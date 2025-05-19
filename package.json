@@ -17,7 +17,7 @@
     "name": "ntua-el20014",
     "email": "el20014@mail.ntua.gr"
   },
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "devDependencies": {
     "@electron-forge/cli": "^7.8.1",
     "@electron-forge/maker-deb": "^7.8.1",

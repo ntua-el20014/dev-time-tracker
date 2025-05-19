@@ -1,21 +1,17 @@
-MIT License
+Business Source License 1.1
 
-Copyright (c) 2025 Oikonomou Nikolaos
+Licensor: ntua-el20014 (Oikonomou Nikolaos)
+Licensed Work: dev-time-tracker
+Additional Use Grant: Non-production personal or educational use only.
+Change Date: 2035-01-01
+Change License: Apache-2.0
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Terms:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The Licensed Work is provided under the terms of the Business Source License 1.1. By using, copying, modifying, or contributing to this software, you agree to the terms of the License.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+You may use, copy, and modify the Licensed Work for personal, educational, or non-commercial use. You may not use it in production environments, offer it as a service, or distribute commercial versions without the express permission of the Licensor.
+
+On or after the Change Date, the Licensed Work will be made available under the Change License.
+
+For full terms, see https://mariadb.com/bsl11
