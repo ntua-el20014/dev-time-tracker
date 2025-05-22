@@ -1,19 +1,45 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { logWindow, getLogs } from './logger';
 import { activeWindow } from '@miniben90/x-win';
+import linguistLanguages from 'linguist-languages';
+import path from 'path';
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 
+function getLanguageDataFromTitle(title: string) {
+  const filename = title.split(' - ')[0].trim();
+  const ext = path.extname(filename).toLowerCase();
+  if (!ext) return null;
+
+  const lang = Object.values(linguistLanguages).find(lang =>
+    lang.extensions?.includes(ext)
+  );
+
+  if (!lang) return null;
+
+  return {
+    language: lang.name,
+  };
+}
+
 function trackActiveWindow() {
   try {
-    const window = activeWindow(); // Synchronous API
+    const window = activeWindow(); // Synchronous
     const execName = window?.info?.execName?.toLowerCase();
+    const title = window?.title || '';
 
     if (execName?.includes('code')) {
-      console.log('Tracking:', window.title);
-      logWindow(window.info.name || 'Unknown', window.title || 'Untitled');
-      mainWindow?.webContents.send('window-tracked'); // <--- Notify renderer
+      console.log('Tracking:', title);
+
+      const langData = getLanguageDataFromTitle(title);
+      const language = langData?.language || 'Unknown';
+      //const icon = langData?.icon || 'default.svg';
+
+      // logWindow now logs language and icon
+      logWindow(window.info.name || 'Unknown', title, language);
+
+      mainWindow?.webContents.send('window-tracked');
     }
   } catch (err) {
     console.error('[Tracker Error]', err);

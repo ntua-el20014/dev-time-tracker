@@ -9,7 +9,12 @@ async function renderLogs() {
   tbody.innerHTML = '';
   logs.forEach(log => {
     const row = document.createElement('tr');
-    row.innerHTML = `<td>${escapeHtml(log.app)}</td><td>${escapeHtml(log.title)}</td><td>${new Date(log.timestamp).toLocaleString()}</td>`;
+    row.innerHTML = `
+      <td>${escapeHtml(log.app)}</td>
+      <td>${escapeHtml(log.language)}</td>
+      <td>${escapeHtml(log.title)}</td>
+      <td>${new Date(log.timestamp).toLocaleString()}</td>
+    `;
     tbody.appendChild(row);
   });
 }

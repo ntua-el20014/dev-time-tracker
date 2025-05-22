@@ -6,15 +6,17 @@ db.prepare(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     app TEXT,
     title TEXT,
+    language TEXT,
     timestamp TEXT
   )
 `).run();
 
-export function logWindow(app: string, title: string) {
-  db.prepare(`INSERT INTO usage (app, title, timestamp) VALUES (?, ?, ?)`)
-    .run(app, title, new Date().toISOString());
+export function logWindow(app: string, title: string, lang: string | null) {
+  // Store SVG icon as TEXT directly
+  db.prepare(`INSERT INTO usage (app, title, language, timestamp) VALUES (?, ?, ?, ?)`)
+    .run(app, title, lang, new Date().toISOString());
 }
 
 export function getLogs() {
-  return db.prepare('SELECT app, title, timestamp FROM usage ORDER BY id DESC LIMIT 100').all();
+  return db.prepare('SELECT app, title, language, timestamp FROM usage ORDER BY id DESC LIMIT 100').all();
 }

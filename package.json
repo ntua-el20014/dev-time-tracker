@@ -47,6 +47,9 @@
   "dependencies": {
     "@miniben90/x-win": "^2.2.1",
     "better-sqlite3": "^11.10.0",
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "extract-file-icon": "^0.3.2",
+    "language-icons": "^0.3.0",
+    "linguist-languages": "^7.30.0"
   }
 }
