@@ -10,6 +10,7 @@ async function renderLogs() {
   logs.forEach(log => {
     const row = document.createElement('tr');
     row.innerHTML = `
+      <td><img src="${log.icon}" alt="${escapeHtml(log.app)} icon" class="icon" /></td>
       <td>${escapeHtml(log.app)}</td>
       <td>${escapeHtml(log.language)}</td>
       <td>${escapeHtml(log.title)}</td>
@@ -48,4 +49,20 @@ renderLogs();
 // Listen for real-time updates
 ipcRenderer.on('window-tracked', () => {
   renderLogs();
+});
+
+// Add an element to display the OS
+const osDiv = document.createElement('div');
+osDiv.id = 'os-info';
+osDiv.style.position = 'fixed';
+osDiv.style.right = '20px';
+osDiv.style.bottom = '20px';
+osDiv.style.opacity = '0.7';
+osDiv.style.fontSize = '14px';
+document.body.appendChild(osDiv);
+
+ipcRenderer.on('os-info', (_event, data) => {
+  if (data && data.os) {
+    osDiv.textContent = `OS: ${data.os}`;
+  }
 });

@@ -7,16 +7,17 @@ db.prepare(`
     app TEXT,
     title TEXT,
     language TEXT,
-    timestamp TEXT
+    timestamp TEXT,
+    icon TEXT
   )
 `).run();
 
-export function logWindow(app: string, title: string, lang: string | null) {
+export function logWindow(app: string, title: string, lang: string | null, icon: string) {
   // Store SVG icon as TEXT directly
-  db.prepare(`INSERT INTO usage (app, title, language, timestamp) VALUES (?, ?, ?, ?)`)
-    .run(app, title, lang, new Date().toISOString());
+  db.prepare(`INSERT INTO usage (app, title, language, timestamp, icon) VALUES (?, ?, ?, ?, ?)`)
+    .run(app, title, lang, new Date().toISOString(), icon);
 }
 
 export function getLogs() {
-  return db.prepare('SELECT app, title, language, timestamp FROM usage ORDER BY id DESC LIMIT 100').all();
+  return db.prepare('SELECT app, title, language, timestamp, icon FROM usage ORDER BY id DESC LIMIT 100').all();
 }

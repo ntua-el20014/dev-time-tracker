@@ -101,3 +101,11 @@ th {
   font-size: 13px;
   user-select: none;
 }
+
+#os-info {
+  background: #222;
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 8px;
+  z-index: 1000;
+}

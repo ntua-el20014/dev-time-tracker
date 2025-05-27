@@ -1,8 +1,10 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { logWindow, getLogs } from './logger';
-import { activeWindow } from '@miniben90/x-win';
+import { activeWindow} from '@miniben90/x-win';
 import linguistLanguages from 'linguist-languages';
 import path from 'path';
+import os from 'os';
+
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -26,6 +28,7 @@ function getLanguageDataFromTitle(title: string) {
 function trackActiveWindow() {
   try {
     const window = activeWindow(); // Synchronous
+    const icon = window.getIcon().data;
     const execName = window?.info?.execName?.toLowerCase();
     const title = window?.title || '';
 
@@ -34,10 +37,9 @@ function trackActiveWindow() {
 
       const langData = getLanguageDataFromTitle(title);
       const language = langData?.language || 'Unknown';
-      //const icon = langData?.icon || 'default.svg';
 
       // logWindow now logs language and icon
-      logWindow(window.info.name || 'Unknown', title, language);
+      logWindow(window.info.name || 'Unknown', title, language, icon);
 
       mainWindow?.webContents.send('window-tracked');
     }
@@ -54,7 +56,10 @@ function createWindow() {
       contextIsolation: false,
       nodeIntegration: true,
     },
-  });
+  })
+  mainWindow.webContents.on('did-finish-load', () => {
+  mainWindow.webContents.send('os-info', { os: os.platform() });
+});
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
   setInterval(trackActiveWindow, 5000);
