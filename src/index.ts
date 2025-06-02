@@ -1,29 +1,13 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { logWindow, getLogs } from './logger';
+import { getEditorByExecutable } from './utils/editors';
+import { getLanguageDataFromTitle } from './utils/extractData';
 import { activeWindow} from '@miniben90/x-win';
-import linguistLanguages from 'linguist-languages';
-import path from 'path';
 import os from 'os';
 
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
-
-function getLanguageDataFromTitle(title: string) {
-  const filename = title.split(' - ')[0].trim();
-  const ext = path.extname(filename).toLowerCase();
-  if (!ext) return null;
-
-  const lang = Object.values(linguistLanguages).find(lang =>
-    lang.extensions?.includes(ext)
-  );
-
-  if (!lang) return null;
-
-  return {
-    language: lang.name,
-  };
-}
 
 function trackActiveWindow() {
   try {
@@ -31,18 +15,20 @@ function trackActiveWindow() {
     const icon = window.getIcon().data;
     const execName = window?.info?.execName?.toLowerCase();
     const title = window?.title || '';
+    const editor = getEditorByExecutable(execName);
 
-    if (execName?.includes('code')) {
-      console.log('Tracking:', title);
+    if (!editor) return;
 
-      const langData = getLanguageDataFromTitle(title);
-      const language = langData?.language || 'Unknown';
+    console.log('Tracking:', title);
 
-      // logWindow now logs language and icon
-      logWindow(window.info.name || 'Unknown', title, language, icon);
+    const langData = getLanguageDataFromTitle(title);
+    const language = langData?.language || 'Unknown';
 
-      mainWindow?.webContents.send('window-tracked');
-    }
+    // logWindow now logs language and icon
+    logWindow(editor.name || 'Unknown', title, language, icon);
+
+    mainWindow?.webContents.send('window-tracked');
+    //}
   } catch (err) {
     console.error('[Tracker Error]', err);
   }
@@ -62,7 +48,7 @@ function createWindow() {
 });
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
-  setInterval(trackActiveWindow, 5000);
+  setInterval(trackActiveWindow, 10000);
 }
 
 ipcMain.handle('get-logs', async () => {

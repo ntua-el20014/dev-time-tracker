@@ -1,0 +1,54 @@
+[
+  {
+    "name": "Visual Studio Code",
+    "execNames": ["code", "code.exe"]
+  },
+  {
+    "name": "Atom",
+    "execNames": ["atom", "atom.exe"]
+  },
+  {
+    "name": "Brackets",
+    "execNames": ["brackets", "brackets.exe"]
+  },
+  {
+    "name": "Eclipse",
+    "execNames": ["eclipse", "eclipse.exe"]
+  },
+  {
+    "name": "Emacs",
+    "execNames": ["emacs", "emacs.exe"]
+  },
+  {
+    "name": "Gedit",
+    "execNames": ["gedit"]
+  },
+  {
+    "name": "NetBeans",
+    "execNames": ["netbeans", "netbeans64.exe", "netbeans.exe"]
+  },
+  {
+    "name": "Notepad++",
+    "execNames": ["notepad++.exe"]
+  },
+  {
+    "name": "SlickEdit",
+    "execNames": ["vs", "vs.exe"]
+  },
+  {
+    "name": "Sublime Text",
+    "execNames": ["subl", "sublime_text", "sublime_text.exe"]
+  },
+  {
+    "name": "TextMate",
+    "execNames": ["TextMate"]
+  },
+  {
+    "name": "UltraEdit",
+    "execNames": ["uedit", "uedit64.exe"]
+  },
+  {
+    "name": "Vim",
+    "execNames": ["vim", "gvim", "vi", "vim.exe", "gvim.exe"]
+  }
+]
