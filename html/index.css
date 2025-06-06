@@ -51,18 +51,20 @@ h1 {
 }
 
 button#toggleTheme {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  z-index: 1001;
+  padding: 8px 16px;
+  border-radius: 6px;
   background-color: transparent;
-  border: 2px solid var(--accent);
-  color: var(--accent);
-  padding: 8px 12px;
-  border-radius: 8px;
+  border: none;
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
 
-button#toggleTheme:hover {
-  background-color: var(--accent);
-  color: var(--bg);
+button#toggleTheme img {
+  display: block;
 }
 
 table {

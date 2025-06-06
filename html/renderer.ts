@@ -1,5 +1,7 @@
 import { ipcRenderer } from 'electron';
 import './index.css';
+import themeLight from '../data/toggle_light.png';
+import themeDark from '../data/toggle_dark.png';
 
 async function renderLogs() {
   const logs = await ipcRenderer.invoke('get-logs');
@@ -7,7 +9,8 @@ async function renderLogs() {
   if (!tbody) return;
 
   tbody.innerHTML = '';
-  logs.forEach(log => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  logs.forEach((log: any) => {
     const minutes = (log.time_spent / 60).toFixed(1);
     const row = document.createElement('tr');
     row.innerHTML = `
@@ -29,12 +32,24 @@ function escapeHtml(text: string) {
 
 // Theme toggle support
 const toggleBtn = document.getElementById('toggleTheme');
+const themeIcon = document.getElementById('themeIcon') as HTMLImageElement;
+
+function updateThemeIcon() {
+  if (!themeIcon) return;
+  if (document.body.classList.contains('light')) {
+    themeIcon.src = themeDark; // Use imported variable
+  } else {
+    themeIcon.src = themeLight;
+  }
+}
+
 if (toggleBtn) {
   toggleBtn.addEventListener('click', () => {
     document.body.classList.toggle('light');
     // Optionally store preference
     const isLight = document.body.classList.contains('light');
     localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    updateThemeIcon();
   });
 
   // Set initial theme
@@ -42,6 +57,7 @@ if (toggleBtn) {
   if (savedTheme === 'light') {
     document.body.classList.add('light');
   }
+  updateThemeIcon();
 }
 
 function displayOSInfo(os: string) {
