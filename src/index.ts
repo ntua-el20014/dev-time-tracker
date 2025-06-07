@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { logWindow, getSummary } from './logger';
+import { logWindow, getSummary, getEditorUsage } from './logger';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
 import { activeWindow} from '@miniben90/x-win';
@@ -57,6 +57,15 @@ ipcMain.handle('get-logs', async () => {
     return getSummary(date);
   } catch (err) {
     console.error('[Get Logs Error]', err);
+    return [];
+  }
+});
+
+ipcMain.handle('get-editor-usage', async () => {
+  try {
+    return getEditorUsage();
+  } catch (err) {
+    console.error('[Get Editor Usage Error]', err);
     return [];
   }
 });

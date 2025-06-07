@@ -53,3 +53,9 @@ export function getSummary(date?: string) {
     'SELECT app, language, icon, time_spent FROM usage_summary WHERE date = ? ORDER BY time_spent DESC'
   ).all(date);
 }
+
+export function getEditorUsage() {
+  return db.prepare(
+    `SELECT app, SUM(time_spent) as total_time FROM usage_summary GROUP BY app`
+  ).all();
+}

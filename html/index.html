@@ -6,24 +6,42 @@
   <link rel="stylesheet" href="index.css" />
 </head>
 <body>
+  <div class="tab-bar">
+    <button class="tab active" data-tab="today">Today</button>
+    <button class="tab" data-tab="summary">Summary</button>
+    <button class="tab" data-tab="profile">My Profile</button>
+  </div>
+  <div id="tab-today" class="tab-content active">
+    <div class="container">
+      <h1>Developer Time Tracker</h1>
+      <table id="logTable">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Application</th>
+            <th>Language</th>
+            <th>Time Spent Today (minutes)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="tab-summary" class="tab-content" style="display:none;">
+    <div class="container">
+      <h1>Summary (All Days)</h1>
+      <div id="summaryContent">Coming soon...</div>
+    </div>
+  </div>
+  <div id="tab-profile" class="tab-content" style="display:none;">
+    <div class="container">
+      <h1>My Profile</h1>
+      <div id="profileContent">Coming soon...</div>
+    </div>
+  </div>
   <button id="toggleTheme">
   <img id="themeIcon" src="" alt="Theme" style="width:28px;height:28px;">
 </button>
-  <div class="container">
-    <h1>Developer Time Tracker</h1>
-    <table id="logTable">
-      <thead>
-        <tr>
-          <th></th>
-          <th>Application</th>
-          <th>Language</th>
-    <!-- <th>Title</th> -->
-          <th>Time Spent Today (minutes)</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
   <script src="renderer.ts"></script>
 </body>
 </html>

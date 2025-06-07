@@ -1,5 +1,11 @@
 import linguistLanguages from 'linguist-languages';
 
+const preferredExtensionMap: Record<string, string> = {
+  '.md': 'Markdown',
+  '.sql': 'SQL',
+  '.html': 'HTML',
+};
+
 /**
  * Extracts the programming language from a window title using known file extensions.
  * @param title The window title string (e.g. "logger.ts - dev-time-tracker - Visual Studio Code")
@@ -28,14 +34,21 @@ export function getLanguageDataFromTitle(title: string) {
 
   if (!foundExt) return null;
 
-  // Find the language for the detected extension
-  const lang = Object.values(linguistLanguages).find(lang =>
-    Array.isArray(lang.extensions) && lang.extensions.includes(foundExt)
-  );
+  let lang;
+  if (preferredExtensionMap[foundExt]) {
+    lang = Object.values(linguistLanguages).find(
+      l => l.name === preferredExtensionMap[foundExt]
+    );
+  } else {
+    lang = Object.values(linguistLanguages).find(
+      l => Array.isArray(l.extensions) && l.extensions.includes(foundExt)
+    );
+  }
 
   if (!lang) return null;
 
   return {
     language: lang.name,
   };
+
 }

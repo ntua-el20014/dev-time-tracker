@@ -29,7 +29,7 @@
   },
   {
     "name": "Notepad++",
-    "execNames": ["notepad++.exe"]
+    "execNames": ["notepad++", "notepad++.exe", "Notepad++.exe"]
   },
   {
     "name": "SlickEdit",
