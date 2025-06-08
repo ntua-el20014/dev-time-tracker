@@ -59,3 +59,17 @@ export function getEditorUsage() {
     `SELECT app, SUM(time_spent) as total_time FROM usage_summary GROUP BY app`
   ).all();
 }
+
+export function getDailySummary() {
+  // Returns: [{ date, app, icon, total_time }]
+  return db.prepare(`
+    SELECT 
+      date, 
+      app, 
+      icon, 
+      SUM(time_spent) as total_time
+    FROM usage_summary
+    GROUP BY date, app
+    ORDER BY date DESC, total_time DESC
+  `).all();
+}

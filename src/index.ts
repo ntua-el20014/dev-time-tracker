@@ -1,8 +1,9 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { logWindow, getSummary, getEditorUsage } from './logger';
+import { logWindow, getSummary, getEditorUsage, getDailySummary } from './logger';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
-import { activeWindow} from '@miniben90/x-win';
+import { activeWindow } from '@miniben90/x-win';
+import { loadEditorColors, saveEditorColors } from './config';
 import os from 'os';
 
 let mainWindow: BrowserWindow;
@@ -68,6 +69,25 @@ ipcMain.handle('get-editor-usage', async () => {
     console.error('[Get Editor Usage Error]', err);
     return [];
   }
+});
+
+ipcMain.handle('get-daily-summary', async () => {
+  try {
+    return getDailySummary();
+  } catch (err) {
+    console.error('[Get Daily Summary Error]', err);
+    return [];
+  }
+});
+
+ipcMain.handle('get-editor-colors', () => {
+  return loadEditorColors();
+});
+
+ipcMain.handle('set-editor-color', (event, app: string, color: string) => {
+  const config = loadEditorColors();
+  config[app] = color;
+  saveEditorColors(config);
 });
 
 app.whenReady().then(createWindow);
