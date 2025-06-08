@@ -23,14 +23,19 @@ db.prepare(`
   )
 `).run();
 
+// Add this helper function at the top of logger.ts
+function getLocalDateString(date = new Date()): string {
+  return date.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+}
+
+// Then update logWindow function:
 export function logWindow(app: string, title: string, lang: string | null, icon: string, intervalSeconds: number) {
   const timestamp = new Date().toISOString();
-  // 1. Log the raw event
+  // 1. Log the raw event (keep UTC timestamp for exact time)
   db.prepare(`INSERT INTO usage (app, title, language, timestamp) VALUES (?, ?, ?, ?)`)
     .run(app, title, lang, timestamp);
 
-  // 2. Aggregate for summary table
-  const date = timestamp.slice(0, 10) // YYYY-MM-DD
+  const date = getLocalDateString(); // Use local date
   db.prepare(`
     INSERT INTO usage_summary (app, language, date, icon, time_spent)
     VALUES (?, ?, ?, ?, ?)
@@ -41,13 +46,22 @@ export function logWindow(app: string, title: string, lang: string | null, icon:
   `).run(app, lang, date, icon, intervalSeconds);
 }
 
-export function getLogs() {
+export function getLogs(date?: string) {
+  if (date) {
+    return db.prepare(`
+      SELECT app, title, language, timestamp 
+      FROM usage 
+      WHERE date(timestamp) = date(?)
+      ORDER BY id DESC 
+      LIMIT 100
+    `).all(date);
+  }
   return db.prepare('SELECT app, title, language, timestamp FROM usage ORDER BY id DESC LIMIT 100').all();
 }
 
 export function getSummary(date?: string) {
   if (!date) {
-    date = new Date().toISOString().slice(0, 10);
+    date = getLocalDateString();
   }
   return db.prepare(
     'SELECT app, language, icon, time_spent FROM usage_summary WHERE date = ? ORDER BY time_spent DESC'

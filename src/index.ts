@@ -44,6 +44,10 @@ function createWindow() {
       nodeIntegration: true,
     },
   })
+  // Open DevTools in development mode
+  if (process.env.NODE_ENV === 'development') {
+    mainWindow.webContents.openDevTools();
+  }
   mainWindow.webContents.on('did-finish-load', () => {
   mainWindow.webContents.send('os-info', { os: os.platform() });
 });
@@ -52,9 +56,8 @@ function createWindow() {
   setInterval(trackActiveWindow, intervalSeconds * 1000);
 }
 
-ipcMain.handle('get-logs', async () => {
+ipcMain.handle('get-logs', async (event, date: string) => {
   try {
-    const date = new Date().toISOString().slice(0, 10);
     return getSummary(date);
   } catch (err) {
     console.error('[Get Logs Error]', err);
