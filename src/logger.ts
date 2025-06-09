@@ -74,6 +74,12 @@ export function getEditorUsage() {
   ).all();
 }
 
+export function getLanguageUsage() {
+  return db.prepare(
+    `SELECT language, SUM(time_spent) as total_time FROM usage_summary WHERE language IS NOT NULL GROUP BY language`
+  ).all();
+}
+
 export function getDailySummary() {
   // Returns: [{ date, app, icon, total_time }]
   return db.prepare(`

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { logWindow, getSummary, getEditorUsage, getDailySummary } from './logger';
+import { logWindow, getSummary, getEditorUsage, getDailySummary, getLanguageUsage } from './logger';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
 import { activeWindow } from '@miniben90/x-win';
@@ -91,6 +91,15 @@ ipcMain.handle('set-editor-color', (event, app: string, color: string) => {
   const config = loadEditorColors();
   config[app] = color;
   saveEditorColors(config);
+});
+
+ipcMain.handle('get-language-usage', async () => {
+  try {
+    return getLanguageUsage();
+  } catch (err) {
+    console.error('[Get Language Usage Error]', err);
+    return [];
+  }
 });
 
 app.whenReady().then(createWindow);

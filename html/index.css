@@ -323,3 +323,18 @@ th {
     padding: 8px 12px;
   }
 }
+
+/* Profile sidebar menu button hover effect */
+.profile-chapter-btn {
+  background: none;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.profile-chapter-btn.active {
+  background: var(--row-hover);
+}
+
+.profile-chapter-btn:hover {
+  background: var(--row-hover);
+}
