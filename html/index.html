@@ -2,8 +2,9 @@
 <html>
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:3000 data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval' http://localhost:3000;">
   <title>Dev Time Tracker</title>
-  <link rel="stylesheet" href="index.css" />
 </head>
 <body>
   <div class="tab-bar">
@@ -41,6 +42,5 @@
   <button id="toggleTheme">
   <img id="themeIcon" src="" alt="Theme" style="width:28px;height:28px;">
 </button>
-  <script src="renderer.ts"></script>
 </body>
 </html>
