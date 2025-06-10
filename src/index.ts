@@ -9,6 +9,7 @@ import os from 'os';
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 const intervalSeconds = 10;
+let trackingInterval: NodeJS.Timeout | null = null;
 
 function trackActiveWindow() {
   try {
@@ -53,7 +54,6 @@ function createWindow() {
 });
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
-  setInterval(trackActiveWindow, intervalSeconds * 1000);
 }
 
 ipcMain.handle('get-logs', async (event, date: string) => {
@@ -99,6 +99,19 @@ ipcMain.handle('get-language-usage', async () => {
   } catch (err) {
     console.error('[Get Language Usage Error]', err);
     return [];
+  }
+});
+
+ipcMain.handle('start-tracking', () => {
+  if (!trackingInterval) {
+    trackingInterval = setInterval(trackActiveWindow, intervalSeconds * 1000);
+  }
+});
+
+ipcMain.handle('stop-tracking', () => {
+  if (trackingInterval) {
+    clearInterval(trackingInterval);
+    trackingInterval = null;
   }
 });
 

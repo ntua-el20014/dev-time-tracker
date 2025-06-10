@@ -4,7 +4,7 @@ import './index.css';
 import { renderLogs } from './logsTab';
 import { refreshProfile } from './profileTab';
 import { renderSummary } from './summaryTab';
-import { initTheme } from './theme';
+import { initTheme, updateRecordBtn } from './theme';
 import { displayOSInfo } from './osInfo';
 
 function setupTabs() {
@@ -49,4 +49,25 @@ function initUI() {
   setupTabs();
 }
 
-document.addEventListener('DOMContentLoaded', initUI);
+let isRecording = false;
+
+function setupRecordBtn() {
+  const btn = document.getElementById('recordBtn') as HTMLButtonElement;
+  const icon = document.getElementById('recordIcon') as HTMLImageElement;
+  if (!btn || !icon) return;
+  btn.addEventListener('click', async () => {
+    isRecording = !isRecording;
+    updateRecordBtn(btn, icon, isRecording);
+    if (isRecording) {
+      await ipcRenderer.invoke('start-tracking');
+    } else {
+      await ipcRenderer.invoke('stop-tracking');
+    }
+  });
+  updateRecordBtn(btn, icon, isRecording);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initUI();
+  setupRecordBtn();
+});

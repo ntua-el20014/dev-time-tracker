@@ -73,6 +73,29 @@ button#toggleTheme img {
   display: block;
 }
 
+#recordBtn {
+  position: fixed;
+  top: 60px;         /* Adjust this value if your tab bar height changes */
+  left: 24px;        /* Align with tab bar padding if needed */
+  z-index: 1001;
+  padding: 8px 24px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #222;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+#recordBtn img {
+  width: 36px;
+  height: 36px;
+  display: block;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
