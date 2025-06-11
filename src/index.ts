@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions } from './logger';
+import { logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions, editSession, deleteSession } from './logger';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
 import { activeWindow } from '@miniben90/x-win';
@@ -128,7 +128,7 @@ ipcMain.handle('stop-tracking', async () => {
   sessionEnd = new Date();
   if (sessionStart && sessionEnd) {
     const duration = (sessionEnd.getTime() - sessionStart.getTime()) / 1000;
-    if (duration >= 60) { // Only record if >= 1 minute
+    if (duration >= 10) { // Only record if >= 1 minute
       // Ask renderer for session title/description
       const getSessionInfo = () =>
         new Promise<{ title: string; description: string }>((resolve) => {
@@ -157,6 +157,26 @@ ipcMain.handle('get-sessions', async () => {
   } catch (err) {
     console.error('[Get Sessions Error]', err);
     return [];
+  }
+});
+
+ipcMain.handle('edit-session', async (_event, { id, title, description }) => {
+  try {
+    editSession(id, title, description);
+    return true;
+  } catch (err) {
+    console.error('[Edit Session Error]', err);
+    return false;
+  }
+});
+
+ipcMain.handle('delete-session', async (_event, id) => {
+  try {
+    deleteSession(id);
+    return true;
+  } catch (err) {
+    console.error('[Delete Session Error]', err);
+    return false;
   }
 });
 

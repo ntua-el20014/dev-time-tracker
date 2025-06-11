@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
 import { formatTimeSpent } from '../src/utils/timeFormat';
+import edit from '../data/edit.png';
 
 function escapeHtml(text: string) {
   const div = document.createElement('div');
@@ -246,35 +248,104 @@ export async function renderSummary() {
         <th>Name</th>
         <th>Date</th>
         <th>Duration</th>
+        <th></th>
       </tr>
     </thead>
     <tbody id="sessionTableBody"></tbody>
   `;
   bySessionContainer.appendChild(sessionTable);
 
-  // Fetch and render sessions
-  const sessions = await ipcRenderer.invoke('get-sessions');
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const sessionTableBody = sessionTable.querySelector('tbody')!;
-  sessionTableBody.innerHTML = sessions.map((session: any) => {
-    const start = new Date(session.start_time);
-    const end = new Date(session.end_time);
-    const durationSec = Math.floor((end.getTime() - start.getTime()) / 1000);
-    const h = Math.floor(durationSec / 3600);
-    const m = Math.floor((durationSec % 3600) / 60);
-    const s = durationSec % 60;
-    let durationStr = '';
-    if (h > 0) durationStr += `${h}h `;
-    if (m > 0) durationStr += `${m}m `;
-    if (s > 0 || (!h && !m)) durationStr += `${s}s`;
-    return `
-      <tr>
-        <td>${escapeHtml(session.title)}</td>
-        <td>${escapeHtml(session.date)}</td>
-        <td>${durationStr.trim()}</td>
-      </tr>
-    `;
-  }).join('');
+  // Helper to render sessions and attach edit logic
+  async function renderSessionRows() {
+    const sessions = await ipcRenderer.invoke('get-sessions');
+    const sessionTableBody = sessionTable.querySelector('tbody')!;
+    sessionTableBody.innerHTML = sessions.map((session: any) => {
+      const start = new Date(session.start_time);
+      const end = new Date(session.end_time);
+      const durationSec = Math.floor((end.getTime() - start.getTime()) / 1000);
+      const h = Math.floor(durationSec / 3600);
+      const m = Math.floor((durationSec % 3600) / 60);
+      const s = durationSec % 60;
+      let durationStr = '';
+      if (h > 0) durationStr += `${h}h `;
+      if (m > 0) durationStr += `${m}m `;
+      if (s > 0 || (!h && !m)) durationStr += `${s}s`;
+      return `
+        <tr data-session-id="${session.id}">
+          <td>${escapeHtml(session.title)}</td>
+          <td>${escapeHtml(session.date)}</td>
+          <td>${durationStr.trim()}</td>
+          <td>
+            <button class="session-edit-btn" title="Edit session">
+              <img src="${edit}" alt="Edit" style="width:16px; height:16px;">
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Attach edit button listeners
+    sessionTableBody.querySelectorAll('.session-edit-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tr = (btn as HTMLElement).closest('tr');
+        const sessionId = tr?.getAttribute('data-session-id');
+        const session = sessions.find((s: any) => String(s.id) === String(sessionId));
+        if (session) showEditSessionModal(session, renderSessionRows);
+      });
+    });
+  }
+
+  // Modal logic for editing/deleting
+  function showEditSessionModal(session: any, onChange: () => void) {
+    const modal = document.getElementById('sessionModal') as HTMLDivElement;
+    const form = document.getElementById('sessionForm') as HTMLFormElement;
+    const titleInput = document.getElementById('sessionTitle') as HTMLInputElement;
+    const descInput = document.getElementById('sessionDesc') as HTMLTextAreaElement;
+    const discardBtn = document.getElementById('sessionCancelBtn') as HTMLButtonElement;
+
+    if (!modal || !form || !titleInput || !descInput || !discardBtn) return;
+
+    // Set fields to session values
+    titleInput.value = session.title || '';
+    descInput.value = session.description || '';
+
+    // Change modal title and button text
+    modal.querySelector('h2')!.textContent = 'Edit Session';
+    discardBtn.textContent = 'Delete';
+    discardBtn.classList.add('delete');
+
+    modal.classList.add('active');
+    setTimeout(() => titleInput.focus(), 100);
+
+    // Remove previous event listeners by assigning null
+    form.onsubmit = null;
+    discardBtn.onclick = null;
+
+    // Submit handler (edit)
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      await ipcRenderer.invoke('edit-session', {
+        id: session.id,
+        title: titleInput.value.trim(),
+        description: descInput.value.trim()
+      });
+      modal.classList.remove('active');
+      onChange();
+    };
+
+    // Delete handler
+    discardBtn.onclick = async () => {
+      if (confirm('Delete this session? This cannot be undone.')) {
+        await ipcRenderer.invoke('delete-session', session.id);
+        modal.classList.remove('active');
+        onChange();
+      }
+    };
+  }
+
+  // Initial render
+  await renderSessionRows();
 
   summaryDiv.appendChild(byDateContainer);
   summaryDiv.appendChild(bySessionContainer);

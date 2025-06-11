@@ -127,3 +127,13 @@ export function getSessions() {
     ORDER BY date DESC, start_time DESC
   `).all();
 }
+
+export function editSession(id: number, title: string, description: string) {
+  db.prepare(`
+    UPDATE sessions SET title = ?, description = ? WHERE id = ?
+  `).run(title, description, id);
+}
+
+export function deleteSession(id: number) {
+  db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
+}
