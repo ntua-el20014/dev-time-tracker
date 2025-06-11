@@ -170,9 +170,34 @@ export async function renderSummary() {
   updateWeeklySummary();
   summaryDiv.appendChild(weeklySummaryContainer);
 
+  // --- Filter toggle ---
+  const filterContainer = document.createElement('div');
+  filterContainer.style.margin = '24px 0 8px 0';
+  filterContainer.style.display = 'flex';
+  filterContainer.style.gap = '16px';
+  filterContainer.style.alignItems = 'center';
+
+  const byDateBtn = document.createElement('button');
+  byDateBtn.textContent = 'Summary by Date';
+  byDateBtn.className = 'summary-filter-btn active';
+
+  const bySessionBtn = document.createElement('button');
+  bySessionBtn.textContent = 'Summary by Session';
+  bySessionBtn.className = 'summary-filter-btn';
+
+  filterContainer.appendChild(byDateBtn);
+  filterContainer.appendChild(bySessionBtn);
+  summaryDiv.appendChild(filterContainer);
+
+  // --- Containers for each summary type ---
+  const byDateContainer = document.createElement('div');
+  const bySessionContainer = document.createElement('div');
+  bySessionContainer.style.display = 'none';
+
+  // --- By Date (existing) ---
   const detailsTitle = document.createElement('h1');
   detailsTitle.textContent = 'Summary';
-  summaryDiv.appendChild(detailsTitle);
+  byDateContainer.appendChild(detailsTitle);
 
   // Group data by date for detailed view
   const grouped: { [date: string]: any[] } = {};
@@ -184,27 +209,87 @@ export async function renderSummary() {
   const detailsContainer = document.createElement('div');
   detailsContainer.className = 'details-container';
   detailsContainer.innerHTML = Object.entries(grouped).map(([date, rows]) => `
-  <div class="summary-date-header">
-    <h3>${date}</h3>
-  </div>
-  <table class="summary-table">
+    <div class="summary-date-header">
+      <h3>${date}</h3>
+    </div>
+    <table class="summary-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Editor</th>
+          <th>Time Spent</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row: any) => `
+          <tr>
+            <td><img src="${row.icon}" alt="${escapeHtml(row.app)} icon" class="icon" /></td>
+            <td>${escapeHtml(row.app)}</td>
+            <td>${escapeHtml(formatTimeSpent(row.total_time))}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `).join('');
+  byDateContainer.appendChild(detailsContainer);
+
+  // --- By Session ---
+  const sessionTitle = document.createElement('h1');
+  sessionTitle.textContent = 'Sessions';
+  bySessionContainer.appendChild(sessionTitle);
+
+  const sessionTable = document.createElement('table');
+  sessionTable.className = 'summary-table';
+  sessionTable.innerHTML = `
     <thead>
       <tr>
-        <th></th>
-        <th>Editor</th>
-        <th>Time Spent</th>
+        <th>Name</th>
+        <th>Date</th>
+        <th>Duration</th>
       </tr>
     </thead>
-    <tbody>
-      ${rows.map((row: any) => `
-        <tr>
-          <td><img src="${row.icon}" alt="${escapeHtml(row.app)} icon" class="icon" /></td>
-          <td>${escapeHtml(row.app)}</td>
-          <td>${escapeHtml(formatTimeSpent(row.total_time))}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>
-`).join('');
-  summaryDiv.appendChild(detailsContainer);
+    <tbody id="sessionTableBody"></tbody>
+  `;
+  bySessionContainer.appendChild(sessionTable);
+
+  // Fetch and render sessions
+  const sessions = await ipcRenderer.invoke('get-sessions');
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const sessionTableBody = sessionTable.querySelector('tbody')!;
+  sessionTableBody.innerHTML = sessions.map((session: any) => {
+    const start = new Date(session.start_time);
+    const end = new Date(session.end_time);
+    const durationSec = Math.floor((end.getTime() - start.getTime()) / 1000);
+    const h = Math.floor(durationSec / 3600);
+    const m = Math.floor((durationSec % 3600) / 60);
+    const s = durationSec % 60;
+    let durationStr = '';
+    if (h > 0) durationStr += `${h}h `;
+    if (m > 0) durationStr += `${m}m `;
+    if (s > 0 || (!h && !m)) durationStr += `${s}s`;
+    return `
+      <tr>
+        <td>${escapeHtml(session.title)}</td>
+        <td>${escapeHtml(session.date)}</td>
+        <td>${durationStr.trim()}</td>
+      </tr>
+    `;
+  }).join('');
+
+  summaryDiv.appendChild(byDateContainer);
+  summaryDiv.appendChild(bySessionContainer);
+
+  // --- Toggle logic ---
+  byDateBtn.onclick = () => {
+    byDateBtn.classList.add('active');
+    bySessionBtn.classList.remove('active');
+    byDateContainer.style.display = '';
+    bySessionContainer.style.display = 'none';
+  };
+  bySessionBtn.onclick = () => {
+    bySessionBtn.classList.add('active');
+    byDateBtn.classList.remove('active');
+    byDateContainer.style.display = 'none';
+    bySessionContainer.style.display = '';
+  };
 }

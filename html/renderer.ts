@@ -67,6 +67,54 @@ function setupRecordBtn() {
   updateRecordBtn(btn, icon, isRecording);
 }
 
+ipcRenderer.on('get-session-info', () => {
+  showSessionModal();
+});
+
+function showSessionModal() {
+  const modal = document.getElementById('sessionModal') as HTMLDivElement;
+  const form = document.getElementById('sessionForm') as HTMLFormElement;
+  const titleInput = document.getElementById('sessionTitle') as HTMLInputElement;
+  const descInput = document.getElementById('sessionDesc') as HTMLTextAreaElement;
+  const discardBtn = document.getElementById('sessionCancelBtn') as HTMLButtonElement;
+
+  if (!modal || !form || !titleInput || !descInput || !discardBtn) return;
+
+  // Reset fields
+  titleInput.value = '';
+  descInput.value = '';
+
+  modal.classList.add('active');
+
+  // Focus title input
+  setTimeout(() => titleInput.focus(), 100);
+
+  // Handle form submit
+  const submitHandler = (e: Event) => {
+    e.preventDefault();
+    ipcRenderer.send('session-info-reply', {
+      title: titleInput.value.trim() || 'Coding Session',
+      description: descInput.value.trim()
+    });
+    modal.classList.remove('active');
+    form.removeEventListener('submit', submitHandler);
+    discardBtn.removeEventListener('click', discardHandler);
+  };
+
+  // Handle discard with confirmation
+  const discardHandler = () => {
+    if (confirm('Session will be discarded. Are you sure?')) {
+      ipcRenderer.send('session-info-reply', { title: '', description: '' });
+      modal.classList.remove('active');
+      form.removeEventListener('submit', submitHandler);
+      discardBtn.removeEventListener('click', discardHandler);
+    }
+  };
+
+  form.addEventListener('submit', submitHandler);
+  discardBtn.addEventListener('click', discardHandler);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initUI();
   setupRecordBtn();

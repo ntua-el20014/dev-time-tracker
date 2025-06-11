@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { logWindow, getSummary, getEditorUsage, getDailySummary, getLanguageUsage } from './logger';
+import { logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions } from './logger';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
 import { activeWindow } from '@miniben90/x-win';
@@ -10,6 +10,8 @@ let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 const intervalSeconds = 10;
 let trackingInterval: NodeJS.Timeout | null = null;
+let sessionStart: Date | null = null;
+let sessionEnd: Date | null = null;
 
 function trackActiveWindow() {
   try {
@@ -65,6 +67,15 @@ ipcMain.handle('get-logs', async (event, date: string) => {
   }
 });
 
+ipcMain.handle('get-logged-days-of-month', async (_event, year: number, month: number) => {
+  try {
+    return getLoggedDaysOfMonth(year, month);
+  } catch (err) {
+    console.error('[Get Logged Days Of Month Error]', err);
+    return [];
+  }
+});
+
 ipcMain.handle('get-editor-usage', async () => {
   try {
     return getEditorUsage();
@@ -106,12 +117,46 @@ ipcMain.handle('start-tracking', () => {
   if (!trackingInterval) {
     trackingInterval = setInterval(trackActiveWindow, intervalSeconds * 1000);
   }
+  sessionStart = new Date();
 });
 
-ipcMain.handle('stop-tracking', () => {
+ipcMain.handle('stop-tracking', async () => {
   if (trackingInterval) {
     clearInterval(trackingInterval);
     trackingInterval = null;
+  }
+  sessionEnd = new Date();
+  if (sessionStart && sessionEnd) {
+    const duration = (sessionEnd.getTime() - sessionStart.getTime()) / 1000;
+    if (duration >= 60) { // Only record if >= 1 minute
+      // Ask renderer for session title/description
+      const getSessionInfo = () =>
+        new Promise<{ title: string; description: string }>((resolve) => {
+          ipcMain.once('session-info-reply', (event, data) => {
+            resolve(data);
+          });
+          mainWindow?.webContents.send('get-session-info');
+        });
+
+      const { title, description } = await getSessionInfo();
+      if (title && title.trim() !== '') {
+        const date = sessionStart.toLocaleDateString('en-CA');
+        const start_time = sessionStart.toISOString();
+        const end_time = sessionEnd.toISOString();
+        addSession(date, start_time, end_time, title, description);
+      }
+    }
+  }
+  sessionStart = null;
+  sessionEnd = null;
+});
+
+ipcMain.handle('get-sessions', async () => {
+  try {
+    return getSessions();
+  } catch (err) {
+    console.error('[Get Sessions Error]', err);
+    return [];
   }
 });
 

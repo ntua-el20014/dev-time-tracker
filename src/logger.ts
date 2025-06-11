@@ -23,6 +23,17 @@ db.prepare(`
   )
 `).run();
 
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT,
+    start_time TEXT,
+    end_time TEXT,
+    title TEXT,
+    description TEXT
+  )
+`).run();
+
 // Add this helper function at the top of logger.ts
 function getLocalDateString(date = new Date()): string {
   return date.toLocaleDateString('en-CA'); // YYYY-MM-DD format
@@ -59,6 +70,14 @@ export function getLogs(date?: string) {
   return db.prepare('SELECT app, title, language, timestamp FROM usage ORDER BY id DESC LIMIT 100').all();
 }
 
+export function getLoggedDaysOfMonth(year: number, month: number) {
+  // month: 1-based (1=January)
+  return db.prepare(`
+    SELECT DISTINCT date FROM usage_summary
+    WHERE strftime('%Y', date) = ? AND strftime('%m', date) = ?
+  `).all(String(year), String(month).padStart(2, '0'));
+}
+
 export function getSummary(date?: string) {
   if (!date) {
     date = getLocalDateString();
@@ -91,5 +110,20 @@ export function getDailySummary() {
     FROM usage_summary
     GROUP BY date, app
     ORDER BY date DESC, total_time DESC
+  `).all();
+}
+
+export function addSession(date: string, start_time: string, end_time: string, title: string, description?: string) {
+  db.prepare(`
+    INSERT INTO sessions (date, start_time, end_time, title, description)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(date, start_time, end_time, title, description || null);
+}
+
+export function getSessions() {
+  return db.prepare(`
+    SELECT id, date, start_time, end_time, title, description
+    FROM sessions
+    ORDER BY date DESC, start_time DESC
   `).all();
 }
