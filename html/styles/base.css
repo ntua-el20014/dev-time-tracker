@@ -95,3 +95,20 @@ h1 {
   background: var(--accent);
   color: #222;
 }
+
+.custom-notification {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #222;
+  padding: 14px 32px;
+  border-radius: 12px;
+  font-size: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+  z-index: 2000;
+  opacity: 0.97;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}

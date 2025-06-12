@@ -4,7 +4,7 @@ import { renderLogs } from './logsTab';
 import { refreshProfile } from './profileTab';
 import { renderSummary } from './summaryTab';
 import { initTheme, updateRecordBtn, updatePauseBtn } from './theme';
-import { displayOSInfo, showModal } from './components';
+import { displayOSInfo, showModal, showNotification } from './components';
 import './styles/base.css';
 import './styles/layout.css';
 import './styles/table.css';
@@ -122,6 +122,10 @@ ipcRenderer.on('get-session-info', () => {
   });
 });
 
+ipcRenderer.on('notify', (_event, data) => {
+  if (data && data.message) showNotification(data.message);
+});
+
 ipcRenderer.on('auto-paused', () => {
   isPaused = true;
   const pauseBtn = document.getElementById('pauseBtn') as HTMLButtonElement;
@@ -140,7 +144,23 @@ ipcRenderer.on('auto-resumed', () => {
   }
 });
 
+export async function applyAccentColor() {
+  const theme = document.body.classList.contains('light') ? 'light' : 'dark';
+  const accentColor = await ipcRenderer.invoke('get-accent-color', theme);
+
+  if (theme === 'light') {
+    document.body.style.setProperty('--accent', accentColor);
+    // Remove from dark theme root so it falls back to config when switching
+    document.documentElement.style.removeProperty('--accent');
+  } else {
+    document.documentElement.style.setProperty('--accent', accentColor);
+    // Remove from light theme body so it falls back to config when switching
+    document.body.style.removeProperty('--accent');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initUI();
+  applyAccentColor();
   setupRecordAndPauseBtns();
 });

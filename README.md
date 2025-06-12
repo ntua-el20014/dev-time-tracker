@@ -10,7 +10,7 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 - **Automatic Tracking:**  
   Monitors time spent in code editors (like VSCode) and logs active window data every 10 seconds.
 - **Session Management:**  
-  Start/pause/stop recording sessions, add titles and descriptions, edit or delete past sessions, set idle timeout. Great for tracking focused work periods.
+  Start/pause/stop recording sessions, add titles and descriptions, edit or delete past sessions, add tags, set idle timeout. Great for tracking focused work periods.
 - **Detailed Summaries:**  
   View summaries by day or by session, with interactive tables and charts.
 - **Timeline & Calendar:**  
@@ -18,7 +18,7 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 - **Editor & Language Stats:**  
   See which editors and programming languages you use most.
 - **Customizable Themes:**  
-  Switch between dark and light mode, with more theme options planned.
+  Switch between dark and light mode, pick custom accent color for each one.
 - **Local-First:**  
   All data is stored locally—your privacy is respected.
 

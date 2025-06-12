@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
+import { applyAccentColor } from './renderer';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function escapeHtml(text: string) {
@@ -34,10 +35,13 @@ async function renderEditorUsage(container: HTMLElement) {
         </div>`;
       }).join('')}
     </div>
-    <ul>
+    <ul style="list-style:none;padding:0;margin:0;">
       ${usage.map((row: any) => {
         const percent = ((row.total_time / total) * 100).toFixed(1);
-        return `<li><b>${row.app}</b>: ${percent}%</li>`;
+        const color = colorMap[row.app];
+        return `<li style="margin-bottom:4px;">
+          <b style="color:${color};">${row.app}</b>: ${percent}%
+        </li>`;
       }).join('')}
     </ul>
     <h3>Customize Colors</h3>
@@ -73,7 +77,6 @@ async function renderEditorUsage(container: HTMLElement) {
   container.querySelectorAll('input[type="color"]').forEach(input => {
     input.addEventListener('change', (e: Event) => {
       const target = e.target as HTMLInputElement;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const app = target.dataset.app!;
       const color = target.value;
       ipcRenderer.invoke('set-editor-color', app, color);
@@ -102,10 +105,13 @@ async function renderLanguageUsage(container: HTMLElement) {
         </div>`;
       }).join('')}
     </div>
-    <ul>
-      ${usage.map((row: any) => {
+    <ul style="list-style:none;padding:0;margin:0;">
+      ${usage.map((row: any, i: number) => {
         const percent = ((row.total_time / total) * 100).toFixed(1);
-        return `<li><b>${row.language}</b>: ${percent}%</li>`;
+        const color = defaultColors[i % defaultColors.length];
+        return `<li style="margin-bottom:4px;">
+          <b style="color:${color};">${row.language}</b>: ${percent}%
+        </li>`;
       }).join('')}
     </ul>
   `;
@@ -120,7 +126,7 @@ async function renderSettings(container: HTMLElement) {
     <h2>Settings</h2>
     <div style="margin-bottom:24px;">
       <label for="idleTimeoutRange" style="font-weight:bold;">Idle Timeout:</label>
-      <input type="range" id="idleTimeoutRange" min="60" max="300" step="30" value="${idleTimeout}" style="vertical-align:middle;">
+      <input type="range" id="idleTimeoutRange" min="60" max="300" step="30" value="${idleTimeout}" style="vertical-align:middle; accent-color: var(--accent);">
       <span id="idleTimeoutValue" style="margin-left:8px;">${(idleTimeout/60).toFixed(1)} min</span>
     </div>
   `;
@@ -133,6 +139,109 @@ async function renderSettings(container: HTMLElement) {
     valueSpan.textContent = (seconds / 60).toFixed(1) + ' min';
     await ipcRenderer.invoke('set-idle-timeout', seconds);
   });
+
+  // --- Tag management ---
+  const tags: { name: string }[] = await ipcRenderer.invoke('get-all-tags');
+  container.innerHTML += `
+    <h2 style="margin-top:32px;">Manage Tags</h2>
+    ${
+      tags.length === 0
+        ? `<p>No tags added yet.</p>`
+        : `<ul id="tag-list-settings" style="list-style:none;padding:0;">
+            ${tags.map(tag => `
+              <li style="margin-bottom:8px;display:flex;align-items:center;gap:12px;">
+                <span style="background:var(--accent);color:#222;padding:2px 12px;border-radius:12px;">${escapeHtml(tag.name)}</span>
+                <button class="delete-tag-btn" data-tag="${escapeHtml(tag.name)}" style="background:#d32f2f;color:#fff;border:none;border-radius:6px;padding:2px 10px;cursor:pointer;">Delete</button>
+              </li>
+            `).join('')}
+          </ul>`
+    }
+  `;
+
+  // Attach delete handlers
+  container.querySelectorAll('.delete-tag-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const tag = (btn as HTMLButtonElement).dataset.tag!;
+      if (confirm(`Delete tag "${tag}"? This will remove it from all sessions.`)) {
+        await ipcRenderer.invoke('delete-tag', tag);
+        renderSettings(container); // Refresh the list
+      }
+    });
+  });
+
+  // --- Accent color management ---
+  const theme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
+  const accentColor: string = await ipcRenderer.invoke('get-accent-color', theme);
+
+  container.innerHTML += `
+    <h2 style="margin-top:32px;">Accent Color</h2>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+      <div style="width:32px;height:32px;border-radius:50%;border:2px solid #aaa;background:${accentColor};position:relative;">
+        <input type="color" id="accentColorInput" value="${accentColor}" style="
+          opacity: 0;
+          width: 100%;
+          height: 100%;
+          position: absolute;
+          top: 0;
+          left: 0;
+          cursor: pointer;
+        " />
+      </div>
+      <button id="saveAccentColorBtn" style="padding:6px 12px;border:none;border-radius:6px;background:var(--accent);color:#222;cursor:pointer;">Save Accent Color</button>
+    </div>
+    <div style="margin-bottom:24px;">
+      <button id="resetAccentColorsBtn" style="padding:6px 18px;border:none;border-radius:6px;background:#eee;color:#222;cursor:pointer;">Reset Accent Colors to Default</button>
+    </div>
+  `;
+
+  const accentInput = container.querySelector('#accentColorInput') as HTMLInputElement;
+  const saveAccentBtn = container.querySelector('#saveAccentColorBtn') as HTMLButtonElement;
+  const resetAccentBtn = container.querySelector('#resetAccentColorsBtn') as HTMLButtonElement;
+
+  accentInput.addEventListener('input', () => {
+    accentInput.parentElement!.style.background = accentInput.value; // Update preview
+  });
+
+  saveAccentBtn.addEventListener('click', async () => {
+    const currentTheme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
+    const colorToSave = accentInput.value; // Always use the picker's current value
+    const confirmed = confirm(`Apply new accent color ${colorToSave} for ${currentTheme} theme?`);
+    if (!confirmed) return;
+
+    await ipcRenderer.invoke('set-accent-color', colorToSave, currentTheme);
+    await applyAccentColor();
+
+    accentInput.value = colorToSave;
+  });
+
+  resetAccentBtn.addEventListener('click', async () => {
+    if (!confirm('Reset both accent colors to default values?')) return;
+    await ipcRenderer.invoke('set-accent-color', '#f0db4f', 'dark');
+    await ipcRenderer.invoke('set-accent-color', '#007acc', 'light');
+    await applyAccentColor();
+
+    // Always get the current theme at the moment of reset
+    const currentTheme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
+    const newAccent = await ipcRenderer.invoke('get-accent-color', currentTheme);
+    accentInput.value = newAccent;
+    accentInput.parentElement!.style.background = newAccent;
+  });
+
+  function updateAccentPickerForTheme() {
+    const theme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
+    ipcRenderer.invoke('get-accent-color', theme).then((color: string) => {
+      accentInput.value = color;
+      accentInput.parentElement!.style.background = color;
+    });
+  }
+
+  // Listen for theme changes (toggleTheme button click)
+  const toggleThemeBtn = document.getElementById('toggleTheme');
+  if (toggleThemeBtn) {
+    toggleThemeBtn.addEventListener('click', () => {
+      updateAccentPickerForTheme(); // Wait for theme to apply
+    });
+  }
 }
   
 export async function refreshProfile() {

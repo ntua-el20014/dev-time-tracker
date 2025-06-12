@@ -1,9 +1,9 @@
 import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
-import { logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions, editSession, deleteSession } from './logger';
+import { logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions, editSession, deleteSession, getAllTags, setSessionTags, deleteTag } from './logger';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
 import { activeWindow } from '@miniben90/x-win';
-import { loadEditorColors, saveEditorColors, loadConfig, saveConfig } from './config';
+import { loadEditorColors, saveEditorColors, loadConfig, saveConfig, getAccentColor, setAccentColor } from './config';
 import os from 'os';
 
 let mainWindow: BrowserWindow;
@@ -38,13 +38,6 @@ app.whenReady().then(() => {
     }
   });
 
-  powerMonitor.on('unlock-screen', () => {
-    if (isPaused && trackingInterval === null) {
-      ipcMain.emit('auto-resume');
-      mainWindow?.webContents.send('auto-resumed');
-    }
-  });
-
   // Poll for idle time every 2 seconds
   setInterval(() => {
     const idleSeconds = powerMonitor.getSystemIdleTime();
@@ -52,11 +45,9 @@ app.whenReady().then(() => {
       if (!isPaused && trackingInterval) {
         ipcMain.emit('auto-pause');
         mainWindow?.webContents.send('auto-paused');
-      }
-    } else {
-      if (isPaused && trackingInterval === null) {
-        ipcMain.emit('auto-resume');
-        mainWindow?.webContents.send('auto-resumed');
+        mainWindow?.webContents.send('notify', {
+          message: `Tracking paused due to inactivity (${(idleTimeoutSeconds / 60).toFixed(1)} minutes idle).`
+        });
       }
     }
   }, 2000);
@@ -96,10 +87,12 @@ function createWindow() {
       nodeIntegration: true,
     },
   })
+  /*
   // Open DevTools in development mode
-  /*if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools();
-  }*/
+  }
+  */
   mainWindow.webContents.on('did-finish-load', () => {
   mainWindow.webContents.send('os-info', { os: os.platform() });
 });
@@ -151,6 +144,15 @@ ipcMain.handle('set-editor-color', (event, app: string, color: string) => {
   const config = loadEditorColors();
   config[app] = color;
   saveEditorColors(config);
+});
+
+ipcMain.handle('get-accent-color', (_event, theme: 'dark' | 'light') => {
+  return getAccentColor(theme);
+});
+
+ipcMain.handle('set-accent-color', (_event, color: string, theme: 'dark' | 'light') => {
+  setAccentColor(color, theme);
+  return true;
 });
 
 ipcMain.handle('get-idle-timeout', () => {
@@ -267,6 +269,20 @@ ipcMain.handle('delete-session', async (_event, id) => {
     console.error('[Delete Session Error]', err);
     return false;
   }
+});
+
+ipcMain.handle('get-all-tags', () => {
+  return getAllTags();
+});
+
+ipcMain.handle('set-session-tags', (_event, sessionId: number, tagNames: string[]) => {
+  setSessionTags(sessionId, tagNames);
+  return true;
+});
+
+ipcMain.handle('delete-tag', (_event, name: string) => {
+  deleteTag(name);
+  return true;
 });
 
 app.on('window-all-closed', () => {

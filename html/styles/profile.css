@@ -12,3 +12,22 @@
 .profile-chapter-btn:hover {
   background: var(--row-hover);
 }
+
+#resetAccentColorsBtn {
+  background: #eee;
+  color: #222;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-size: 1em;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-top: 4px;
+}
+
+#resetAccentColorsBtn:hover {
+  background: var(--accent);
+  color: #222;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}

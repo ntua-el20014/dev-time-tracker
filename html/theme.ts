@@ -4,6 +4,7 @@ import startBtn from '../data/start-button.png';
 import stopBtn from '../data/stop-button.png';
 import pauseIconImg from '../data/pause-button.png';
 import playIconImg from '../data/play-button.png';
+import { applyAccentColor } from './renderer';
 
 export function updateThemeIcon(themeIcon: HTMLImageElement) {
   if (!themeIcon) return;
@@ -19,11 +20,11 @@ export function initTheme() {
   const themeIcon = document.getElementById('themeIcon') as HTMLImageElement;
 
   if (toggleBtn && themeIcon) {
-    toggleBtn.addEventListener('click', () => {
+    toggleBtn.addEventListener('click', async () => {
       document.body.classList.toggle('light');
-      const isLight = document.body.classList.contains('light');
-      localStorage.setItem('theme', isLight ? 'light' : 'dark');
+      localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
       updateThemeIcon(themeIcon);
+      await applyAccentColor(); // Always update accent color on theme change
     });
 
     const savedTheme = localStorage.getItem('theme');
@@ -31,6 +32,7 @@ export function initTheme() {
       document.body.classList.add('light');
     }
     updateThemeIcon(themeIcon);
+    applyAccentColor(); // Set accent color on load
   }
 }
 

@@ -229,7 +229,12 @@ export async function renderSummary() {
       if (s > 0 || (!h && !m)) durationStr += `${s}s`;
       return `
         <tr data-session-id="${session.id}">
-          <td>${escapeHtml(session.title)}</td>
+          <td>
+            ${escapeHtml(session.title)}
+            ${session.tags && session.tags.length ? `<div style="margin-top:2px;font-size:0.9em;color:var(--accent);">
+              ${session.tags.map((t: string) => `<span style="background:var(--row-hover);padding:2px 8px;border-radius:8px;margin-right:4px;">${escapeHtml(t)}</span>`).join('')}
+            </div>` : ''}
+          </td>
           <td>${escapeHtml(session.date)}</td>
           <td>${durationStr.trim()}</td>
           <td>
@@ -253,23 +258,33 @@ export async function renderSummary() {
     });
   }
 
-  // Modal logic for editing/deleting
-  function showEditSessionModal(session: any, onChange: () => void) {
+  async function showEditSessionModal(session: any, onChange: () => void) {
+    // Fetch all tags for suggestions
+    const allTags = await ipcRenderer.invoke('get-all-tags');
+    const currentTags = session.tags || [];
+
+    let selectedTags = [...currentTags];
+
     showModal({
       title: 'Edit Session',
       fields: [
         { name: 'title', label: 'Title:', type: 'text', value: session.title, required: true },
-        { name: 'description', label: 'Description:', type: 'textarea', value: session.description }
+        { name: 'description', label: 'Description:', type: 'textarea', value: session.description },
+        // Add a custom field for tags (will render below)
       ],
       submitText: 'Save',
       cancelText: 'Delete',
       cancelClass: 'delete',
       onSubmit: async (values) => {
+        // Get tags from the tag input UI
+        const tags = selectedTags;
         await ipcRenderer.invoke('edit-session', {
           id: session.id,
           title: values.title,
-          description: values.description
+          description: values.description,
+          tags
         });
+        await ipcRenderer.invoke('set-session-tags', session.id, tags);
         onChange();
       },
       onCancel: async () => {
@@ -279,6 +294,84 @@ export async function renderSummary() {
         }
       }
     });
+
+    // Render tag input UI below the modal form
+    setTimeout(() => {
+      const form = document.getElementById('customModalForm');
+      if (!form) return;
+      const tagDiv = document.createElement('div');
+      tagDiv.style.margin = '12px 0';
+
+      tagDiv.innerHTML = `
+        <label style="font-weight:bold;">Tags:</label>
+        <div id="tag-list" style="margin:6px 0 8px 0; display:flex; flex-wrap:wrap; gap:6px;"></div>
+        <input id="tag-input" type="text" placeholder="Add tag and press Enter">
+        <select id="tag-select">
+          <option value="">-- no tag selected --</option>
+          ${allTags
+            .filter((t: any) => !selectedTags.includes(t.name))
+            .map((t: any) => `<option value="${t.name}">${t.name}</option>`)
+            .join('')}
+        </select>
+      `;
+      form.appendChild(tagDiv);
+
+      const tagList = tagDiv.querySelector('#tag-list') as HTMLDivElement;
+      const tagInput = tagDiv.querySelector('#tag-input') as HTMLInputElement;
+      const tagSelect = tagDiv.querySelector('#tag-select') as HTMLSelectElement;
+
+      function renderTags() {
+        tagList.innerHTML = selectedTags.map(tag =>
+          `<span style="background:var(--accent);color:#222;padding:2px 10px;border-radius:12px;display:inline-flex;align-items:center;gap:4px;">
+            ${tag}
+            <button type="button" data-tag="${tag}" style="background:none;border:none;color:#222;cursor:pointer;font-size:1em;">&times;</button>
+          </span>`
+        ).join('');
+        tagList.querySelectorAll('button[data-tag]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const tag = (btn as HTMLButtonElement).dataset.tag!;
+            selectedTags = selectedTags.filter(t => t !== tag);
+            renderTags();
+            // Update dropdown to show removed tag again
+            updateTagSelect();
+          });
+        });
+      }
+
+      function updateTagSelect() {
+        tagSelect.innerHTML = `<option value="">Add existing tag</option>` +
+          allTags
+            .filter((t: any) => !selectedTags.includes(t.name))
+            .map((t: any) => `<option value="${t.name}">${t.name}</option>`)
+            .join('');
+      }
+
+      renderTags();
+      updateTagSelect();
+
+      tagInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && tagInput.value.trim()) {
+          const tag = tagInput.value.trim();
+          if (!selectedTags.includes(tag)) {
+            selectedTags.push(tag);
+            renderTags();
+            updateTagSelect();
+          }
+          tagInput.value = '';
+          e.preventDefault();
+        }
+      });
+
+      tagSelect.addEventListener('change', () => {
+        const tag = tagSelect.value;
+        if (tag && !selectedTags.includes(tag)) {
+          selectedTags.push(tag);
+          renderTags();
+          updateTagSelect();
+        }
+        tagSelect.value = '';
+      });
+    }, 100);
   }
 
   // Initial render

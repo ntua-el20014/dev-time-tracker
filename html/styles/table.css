@@ -122,16 +122,18 @@ th {
   align-items: center;
   justify-content: center;
 }
-.summary-table tr:hover .session-edit-btn {
+.summary-table tr:hover .session-edit-btn{
   visibility: visible;
+}
+.summary-table tr:hover:not(:has(th)) .session-edit-btn:hover{
   background: var(--row-hover);
 }
+
 .summary-table .session-edit-btn img {
   width: 16px;
   height: 16px;
 }
 
-/* table.css or filters.css */
 .summary-filter-btn {
   padding: 8px 18px;
   border-radius: 8px;

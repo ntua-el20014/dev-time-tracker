@@ -42,3 +42,16 @@ export function saveEditorColors(editorColors: EditorColorConfig) {
   cfg.editorColors = editorColors;
   saveConfig(cfg);
 }
+
+export function getAccentColor(theme: 'dark' | 'light' = 'dark'): string {
+  const cfg = loadConfig();
+  if (theme === 'light') return cfg.accentColorLight || '#f0db4f';
+  return cfg.accentColorDark || '#f0db4f';
+}
+
+export function setAccentColor(color: string, theme: 'dark' | 'light' = 'dark') {
+  const cfg = loadConfig();
+  if (theme === 'light') cfg.accentColorLight = color;
+  else cfg.accentColorDark = color;
+  saveConfig(cfg);
+}

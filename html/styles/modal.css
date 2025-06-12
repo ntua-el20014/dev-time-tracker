@@ -86,3 +86,41 @@
   cursor: pointer;
   font-weight: bold;
 }
+
+input#tag-input {
+  width: 70%;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: var(--row-odd);
+  color: var(--fg);
+  font-size: 1em;
+  box-sizing: border-box;
+}
+
+select#tag-select {
+  background: var(--accent);
+  color: #222;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 1em;
+  margin-top: 8px;
+  margin-bottom: 2px;
+  outline: none;
+  transition: box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  cursor: pointer;
+  width: 220px;
+  min-width: 120px;
+  max-width: 100%;
+}
+
+select#tag-select:focus {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+select#tag-select option {
+  background: #fffbe6;
+  color: #222;
+}

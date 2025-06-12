@@ -34,6 +34,23 @@ db.prepare(`
   )
 `).run();
 
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE
+  )
+`).run();
+
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS session_tags (
+    session_id INTEGER,
+    tag_id INTEGER,
+    PRIMARY KEY (session_id, tag_id),
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+  )
+`).run();
+
 // Add this helper function at the top of logger.ts
 function getLocalDateString(date = new Date()): string {
   return date.toLocaleDateString('en-CA'); // YYYY-MM-DD format
@@ -113,27 +130,95 @@ export function getDailySummary() {
   `).all();
 }
 
-export function addSession(date: string, start_time: string, duration: number, title: string, description?: string) {
-  db.prepare(`
-    INSERT INTO sessions (date, start_time, duration, title, description)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(date, start_time, duration, title, description || null);
-}
-
 export function getSessions() {
-  return db.prepare(`
+  type SessionRow = {
+    id: number;
+    date: string;
+    start_time: string;
+    duration: number;
+    title: string;
+    description: string | null;
+    tags?: string[];
+  };
+  const sessions = db.prepare(`
     SELECT id, date, start_time, duration, title, description
     FROM sessions
     ORDER BY date DESC, start_time DESC
-  `).all();
+  `).all() as SessionRow[];
+  for (const s of sessions) {
+    s.tags = getSessionTags(s.id);
+  }
+  return sessions;
 }
 
-export function editSession(id: number, title: string, description: string) {
+export function editSession(id: number, title: string, description: string, tags?: string[]) {
   db.prepare(`
     UPDATE sessions SET title = ?, description = ? WHERE id = ?
   `).run(title, description, id);
+  if (tags) setSessionTags(id, tags);
 }
 
 export function deleteSession(id: number) {
   db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
 }
+
+export function getAllTags() {
+  return db.prepare(`SELECT * FROM tags ORDER BY name COLLATE NOCASE`).all();
+}
+
+export function addTag(name: string): number {
+  try {
+    const info = db.prepare(`INSERT INTO tags (name) VALUES (?)`).run(name);
+    return info.lastInsertRowid as number;
+  } catch {
+    // Tag already exists
+    const row = db.prepare(`SELECT id FROM tags WHERE name = ?`).get(name) as { id: number } | undefined;
+    return row?.id;
+  }
+}
+
+export function setSessionTags(sessionId: number, tagNames: string[]) {
+  // Remove old tags
+  db.prepare(`DELETE FROM session_tags WHERE session_id = ?`).run(sessionId);
+  // Add new tags
+  for (const name of tagNames) {
+    const tagId = addTag(name);
+    db.prepare(`INSERT OR IGNORE INTO session_tags (session_id, tag_id) VALUES (?, ?)`).run(sessionId, tagId);
+  }
+}
+
+export function getSessionTags(sessionId: number): string[] {
+  return db.prepare(`
+    SELECT t.name FROM tags t
+    JOIN session_tags st ON t.id = st.tag_id
+    WHERE st.session_id = ?
+    ORDER BY t.name COLLATE NOCASE
+  `).all(sessionId).map((row: { name: string }) => row.name);
+}
+
+// When adding a session, optionally accept tags:
+export function addSession(
+  date: string,
+  start_time: string,
+  duration: number,
+  title: string,
+  description?: string,
+  tags?: string[]
+) {
+  const info = db.prepare(`
+    INSERT INTO sessions (date, start_time, duration, title, description)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(date, start_time, duration, title, description || null);
+  const sessionId = info.lastInsertRowid as number;
+  if (tags && tags.length) setSessionTags(sessionId, tags);
+}
+
+export function deleteTag(name: string) {
+  // Remove tag from tags and all session_tags
+  const tag = db.prepare(`SELECT id FROM tags WHERE name = ?`).get(name) as { id: number } | undefined;
+  if (tag) {
+    db.prepare(`DELETE FROM session_tags WHERE tag_id = ?`).run(tag.id);
+    db.prepare(`DELETE FROM tags WHERE id = ?`).run(tag.id);
+  }
+}
+
