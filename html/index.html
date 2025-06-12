@@ -8,9 +8,16 @@
 </head>
 <body>
   <div class="tab-bar">
-    <button class="tab active" data-tab="today">Today</button>
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="today">Today</button>
     <button class="tab" data-tab="summary">Summary</button>
     <button class="tab" data-tab="profile">My Profile</button>
+  </div>
+  <div id="tab-dashboard" class="tab-content" style="display:none">
+    <div class="container">
+      <h1>Dashboard</h1>
+      <div id="dashboardContent"></div>
+    </div>
   </div>
   <div id="tab-today" class="tab-content active">
     <div class="container">

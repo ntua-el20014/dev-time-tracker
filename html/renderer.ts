@@ -3,6 +3,7 @@ import { ipcRenderer } from 'electron';
 import { renderLogs } from './logsTab';
 import { refreshProfile } from './profileTab';
 import { renderSummary } from './summaryTab';
+import { renderDashboard } from './dashboardTab';
 import { initTheme, updateRecordBtn, updatePauseBtn } from './theme';
 import { displayOSInfo, showModal, showNotification } from './components';
 import './styles/base.css';
@@ -33,7 +34,8 @@ function setupTabs() {
         content.classList.add('active');
         content.style.display = '';
       }
-
+      if (tabId === 'dashboard') renderDashboard();
+      if (tabId === 'today') renderLogs();
       if (tabId === 'profile') refreshProfile();
       if (tabId === 'summary') renderSummary();
     });
@@ -49,11 +51,33 @@ function initUI() {
   });
 
   ipcRenderer.on('window-tracked', () => {
-    renderLogs(localToday);
+    // Only refresh logs if Today tab is active
+    const todayTab = document.querySelector('.tab[data-tab="today"]') as HTMLButtonElement;
+    const todayContent = document.getElementById('tab-today');
+    if (todayTab?.classList.contains('active') && todayContent?.classList.contains('active')) {
+      renderLogs(localToday);
+    }
   });
 
-  renderLogs(localToday);
   setupTabs();
+
+  // --- Make Dashboard tab active by default ---
+  const tabs = Array.from(document.querySelectorAll('.tab')) as HTMLButtonElement[];
+  const tabContents = Array.from(document.querySelectorAll('.tab-content')) as HTMLDivElement[];
+  tabs.forEach(t => t.classList.remove('active'));
+  tabContents.forEach(tc => {
+    tc.classList.remove('active');
+    tc.style.display = 'none';
+  });
+
+  const dashboardTab = document.querySelector('.tab[data-tab="dashboard"]') as HTMLButtonElement;
+  const dashboardContent = document.getElementById('tab-dashboard');
+  if (dashboardTab && dashboardContent) {
+    dashboardTab.classList.add('active');
+    dashboardContent.classList.add('active');
+    dashboardContent.style.display = '';
+    renderDashboard();
+  }
 }
 
 let isRecording = false;

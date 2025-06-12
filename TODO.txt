@@ -1,10 +1,9 @@
 TODO / Ideas for Improvements
 
-- [ ] More charts: Add line charts for trends.
 - [ ] Daily goals: Allow users to set and track daily coding time or session goals and get notified when done.
-- [ ] Better error handling: Show user-friendly error messages for DB or tracking issues.
 - [ ] Multi-user support: Allow switching between different user profiles.
 - [ ] Add a dashboard/home tab with quick stats and recent activity.
+- [ ] Present customizable charts with filtering options (language, editor, time per day on specified date range)
 - [ ] Add language icons and editing options for unknown results.
 - [ ] Session export: Export sessions or summaries to CSV/JSON for reporting.
 - [ ] Weekly/monthly reports: Generate and display reports for longer periods.

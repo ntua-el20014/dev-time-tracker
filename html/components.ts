@@ -224,3 +224,126 @@ export function renderPieChartJS(
   // Store chart instance for later cleanup
   container._pieChartInstance = chart;
 }
+
+type LineChartDataPoint = {
+  title: string;
+  date: string;   // YYYY-MM-DD
+  name?: string;   // Editor or language
+  usage: number;  // Usage in seconds or minutes
+  color?: string; // Optional: for custom series color
+};
+
+type LineChartOptions = {
+  containerId: string;
+  data: LineChartDataPoint[];
+  width?: number;
+  height?: number;
+  yLabel?: string;
+  dateSpan?: string[]; // Optional: array of dates to use as x-axis (for missing days)
+};
+
+type LineChartContainer = HTMLElement & { _lineChartInstance?: Chart };
+
+export function renderLineChartJS(opts: LineChartOptions) {
+  const { containerId, data, width = 400, height = 200, yLabel = 'Usage', dateSpan } = opts;
+  const container = document.getElementById(containerId) as LineChartContainer | null;
+  if (!container) return;
+  container.innerHTML = '';
+
+  // Destroy previous chart instance if any
+  if (container._lineChartInstance) {
+    container._lineChartInstance.destroy();
+  }
+
+  // If all data points are missing 'name', use a default name (from title or 'Usage')
+  const names = Array.from(new Set(data.map(d => d.name).filter(Boolean)));
+  if (names.length === 0) {
+    const defaultName = data[0]?.title || 'Usage';
+    names.push(defaultName);
+    data.forEach(d => (d.name = defaultName));
+  }
+
+  // Get all unique dates (x-axis)
+  const dates = dateSpan
+    ? dateSpan
+    : Array.from(new Set(data.map(d => d.date))).sort();
+
+  // Assign colors (fallback palette)
+  const palette = ['#4f8cff', '#ffb347', '#7ed957', '#ff6961', '#b19cd9', '#f67280', '#355c7d'];
+  const colorMap: { [name: string]: string } = {};
+  names.forEach((name, i) => {
+    const custom = data.find(d => d.name === name && d.color)?.color;
+    colorMap[name] = custom || palette[i % palette.length];
+  });
+
+  // Build datasets for Chart.js
+  const datasets = names.map(name => ({
+    label: name,
+    data: dates.map(date => {
+      const found = data.find(d => d.name === name && d.date === date);
+      return found ? found.usage : 0;
+    }),
+    borderColor: colorMap[name],
+    backgroundColor: colorMap[name] + '33', // semi-transparent fill
+    tension: 0.2,
+    fill: false,
+    pointRadius: 3,
+    pointHoverRadius: 5,
+  }));
+
+  // Create and append canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  container.appendChild(canvas);
+
+  // Use CSS variable for axis/label color
+  const axisColor = getComputedStyle(document.body).getPropertyValue('--fg').trim() || '#fff';
+
+  // Create Chart.js line chart
+  const chart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets,
+    },
+    options: {
+      responsive: false,
+      plugins: {
+        legend: {
+          labels: {
+            color: axisColor,
+            font: { size: 13 }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const label = ctx.dataset.label || '';
+              const value = ctx.parsed.y || 0;
+              return `${label}: ${value}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Date', color: axisColor },
+          ticks: {
+            color: axisColor,
+            font: { size: 10 }, // smaller font
+            maxRotation: 45,    // rotate diagonally
+            minRotation: 45
+          }
+        },
+        y: {
+          title: { display: true, text: yLabel, color: axisColor },
+          ticks: { color: axisColor }
+        }
+      }
+    }
+  });
+
+  // Store chart instance for later cleanup
+  container._lineChartInstance = chart;
+}

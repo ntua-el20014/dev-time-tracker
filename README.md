@@ -130,6 +130,7 @@ For full license details, see the [LICENSE](./LICENSE) file.
 
 Pull requests, bug reports, and feature suggestions are welcome!  
 Please open an issue or discussion to get started.
+Don't forget to read the [Contributor License Agreement](./CLA.md) before doing so.
 
 ---
 
