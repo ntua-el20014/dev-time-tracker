@@ -24,7 +24,9 @@ export function initTheme() {
       document.body.classList.toggle('light');
       localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
       updateThemeIcon(themeIcon);
-      await applyAccentColor(); // Always update accent color on theme change
+      await applyAccentColor();
+      // Dispatch custom event
+      window.dispatchEvent(new Event('theme-changed'));
     });
 
     const savedTheme = localStorage.getItem('theme');
@@ -84,5 +86,5 @@ export function updatePauseBtn(pauseBtn: HTMLButtonElement, pauseIcon: HTMLImage
  */
 export function loadHotkey(key: string): string {
   // You can add more mappings if you use special names
-  return require(`../data/${key}-key.png`);
+  return require(`../data/${key}.png`);
 }

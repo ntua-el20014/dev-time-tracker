@@ -18,7 +18,7 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 - **Timeline & Calendar:**  
   Visualize your coding activity with a weekly timeline and a monthly calendar.
 - **Editor & Language Stats:**  
-  See which editors and programming languages you use most.
+  See which editors and programming languages you use most through charts and statistics.
 - **Customizable Themes:**  
   Switch between dark and light mode, pick custom accent color for each one.
 - **Local-First:**  

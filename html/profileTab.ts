@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
 import { applyAccentColor } from './renderer';
-import { renderPercentBar } from './components';
+import { renderPercentBar, renderPieChartJS } from './components';
 import { loadHotkey } from './theme';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -98,9 +98,11 @@ async function renderLanguageUsage(container: HTMLElement) {
     percent: (row.total_time / total) * 100,
     color: defaultColors[i % defaultColors.length]
   }));
+
+  // Prepare container for Chart.js pie chart
   container.innerHTML = `
     <h2>Language Usage Breakdown</h2>
-    ${renderPercentBar(items)}
+    <div id="languagePieChart" style="width:180px;height:180px;margin-bottom:16px;"></div>
     <ul style="list-style:none;padding:0;margin:0;">
       ${usage.map((row: any, i: number) => {
         const percent = ((row.total_time / total) * 100).toFixed(1);
@@ -111,6 +113,17 @@ async function renderLanguageUsage(container: HTMLElement) {
       }).join('')}
     </ul>
   `;
+
+  // Render the Chart.js pie chart
+  renderPieChartJS('languagePieChart', items, 180);
+
+  // Remove previous listener to avoid duplicates
+  window.removeEventListener('theme-changed', rerenderPieChartOnThemeChange);
+
+  function rerenderPieChartOnThemeChange() {
+    renderPieChartJS('languagePieChart', items, 180);
+  }
+  window.addEventListener('theme-changed', rerenderPieChartOnThemeChange);
 }
 
 async function renderSettings(container: HTMLElement) {
@@ -231,13 +244,7 @@ async function renderSettings(container: HTMLElement) {
     });
   }
 
-  // Listen for theme changes (toggleTheme button click)
-  const toggleThemeBtn = document.getElementById('toggleTheme');
-  if (toggleThemeBtn) {
-    toggleThemeBtn.addEventListener('click', () => {
-      updateAccentPickerForTheme(); // Wait for theme to apply
-    });
-  }
+  window.addEventListener('theme-changed', updateAccentPickerForTheme);
 }
   
 export async function refreshProfile() {
@@ -287,19 +294,42 @@ export async function refreshProfile() {
   });
 }
 
-function renderHotkeys(container: HTMLElement) {
-  const keyImg = (key: string) =>
-  `<img src="${loadHotkey(key)}" alt="${key}" style="height:1.5em;vertical-align:middle;margin:0 2px;">`;
+let lastHotkeysContainer: HTMLElement | null = null;
 
-container.innerHTML = `
-  <h2>Keyboard Shortcuts</h2>
-  <ul style="list-style:none;padding:0;margin:0;line-height:2;">
-    <li>${keyImg('ctrl')} + ${keyImg('r')}   Start/Stop recording</li>
-    <li>${keyImg('ctrl')} + ${keyImg('p')}   Pause/Resume recording</li>
-    <li>${keyImg('ctrl')} + ${keyImg('hashtag')}   Switch Tabs [# = 1, 2, 3]</li>
-  </ul>
-  <p style="margin-top:16px;color:#888;font-size:0.98em;">
-    <i>Shortcuts work globally except when typing in an input or textarea.</i>
-  </p>
-`;
+function rerenderHotkeysIcons() {
+  // Only re-render if the Hotkeys tab is currently visible
+  if (
+    lastHotkeysContainer &&
+    lastHotkeysContainer.offsetParent !== null // visible in DOM
+  ) {
+    renderHotkeys(lastHotkeysContainer);
+  }
+}
+
+window.addEventListener('theme-changed', rerenderHotkeysIcons);
+
+function renderHotkeys(container: HTMLElement) {
+  lastHotkeysContainer = container;
+
+  function keyImg(key: string) {
+    const isLight = document.body.classList.contains('light');
+    const suffix = isLight ? '' : '-w';
+    try {
+      return `<img src="${loadHotkey(key + '-key' + suffix)}" alt="${key}" style="height:1.5em;vertical-align:middle;margin:0 2px;">`;
+    } catch {
+      return `<img src="${loadHotkey(key + '-key')}" alt="${key}" style="height:1.5em;vertical-align:middle;margin:0 2px;">`;
+    }
+  }
+
+  container.innerHTML = `
+    <h2>Keyboard Shortcuts</h2>
+    <ul style="list-style:none;padding:0;margin:0;line-height:2;">
+      <li>${keyImg('ctrl')} + ${keyImg('r')}   Start/Stop recording</li>
+      <li>${keyImg('ctrl')} + ${keyImg('p')}   Pause/Resume recording</li>
+      <li>${keyImg('ctrl')} + ${keyImg('hashtag')}   Switch Tabs [# = 1, 2, 3]</li>
+    </ul>
+    <p style="margin-top:16px;color:#888;font-size:0.98em;">
+      <i>Shortcuts work globally except when typing in an input or textarea.</i>
+    </p>
+  `;
 }

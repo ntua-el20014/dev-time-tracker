@@ -1,3 +1,5 @@
+import { Chart } from 'chart.js/auto';
+
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 export function displayOSInfo(os: string) {
   let osDiv = document.getElementById('os-info') as HTMLDivElement | null;
@@ -153,4 +155,72 @@ export function renderPercentBar(
       `).join('')}
     </div>
   `;
+}
+
+type PieChartContainer = HTMLElement & { _pieChartInstance?: Chart };
+
+export function renderPieChartJS(
+  containerId: string,
+  items: { label: string; percent: number; color: string }[],
+  size = 160
+) {
+  const container = document.getElementById(containerId) as PieChartContainer | null;
+  if (!container) return;
+  container.innerHTML = '';
+
+  // Create and append canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  container.appendChild(canvas);
+
+  // Destroy previous chart instance if any
+  if (container._pieChartInstance) {
+    container._pieChartInstance.destroy();
+  }
+
+  // Use CSS variable for legend label color
+  const legendLabelColor = getComputedStyle(document.body).getPropertyValue('--fg').trim() || '#fff';
+
+  // Prepare data
+  const data = {
+    labels: items.map(i => i.label),
+    datasets: [{
+      data: items.map(i => i.percent),
+      backgroundColor: items.map(i => i.color),
+      borderWidth: 1,
+      borderColor: '#fff'
+    }]
+  };
+
+  // Create Chart.js pie chart
+  const chart = new Chart(canvas, {
+    type: 'pie',
+    data,
+    options: {
+      responsive: false,
+      plugins: {
+        legend: {
+          display: true,
+          position: 'bottom',
+          labels: {
+            color: legendLabelColor,
+            font: { size: 14 }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const label = ctx.label || '';
+              const value = ctx.parsed || 0;
+              return `${label}: ${value.toFixed(1)}%`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Store chart instance for later cleanup
+  container._pieChartInstance = chart;
 }

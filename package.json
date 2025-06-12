@@ -30,6 +30,7 @@
     "@electron/fuses": "^1.8.0",
     "@electron/rebuild": "^4.0.1",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/chart.js": "^2.9.41",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vercel/webpack-asset-relocator-loader": "^1.7.0",
@@ -48,6 +49,7 @@
   "dependencies": {
     "@miniben90/x-win": "^2.2.1",
     "better-sqlite3": "^11.10.0",
+    "chart.js": "^4.4.9",
     "electron-squirrel-startup": "^1.0.1",
     "extract-file-icon": "^0.3.2",
     "language-icons": "^0.3.0",
