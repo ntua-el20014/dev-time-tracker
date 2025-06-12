@@ -3,7 +3,7 @@ import { ipcRenderer } from 'electron';
 import { renderLogs } from './logsTab';
 import { refreshProfile } from './profileTab';
 import { renderSummary } from './summaryTab';
-import { initTheme, updateRecordBtn } from './theme';
+import { initTheme, updateRecordBtn, updatePauseBtn } from './theme';
 import { displayOSInfo, showModal } from './components';
 import './styles/base.css';
 import './styles/layout.css';
@@ -57,21 +57,46 @@ function initUI() {
 }
 
 let isRecording = false;
+let isPaused = false;
 
-function setupRecordBtn() {
-  const btn = document.getElementById('recordBtn') as HTMLButtonElement;
-  const icon = document.getElementById('recordIcon') as HTMLImageElement;
-  if (!btn || !icon) return;
-  btn.addEventListener('click', async () => {
-    isRecording = !isRecording;
-    updateRecordBtn(btn, icon, isRecording);
-    if (isRecording) {
+function setupRecordAndPauseBtns() {
+  const recordBtn = document.getElementById('recordBtn') as HTMLButtonElement;
+  const recordIcon = document.getElementById('recordIcon') as HTMLImageElement;
+  const pauseBtn = document.getElementById('pauseBtn') as HTMLButtonElement;
+  const pauseIcon = document.getElementById('pauseIcon') as HTMLImageElement;
+
+  if (!recordBtn || !recordIcon || !pauseBtn || !pauseIcon) return;
+
+  recordBtn.addEventListener('click', async () => {
+    if (!isRecording) {
+      isRecording = true;
+      isPaused = false;
+      pauseBtn.style.display = '';
+      updatePauseBtn(pauseBtn, pauseIcon, isPaused);
       await ipcRenderer.invoke('start-tracking');
     } else {
+      isRecording = false;
+      isPaused = false;
+      pauseBtn.style.display = 'none';
       await ipcRenderer.invoke('stop-tracking');
     }
+    updateRecordBtn(recordBtn, recordIcon, isRecording);
   });
-  updateRecordBtn(btn, icon, isRecording);
+
+  pauseBtn.addEventListener('click', async () => {
+    if (!isPaused) {
+      isPaused = true;
+      await ipcRenderer.invoke('pause-tracking');
+    } else {
+      isPaused = false;
+      await ipcRenderer.invoke('resume-tracking');
+    }
+    updatePauseBtn(pauseBtn, pauseIcon, isPaused);
+  });
+
+  updateRecordBtn(recordBtn, recordIcon, isRecording);
+  updatePauseBtn(pauseBtn, pauseIcon, isPaused);
+  pauseBtn.style.display = 'none';
 }
 
 ipcRenderer.on('get-session-info', () => {
@@ -97,7 +122,25 @@ ipcRenderer.on('get-session-info', () => {
   });
 });
 
+ipcRenderer.on('auto-paused', () => {
+  isPaused = true;
+  const pauseBtn = document.getElementById('pauseBtn') as HTMLButtonElement;
+  const pauseIcon = document.getElementById('pauseIcon') as HTMLImageElement;
+  if (pauseBtn && pauseIcon) {
+    updatePauseBtn(pauseBtn, pauseIcon, isPaused);
+  }
+});
+
+ipcRenderer.on('auto-resumed', () => {
+  isPaused = false;
+  const pauseBtn = document.getElementById('pauseBtn') as HTMLButtonElement;
+  const pauseIcon = document.getElementById('pauseIcon') as HTMLImageElement;
+  if (pauseBtn && pauseIcon) {
+    updatePauseBtn(pauseBtn, pauseIcon, isPaused);
+  }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   initUI();
-  setupRecordBtn();
+  setupRecordAndPauseBtns();
 });

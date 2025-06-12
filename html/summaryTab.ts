@@ -218,9 +218,8 @@ export async function renderSummary() {
     const sessions = await ipcRenderer.invoke('get-sessions');
     const sessionTableBody = sessionTable.querySelector('tbody')!;
     sessionTableBody.innerHTML = sessions.map((session: any) => {
-      const start = new Date(session.start_time);
-      const end = new Date(session.end_time);
-      const durationSec = Math.floor((end.getTime() - start.getTime()) / 1000);
+      // Use the new duration field directly
+      const durationSec = session.duration || 0;
       const h = Math.floor(durationSec / 3600);
       const m = Math.floor((durationSec % 3600) / 60);
       const s = durationSec % 60;

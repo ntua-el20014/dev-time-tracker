@@ -2,10 +2,8 @@ TODO / Ideas for Improvements
 
 - [ ] Daily goals: Allow users to set and track daily coding time or session goals.
 - [ ] Session tags: Let users tag sessions (e.g. "work", "study", "project X") for better filtering and reporting.
-- [ ] Session editing: Add UI to edit or delete past sessions (title, description, time).
 - [ ] Session export: Export sessions or summaries to CSV/JSON for reporting.
 - [ ] Notifications: Notify user when a daily goal is reached or after long inactivity.
-- [ ] Idle detection: Pause tracking automatically when user is idle for a configurable period.
 - [ ] Weekly/monthly reports: Generate and display reports for longer periods.
 - [ ] More charts: Add pie charts for language/editor usage, or line charts for trends.
 - [ ] Customizable themes: Allow user to pick accent color or switch between more themes.

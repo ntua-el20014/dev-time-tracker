@@ -44,7 +44,6 @@ h1 {
   z-index: 1000;
 }
 
-/* base.css or record.css */
 #recordBtn {
   position: fixed;
   top: 60px;
@@ -66,4 +65,33 @@ h1 {
   width: 36px;
   height: 36px;
   display: block;
+}
+
+#pauseBtn {
+  position: fixed;
+  top: 112px;
+  left: 24px;
+  z-index: 1001;
+  padding: 8px 24px;
+  border-radius: 8px;
+  background: var(--row-hover);
+  color: var(--fg);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: background 0.2s, color 0.2s;
+}
+
+#pauseBtn img {
+  width: 36px;
+  height: 36px;
+  display: block;
+}
+
+#pauseBtn.paused {
+  background: var(--accent);
+  color: #222;
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/main/config.ts
 import fs from 'fs';
 import path from 'path';
@@ -14,16 +15,30 @@ function ensureConfigDirExists() {
   }
 }
 
-export function loadEditorColors(): EditorColorConfig {
+export function loadConfig(): any {
   ensureConfigDirExists();
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    if (fs.existsSync(CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    }
   } catch {
-    return {};
+    //nothing to do here, just return empty object
   }
+  return {};
 }
 
-export function saveEditorColors(config: EditorColorConfig) {
+export function saveConfig(cfg: any) {
   ensureConfigDirExists();
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf-8');
+}
+
+export function loadEditorColors(): EditorColorConfig {
+  const cfg = loadConfig();
+  return cfg.editorColors || {};
+}
+
+export function saveEditorColors(editorColors: EditorColorConfig) {
+  const cfg = loadConfig();
+  cfg.editorColors = editorColors;
+  saveConfig(cfg);
 }

@@ -1,9 +1,9 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
 import { logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions, editSession, deleteSession } from './logger';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
 import { activeWindow } from '@miniben90/x-win';
-import { loadEditorColors, saveEditorColors } from './config';
+import { loadEditorColors, saveEditorColors, loadConfig, saveConfig } from './config';
 import os from 'os';
 
 let mainWindow: BrowserWindow;
@@ -12,6 +12,55 @@ const intervalSeconds = 10;
 let trackingInterval: NodeJS.Timeout | null = null;
 let sessionStart: Date | null = null;
 let sessionEnd: Date | null = null;
+let sessionActiveDuration = 0; // in seconds
+let lastActiveTimestamp: Date | null = null;
+let isPaused = false;
+
+let idleTimeoutSeconds = 60;
+try {
+  const cfg = loadConfig();
+  if (cfg && typeof cfg.idleTimeoutSeconds === 'number') {
+    idleTimeoutSeconds = cfg.idleTimeoutSeconds;
+  }
+} catch {
+  // Fallback to default if config loading fails
+  idleTimeoutSeconds = 60;
+}
+
+app.whenReady().then(() => {
+  createWindow();
+
+  // Listen for system idle (lock/unlock)
+  powerMonitor.on('lock-screen', () => {
+    if (!isPaused && trackingInterval) {
+      ipcMain.emit('auto-pause');
+      mainWindow?.webContents.send('auto-paused');
+    }
+  });
+
+  powerMonitor.on('unlock-screen', () => {
+    if (isPaused && trackingInterval === null) {
+      ipcMain.emit('auto-resume');
+      mainWindow?.webContents.send('auto-resumed');
+    }
+  });
+
+  // Poll for idle time every 2 seconds
+  setInterval(() => {
+    const idleSeconds = powerMonitor.getSystemIdleTime();
+    if (idleSeconds >= idleTimeoutSeconds) {
+      if (!isPaused && trackingInterval) {
+        ipcMain.emit('auto-pause');
+        mainWindow?.webContents.send('auto-paused');
+      }
+    } else {
+      if (isPaused && trackingInterval === null) {
+        ipcMain.emit('auto-resume');
+        mainWindow?.webContents.send('auto-resumed');
+      }
+    }
+  }, 2000);
+});
 
 function trackActiveWindow() {
   try {
@@ -104,6 +153,17 @@ ipcMain.handle('set-editor-color', (event, app: string, color: string) => {
   saveEditorColors(config);
 });
 
+ipcMain.handle('get-idle-timeout', () => {
+  return idleTimeoutSeconds;
+});
+
+ipcMain.handle('set-idle-timeout', (_event, seconds: number) => {
+  idleTimeoutSeconds = seconds;
+  const cfg = loadConfig();
+  cfg.idleTimeoutSeconds = seconds;
+  saveConfig(cfg);
+});
+
 ipcMain.handle('get-language-usage', async () => {
   try {
     return getLanguageUsage();
@@ -118,6 +178,29 @@ ipcMain.handle('start-tracking', () => {
     trackingInterval = setInterval(trackActiveWindow, intervalSeconds * 1000);
   }
   sessionStart = new Date();
+  sessionActiveDuration = 0;
+  lastActiveTimestamp = new Date();
+  isPaused = false;
+});
+
+ipcMain.handle('pause-tracking', () => {
+  if (!isPaused && lastActiveTimestamp) {
+    const now = new Date();
+    sessionActiveDuration += Math.round((now.getTime() - lastActiveTimestamp.getTime()) / 1000);
+    isPaused = true;
+    if (trackingInterval) {
+      clearInterval(trackingInterval);
+      trackingInterval = null;
+    }
+  }
+});
+
+ipcMain.handle('resume-tracking', () => {
+  if (isPaused) {
+    lastActiveTimestamp = new Date();
+    trackingInterval = setInterval(trackActiveWindow, intervalSeconds * 1000);
+    isPaused = false;
+  }
 });
 
 ipcMain.handle('stop-tracking', async () => {
@@ -125,10 +208,14 @@ ipcMain.handle('stop-tracking', async () => {
     clearInterval(trackingInterval);
     trackingInterval = null;
   }
+  let duration = sessionActiveDuration;
+  if (!isPaused && lastActiveTimestamp) {
+    const now = new Date();
+    duration += Math.round((now.getTime() - lastActiveTimestamp.getTime()) / 1000);
+  }
   sessionEnd = new Date();
   if (sessionStart && sessionEnd) {
-    const duration = (sessionEnd.getTime() - sessionStart.getTime()) / 1000;
-    if (duration >= 10) { // Only record if >= 1 minute
+    if (duration >= 10) { // Only record if >= 10 seconds
       // Ask renderer for session title/description
       const getSessionInfo = () =>
         new Promise<{ title: string; description: string }>((resolve) => {
@@ -142,13 +229,15 @@ ipcMain.handle('stop-tracking', async () => {
       if (title && title.trim() !== '') {
         const date = sessionStart.toLocaleDateString('en-CA');
         const start_time = sessionStart.toISOString();
-        const end_time = sessionEnd.toISOString();
-        addSession(date, start_time, end_time, title, description);
+        addSession(date, start_time, duration, title, description);
       }
     }
   }
   sessionStart = null;
   sessionEnd = null;
+  sessionActiveDuration = 0;
+  lastActiveTimestamp = null;
+  isPaused = false;
 });
 
 ipcMain.handle('get-sessions', async () => {
@@ -180,7 +269,26 @@ ipcMain.handle('delete-session', async (_event, id) => {
   }
 });
 
-app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+ipcMain.on('auto-pause', () => {
+  if (!isPaused && lastActiveTimestamp) {
+    const now = new Date();
+    sessionActiveDuration += Math.round((now.getTime() - lastActiveTimestamp.getTime()) / 1000);
+    isPaused = true;
+    if (trackingInterval) {
+      clearInterval(trackingInterval);
+      trackingInterval = null;
+    }
+  }
+});
+
+ipcMain.on('auto-resume', () => {
+  if (isPaused) {
+    lastActiveTimestamp = new Date();
+    trackingInterval = setInterval(trackActiveWindow, intervalSeconds * 1000);
+    isPaused = false;
+  }
 });

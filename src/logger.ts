@@ -28,7 +28,7 @@ db.prepare(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     date TEXT,
     start_time TEXT,
-    end_time TEXT,
+    duration INTEGER,
     title TEXT,
     description TEXT
   )
@@ -113,16 +113,16 @@ export function getDailySummary() {
   `).all();
 }
 
-export function addSession(date: string, start_time: string, end_time: string, title: string, description?: string) {
+export function addSession(date: string, start_time: string, duration: number, title: string, description?: string) {
   db.prepare(`
-    INSERT INTO sessions (date, start_time, end_time, title, description)
+    INSERT INTO sessions (date, start_time, duration, title, description)
     VALUES (?, ?, ?, ?, ?)
-  `).run(date, start_time, end_time, title, description || null);
+  `).run(date, start_time, duration, title, description || null);
 }
 
 export function getSessions() {
   return db.prepare(`
-    SELECT id, date, start_time, end_time, title, description
+    SELECT id, date, start_time, duration, title, description
     FROM sessions
     ORDER BY date DESC, start_time DESC
   `).all();

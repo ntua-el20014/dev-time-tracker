@@ -2,6 +2,8 @@ import themeLight from '../data/toggle_light.png';
 import themeDark from '../data/toggle_dark.png';
 import startBtn from '../data/start-button.png';
 import stopBtn from '../data/stop-button.png';
+import pauseIconImg from '../data/pause-button.png';
+import playIconImg from '../data/play-button.png';
 
 export function updateThemeIcon(themeIcon: HTMLImageElement) {
   if (!themeIcon) return;
@@ -51,4 +53,25 @@ export function updateRecordBtn(recordBtn: HTMLButtonElement, recordIcon: HTMLIm
   recordBtn.title = isRecording ? 'Finish Recording' : 'Start Recording';
   recordBtn.style.background = isRecording ? 'crimson' : 'var(--accent)';
   recordBtn.style.color = isRecording ? '#fff' : '#222';
+}
+
+// --- Pause Button Logic ---
+
+export function updatePauseIcon(pauseIcon: HTMLImageElement, isPaused: boolean) {
+  if (!pauseIcon) return;
+  if (isPaused) {
+    pauseIcon.src = playIconImg;
+    pauseIcon.alt = 'Resume';
+    pauseIcon.classList.add('paused');
+  } else {
+    pauseIcon.src = pauseIconImg;
+    pauseIcon.alt = 'Pause';
+  }
+}
+
+export function updatePauseBtn(pauseBtn: HTMLButtonElement, pauseIcon: HTMLImageElement, isPaused: boolean) {
+  if (!pauseBtn || !pauseIcon) return;
+  updatePauseIcon(pauseIcon, isPaused);
+  pauseBtn.title = isPaused ? 'Resume Session' : 'Pause Session';
+  pauseBtn.classList.toggle('paused', isPaused);
 }

@@ -111,21 +111,46 @@ async function renderLanguageUsage(container: HTMLElement) {
   `;
 }
 
+async function renderSettings(container: HTMLElement) {
+  // Get current idleTimeout from main process (in seconds)
+  let idleTimeout = await ipcRenderer.invoke('get-idle-timeout');
+  if (!idleTimeout || typeof idleTimeout !== 'number') idleTimeout = 60;
+
+  container.innerHTML = `
+    <h2>Settings</h2>
+    <div style="margin-bottom:24px;">
+      <label for="idleTimeoutRange" style="font-weight:bold;">Idle Timeout:</label>
+      <input type="range" id="idleTimeoutRange" min="60" max="300" step="30" value="${idleTimeout}" style="vertical-align:middle;">
+      <span id="idleTimeoutValue" style="margin-left:8px;">${(idleTimeout/60).toFixed(1)} min</span>
+    </div>
+  `;
+
+  const range = container.querySelector('#idleTimeoutRange') as HTMLInputElement;
+  const valueSpan = container.querySelector('#idleTimeoutValue') as HTMLSpanElement;
+
+  range?.addEventListener('input', async () => {
+    const seconds = parseInt(range.value, 10);
+    valueSpan.textContent = (seconds / 60).toFixed(1) + ' min';
+    await ipcRenderer.invoke('set-idle-timeout', seconds);
+  });
+}
+  
 export async function refreshProfile() {
   const profileDiv = document.getElementById('profileContent');
   if (!profileDiv) return;
 
   // Layout: sidebar + content
   profileDiv.innerHTML = `
-    <div style="display: flex; min-height: 400px;">
-      <nav id="profileSidebar" style="min-width:180px;max-width:180px;padding:24px 0 0 0;">
-        <ul style="list-style:none;padding:0;margin:0;">
-          <li><button class="profile-chapter-btn" data-chapter="editor" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Editors</button></li>
-          <li><button class="profile-chapter-btn" data-chapter="language" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Languages</button></li>
-        </ul>
-      </nav>
-      <div id="profileChapterContent" style="flex:1;padding:0 0 0 32px;"></div>
-    </div>
+  <div style="display: flex; min-height: 400px;">
+    <nav id="profileSidebar" style="min-width:180px;max-width:180px;padding:24px 0 0 0;">
+      <ul style="list-style:none;padding:0;margin:0;">
+        <li><button class="profile-chapter-btn" data-chapter="editor" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Editors</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="language" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Languages</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="settings" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Settings</button></li>
+      </ul>
+    </nav>
+    <div id="profileChapterContent" style="flex:1;padding:0 0 0 32px;"></div>
+  </div>
   `;
 
   const contentDiv = profileDiv.querySelector('#profileChapterContent') as HTMLElement;
@@ -136,6 +161,9 @@ export async function refreshProfile() {
       await renderEditorUsage(contentDiv);
     } else if (chapter === 'language') {
       await renderLanguageUsage(contentDiv);
+    }
+    else if (chapter === 'settings') {
+      await renderSettings(contentDiv);
     }
     // Highlight active
     buttons.forEach(btn => {
