@@ -1,0 +1,60 @@
+/* layout.css */
+.container {
+  width: 95%;
+  max-width: 1400px;
+  margin-top: 20px;
+  background-color: var(--table-head);
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  overflow: visible;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.tab-bar {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+  background: var(--table-head);
+  padding: 0 0 0 24px;
+  width: 90%;
+  border-radius: 0 0 12px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  min-height: 48px;
+  align-items: center;
+}
+
+.tab {
+  padding: 10px 24px;
+  background: var(--row-odd);
+  border: none;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  color: var(--fg);
+  font-weight: bold;
+  font-size: 15px;
+  outline: none;
+  transition: background 0.2s;
+}
+
+.tab.active {
+  background: var(--accent);
+  color: #222;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}

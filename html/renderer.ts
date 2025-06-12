@@ -1,11 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
-import './index.css';
 import { renderLogs } from './logsTab';
 import { refreshProfile } from './profileTab';
 import { renderSummary } from './summaryTab';
 import { initTheme, updateRecordBtn } from './theme';
-import { displayOSInfo } from './osInfo';
+import { displayOSInfo, showModal } from './components';
+import './styles/base.css';
+import './styles/layout.css';
+import './styles/table.css';
+import './styles/modal.css';
+import './styles/calendar.css';
+import './styles/timeline.css';
+import './styles/profile.css';
+import './styles/theme.css';
 
 function setupTabs() {
   const tabs = Array.from(document.querySelectorAll('.tab')) as HTMLButtonElement[];
@@ -68,52 +75,27 @@ function setupRecordBtn() {
 }
 
 ipcRenderer.on('get-session-info', () => {
-  showSessionModal();
-});
-
-function showSessionModal() {
-  const modal = document.getElementById('sessionModal') as HTMLDivElement;
-  const form = document.getElementById('sessionForm') as HTMLFormElement;
-  const titleInput = document.getElementById('sessionTitle') as HTMLInputElement;
-  const descInput = document.getElementById('sessionDesc') as HTMLTextAreaElement;
-  const discardBtn = document.getElementById('sessionCancelBtn') as HTMLButtonElement;
-
-  if (!modal || !form || !titleInput || !descInput || !discardBtn) return;
-
-  // Reset fields
-  titleInput.value = '';
-  descInput.value = '';
-
-  modal.classList.add('active');
-
-  // Focus title input
-  setTimeout(() => titleInput.focus(), 100);
-
-  // Handle form submit
-  const submitHandler = (e: Event) => {
-    e.preventDefault();
-    ipcRenderer.send('session-info-reply', {
-      title: titleInput.value.trim() || 'Coding Session',
-      description: descInput.value.trim()
-    });
-    modal.classList.remove('active');
-    form.removeEventListener('submit', submitHandler);
-    discardBtn.removeEventListener('click', discardHandler);
-  };
-
-  // Handle discard with confirmation
-  const discardHandler = () => {
-    if (confirm('Session will be discarded. Are you sure?')) {
-      ipcRenderer.send('session-info-reply', { title: '', description: '' });
-      modal.classList.remove('active');
-      form.removeEventListener('submit', submitHandler);
-      discardBtn.removeEventListener('click', discardHandler);
+  showModal({
+    title: 'Session Info',
+    fields: [
+      { name: 'title', label: 'Title:', type: 'text', required: true },
+      { name: 'description', label: 'Description (optional):', type: 'textarea' }
+    ],
+    submitText: 'Save',
+    cancelText: 'Discard',
+    onSubmit: (values) => {
+      ipcRenderer.send('session-info-reply', {
+        title: values.title || 'Coding Session',
+        description: values.description
+      });
+    },
+    onCancel: () => {
+      if (confirm('Session will be discarded. Are you sure?')) {
+        ipcRenderer.send('session-info-reply', { title: '', description: '' });
+      }
     }
-  };
-
-  form.addEventListener('submit', submitHandler);
-  discardBtn.addEventListener('click', discardHandler);
-}
+  });
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   initUI();

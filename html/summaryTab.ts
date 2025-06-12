@@ -3,46 +3,13 @@
 import { ipcRenderer } from 'electron';
 import { formatTimeSpent } from '../src/utils/timeFormat';
 import edit from '../data/edit.png';
-
-function escapeHtml(text: string) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function getLocalDateString(date: Date): string {
-  return date.toLocaleDateString('en-CA'); // YYYY-MM-DD format
-}
-
-function getWeekDates(startDate: Date): Date[] {
-  // Create a new Date object to avoid modifying the original
-  const date = new Date(startDate);
-  const day = date.getDay();
-  // Adjust to get Monday (1) as first day of week
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(date);
-  monday.setDate(diff);
-  const dates = [];
-  for (let i = 0; i < 7; i++) {
-    const weekDay = new Date(monday);
-    weekDay.setDate(monday.getDate() + i);
-    dates.push(weekDay);
-  }
-  return dates;
-}
-
-// Helper to get the Monday of the week for a given date
-function getMonday(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
+import { escapeHtml, getLocalDateString, getWeekDates, getMonday, filterDailyDataForWeek } from './utils';
+import { showModal } from './components';
 
 // Store the current week start date (Monday)
 let currentWeekMonday = getMonday(new Date());
+// Store all daily data for all dates (for client-side week switching)
+let allDailyData: any[] = [];
 
 // Render the timeline chart for a specific week
 function renderTimelineChart(dailyData: any[], weekMonday: Date) {
@@ -105,15 +72,6 @@ function renderTimelineChart(dailyData: any[], weekMonday: Date) {
   `;
 
   return timelineContainer;
-}
-
-// Store all daily data for all dates (for client-side week switching)
-let allDailyData: any[] = [];
-
-// Helper to filter daily data for a specific week
-function filterDailyDataForWeek(dailyData: any[], weekMonday: Date): any[] {
-  const weekDates = getWeekDates(weekMonday).map(d => getLocalDateString(d));
-  return dailyData.filter(row => weekDates.includes(row.date));
 }
 
 export async function renderSummary() {
@@ -298,50 +256,30 @@ export async function renderSummary() {
 
   // Modal logic for editing/deleting
   function showEditSessionModal(session: any, onChange: () => void) {
-    const modal = document.getElementById('sessionModal') as HTMLDivElement;
-    const form = document.getElementById('sessionForm') as HTMLFormElement;
-    const titleInput = document.getElementById('sessionTitle') as HTMLInputElement;
-    const descInput = document.getElementById('sessionDesc') as HTMLTextAreaElement;
-    const discardBtn = document.getElementById('sessionCancelBtn') as HTMLButtonElement;
-
-    if (!modal || !form || !titleInput || !descInput || !discardBtn) return;
-
-    // Set fields to session values
-    titleInput.value = session.title || '';
-    descInput.value = session.description || '';
-
-    // Change modal title and button text
-    modal.querySelector('h2')!.textContent = 'Edit Session';
-    discardBtn.textContent = 'Delete';
-    discardBtn.classList.add('delete');
-
-    modal.classList.add('active');
-    setTimeout(() => titleInput.focus(), 100);
-
-    // Remove previous event listeners by assigning null
-    form.onsubmit = null;
-    discardBtn.onclick = null;
-
-    // Submit handler (edit)
-    form.onsubmit = async (e) => {
-      e.preventDefault();
-      await ipcRenderer.invoke('edit-session', {
-        id: session.id,
-        title: titleInput.value.trim(),
-        description: descInput.value.trim()
-      });
-      modal.classList.remove('active');
-      onChange();
-    };
-
-    // Delete handler
-    discardBtn.onclick = async () => {
-      if (confirm('Delete this session? This cannot be undone.')) {
-        await ipcRenderer.invoke('delete-session', session.id);
-        modal.classList.remove('active');
+    showModal({
+      title: 'Edit Session',
+      fields: [
+        { name: 'title', label: 'Title:', type: 'text', value: session.title, required: true },
+        { name: 'description', label: 'Description:', type: 'textarea', value: session.description }
+      ],
+      submitText: 'Save',
+      cancelText: 'Delete',
+      cancelClass: 'delete',
+      onSubmit: async (values) => {
+        await ipcRenderer.invoke('edit-session', {
+          id: session.id,
+          title: values.title,
+          description: values.description
+        });
         onChange();
+      },
+      onCancel: async () => {
+        if (confirm('Delete this session? This cannot be undone.')) {
+          await ipcRenderer.invoke('delete-session', session.id);
+          onChange();
+        }
       }
-    };
+    });
   }
 
   // Initial render

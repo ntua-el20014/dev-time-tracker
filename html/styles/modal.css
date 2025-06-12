@@ -1,0 +1,88 @@
+/* modal.css */
+#customModal {
+  display: none;
+  position: fixed;
+  z-index: 2000;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.35);
+  align-items: center;
+  justify-content: center;
+}
+
+#customModal.active {
+  display: flex;
+}
+
+#customModal .session-modal-content {
+  background: var(--bg);
+  color: var(--fg);
+  padding: 32px 28px 20px 28px;
+  border-radius: 12px;
+  min-width: 320px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.18);
+  position: relative;
+}
+
+#customModal h2 {
+  margin-top: 0;
+}
+
+#customModalForm label {
+  font-weight: 500;
+}
+
+#customModalForm input[type="text"],
+#customModalForm textarea {
+  width: 100%;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  padding: 6px 10px;
+  font-size: 1em;
+  background: var(--row-odd);
+  color: var(--fg);
+  box-sizing: border-box;
+}
+
+#customModalForm textarea {
+  height: 60px;
+  margin-bottom: 16px;
+  resize: vertical;
+}
+
+#customModalForm .session-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+#customModalCancelBtn {
+  padding: 6px 18px;
+  border-radius: 6px;
+  border: none;
+  background: var(--row-hover);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+#customModalCancelBtn.delete {
+  background: #d32f2f !important;
+  color: #fff !important;
+  border: none;
+}
+#customModalCancelBtn.delete:hover {
+  background: #b71c1c !important;
+}
+
+#customModalForm button[type="submit"] {
+  padding: 6px 18px;
+  background: var(--accent);
+  color: #222;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
