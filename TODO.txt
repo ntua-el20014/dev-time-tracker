@@ -6,7 +6,6 @@ TODO / Ideas for Improvements
 - [ ] More charts: Add pie charts for language/editor usage, or line charts for trends.
 - [ ] Cloud sync: Sync data across devices (optional, with user opt-in).
 - [ ] Backup/restore: Export and import the database for backup or migration.
-- [ ] Keyboard shortcuts: Start/stop recording or switch tabs with hotkeys.
 - [ ] Better error handling: Show user-friendly error messages for DB or tracking issues.
 - [ ] Multi-user support: Allow switching between different user profiles.
 - [ ] Integration with calendar/task apps: Link sessions to calendar events or tasks.

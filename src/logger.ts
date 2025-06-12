@@ -26,7 +26,7 @@ db.prepare(`
 db.prepare(`
   CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT,
+    timestamp TEXT,         -- ISO string, local time
     start_time TEXT,
     duration INTEGER,
     title TEXT,
@@ -133,20 +133,23 @@ export function getDailySummary() {
 export function getSessions() {
   type SessionRow = {
     id: number;
-    date: string;
+    timestamp: string;
     start_time: string;
     duration: number;
     title: string;
     description: string | null;
     tags?: string[];
+    date: string; // For display
   };
   const sessions = db.prepare(`
-    SELECT id, date, start_time, duration, title, description
+    SELECT id, timestamp, start_time, duration, title, description
     FROM sessions
-    ORDER BY date DESC, start_time DESC
+    ORDER BY timestamp DESC
   `).all() as SessionRow[];
   for (const s of sessions) {
     s.tags = getSessionTags(s.id);
+    // Convert timestamp to local date string for display
+    s.date = getLocalDateString(new Date(s.timestamp));
   }
   return sessions;
 }
@@ -205,10 +208,12 @@ export function addSession(
   description?: string,
   tags?: string[]
 ) {
+  const now = new Date();
+  const timestamp = now.toISOString(); // Always store as ISO string (UTC)
   const info = db.prepare(`
-    INSERT INTO sessions (date, start_time, duration, title, description)
+    INSERT INTO sessions (timestamp, start_time, duration, title, description)
     VALUES (?, ?, ?, ?, ?)
-  `).run(date, start_time, duration, title, description || null);
+  `).run(timestamp, start_time, duration, title, description || null);
   const sessionId = info.lastInsertRowid as number;
   if (tags && tags.length) setSessionTags(sessionId, tags);
 }

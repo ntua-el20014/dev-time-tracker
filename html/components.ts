@@ -130,3 +130,27 @@ export function showNotification(message: string, durationMs = 3500) {
     setTimeout(() => notif?.remove(), 350);
   }, durationMs);
 }
+
+/**
+ * Renders a horizontal percentage bar.
+ * @param items Array of { label: string, percent: number, color: string }
+ * @param height Height in px (default 32)
+ * @param borderRadius Border radius in px (default 8)
+ * @returns HTML string for the bar
+ */
+export function renderPercentBar(
+  items: { label: string; percent: number; color: string }[],
+  height = 32,
+  borderRadius = 8
+): string {
+  return `
+    <div style="display: flex; height: ${height}px; border-radius: ${borderRadius}px; overflow: hidden; border: 1px solid #ccc; margin-bottom: 12px;">
+      ${items.map(item => `
+        <div title="${item.label}: ${item.percent.toFixed(1)}%" 
+             style="width:${item.percent}%;background:${item.color};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;">
+          ${item.percent > 10 ? item.label : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+}

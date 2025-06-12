@@ -11,7 +11,7 @@ let currentWeekMonday = getMonday(new Date());
 // Store all daily data for all dates (for client-side week switching)
 let allDailyData: any[] = [];
 
-// Render the timeline chart for a specific week
+// render timeline
 function renderTimelineChart(dailyData: any[], weekMonday: Date) {
   const timelineContainer = document.createElement('div');
   timelineContainer.className = 'timeline-container';
@@ -43,7 +43,16 @@ function renderTimelineChart(dailyData: any[], weekMonday: Date) {
         ${weekDays[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - 
         ${weekDays[6].toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
       </h3>
-      <button id="week-next-btn" style="font-size:1.5em; background:none; border:none; cursor:pointer;">&#8594;</button>
+      ${
+        // Hide right arrow if at current week
+        (() => {
+          const todayMonday = getMonday(new Date());
+          if (weekMonday >= todayMonday) {
+            return `<span style="display:inline-block;width:2.5em;"></span>`;
+          }
+          return `<button id="week-next-btn" style="font-size:1.5em; background:none; border:none; cursor:pointer;">&#8594;</button>`;
+        })()
+      }
     </div>
     <div class="timeline-chart">
       ${weekDays.map(day => {

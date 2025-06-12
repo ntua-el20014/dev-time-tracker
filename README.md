@@ -11,6 +11,8 @@ Tracks your coding sessions, editor and language usage, and helps you understand
   Monitors time spent in code editors (like VSCode) and logs active window data every 10 seconds.
 - **Session Management:**  
   Start/pause/stop recording sessions, add titles and descriptions, edit or delete past sessions, add tags, set idle timeout. Great for tracking focused work periods.
+- **Global Hotkeys:**  
+  Control tracking (start, pause, stop) from anywhere and switch between tabs using keyboard shortcuts.
 - **Detailed Summaries:**  
   View summaries by day or by session, with interactive tables and charts.
 - **Timeline & Calendar:**  

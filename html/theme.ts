@@ -77,3 +77,12 @@ export function updatePauseBtn(pauseBtn: HTMLButtonElement, pauseIcon: HTMLImage
   pauseBtn.title = isPaused ? 'Resume Session' : 'Pause Session';
   pauseBtn.classList.toggle('paused', isPaused);
 }
+
+/**
+ * Returns the image path for a given hotkey name.
+ * Example: loadHotkey('ctrl') => require('../data/ctrl-key.png')
+ */
+export function loadHotkey(key: string): string {
+  // You can add more mappings if you use special names
+  return require(`../data/${key}-key.png`);
+}

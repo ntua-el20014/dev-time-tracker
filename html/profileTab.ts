@@ -2,6 +2,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
 import { applyAccentColor } from './renderer';
+import { renderPercentBar } from './components';
+import { loadHotkey } from './theme';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function escapeHtml(text: string) {
@@ -24,17 +26,14 @@ async function renderEditorUsage(container: HTMLElement) {
   });
   usage.sort((a: any, b: any) => b.total_time - a.total_time);
   const total = usage.reduce((sum: number, row: any) => sum + row.total_time, 0);
+  const items = usage.map((row: any) => ({
+    label: row.app,
+    percent: (row.total_time / total) * 100,
+    color: colorMap[row.app]
+  }));
   container.innerHTML = `
     <h2>Editor Usage Breakdown</h2>
-    <div style="display: flex; height: 32px; border-radius: 8px; overflow: hidden; border: 1px solid #ccc; margin-bottom: 12px;">
-      ${usage.map((row: any) => {
-        const percent = ((row.total_time / total) * 100).toFixed(1);
-        const color = colorMap[row.app];
-        return `<div title="${row.app}: ${percent}%" style="width:${percent}%;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;">
-          ${parseFloat(percent) > 10 ? row.app : ''}
-        </div>`;
-      }).join('')}
-    </div>
+    ${renderPercentBar(items)}
     <ul style="list-style:none;padding:0;margin:0;">
       ${usage.map((row: any) => {
         const percent = ((row.total_time / total) * 100).toFixed(1);
@@ -94,17 +93,14 @@ async function renderLanguageUsage(container: HTMLElement) {
   usage.sort((a: any, b: any) => b.total_time - a.total_time);
   const total = usage.reduce((sum: number, row: any) => sum + row.total_time, 0);
   const defaultColors = ['#4f8cff', '#ffb347', '#7ed957', '#ff6961', '#b19cd9', '#f67280', '#355c7d'];
+  const items = usage.map((row: any, i: number) => ({
+    label: row.language,
+    percent: (row.total_time / total) * 100,
+    color: defaultColors[i % defaultColors.length]
+  }));
   container.innerHTML = `
     <h2>Language Usage Breakdown</h2>
-    <div style="display: flex; height: 32px; border-radius: 8px; overflow: hidden; border: 1px solid #ccc; margin-bottom: 12px;">
-      ${usage.map((row: any, i: number) => {
-        const percent = ((row.total_time / total) * 100).toFixed(1);
-        const color = defaultColors[i % defaultColors.length];
-        return `<div title="${row.language}: ${percent}%" style="width:${percent}%;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;">
-          ${parseFloat(percent) > 10 ? row.language : ''}
-        </div>`;
-      }).join('')}
-    </div>
+    ${renderPercentBar(items)}
     <ul style="list-style:none;padding:0;margin:0;">
       ${usage.map((row: any, i: number) => {
         const percent = ((row.total_time / total) * 100).toFixed(1);
@@ -187,10 +183,10 @@ async function renderSettings(container: HTMLElement) {
           cursor: pointer;
         " />
       </div>
-      <button id="saveAccentColorBtn" style="padding:6px 12px;border:none;border-radius:6px;background:var(--accent);color:#222;cursor:pointer;">Save Accent Color</button>
+      <button id="saveAccentColorBtn" style="padding:6px 12px;border:none;border-radius:6px;background:var(--accent);color:#222;cursor:pointer;">Save</button>
     </div>
     <div style="margin-bottom:24px;">
-      <button id="resetAccentColorsBtn" style="padding:6px 18px;border:none;border-radius:6px;background:#eee;color:#222;cursor:pointer;">Reset Accent Colors to Default</button>
+      <button id="resetAccentColorsBtn" style="padding:6px 18px;border:none;border-radius:6px;background:#eee;color:#222;cursor:pointer;">Reset Defaults</button>
     </div>
   `;
 
@@ -256,6 +252,7 @@ export async function refreshProfile() {
         <li><button class="profile-chapter-btn" data-chapter="editor" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Editors</button></li>
         <li><button class="profile-chapter-btn" data-chapter="language" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Languages</button></li>
         <li><button class="profile-chapter-btn" data-chapter="settings" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Settings</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="hotkeys" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Hotkeys</button></li>
       </ul>
     </nav>
     <div id="profileChapterContent" style="flex:1;padding:0 0 0 32px;"></div>
@@ -270,9 +267,10 @@ export async function refreshProfile() {
       await renderEditorUsage(contentDiv);
     } else if (chapter === 'language') {
       await renderLanguageUsage(contentDiv);
-    }
-    else if (chapter === 'settings') {
+    } else if (chapter === 'settings') {
       await renderSettings(contentDiv);
+    } else if (chapter === 'hotkeys') {
+      renderHotkeys(contentDiv);
     }
     // Highlight active
     buttons.forEach(btn => {
@@ -287,4 +285,21 @@ export async function refreshProfile() {
       showChapter((btn as HTMLButtonElement).dataset.chapter!);
     });
   });
+}
+
+function renderHotkeys(container: HTMLElement) {
+  const keyImg = (key: string) =>
+  `<img src="${loadHotkey(key)}" alt="${key}" style="height:1.5em;vertical-align:middle;margin:0 2px;">`;
+
+container.innerHTML = `
+  <h2>Keyboard Shortcuts</h2>
+  <ul style="list-style:none;padding:0;margin:0;line-height:2;">
+    <li>${keyImg('ctrl')} + ${keyImg('r')}   Start/Stop recording</li>
+    <li>${keyImg('ctrl')} + ${keyImg('p')}   Pause/Resume recording</li>
+    <li>${keyImg('ctrl')} + ${keyImg('hashtag')}   Switch Tabs [# = 1, 2, 3]</li>
+  </ul>
+  <p style="margin-top:16px;color:#888;font-size:0.98em;">
+    <i>Shortcuts work globally except when typing in an input or textarea.</i>
+  </p>
+`;
 }

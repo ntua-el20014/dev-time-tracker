@@ -99,6 +99,42 @@ function setupRecordAndPauseBtns() {
   pauseBtn.style.display = 'none';
 }
 
+function setupHotkeys() {
+  document.addEventListener('keydown', (e) => {
+    // Ignore if typing in an input or textarea
+    if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
+    // Ctrl+R: Start/Stop recording
+    if (e.ctrlKey && e.key.toLowerCase() === 'r') {
+      e.preventDefault();
+      const recordBtn = document.getElementById('recordBtn') as HTMLButtonElement;
+      if (recordBtn) recordBtn.click();
+    }
+
+    // Ctrl+1: Today tab
+    if (e.ctrlKey && e.key === '1') {
+      e.preventDefault();
+      document.querySelector('.tab[data-tab="today"]')?.dispatchEvent(new Event('click'));
+    }
+    // Ctrl+2: Summary tab
+    if (e.ctrlKey && e.key === '2') {
+      e.preventDefault();
+      document.querySelector('.tab[data-tab="summary"]')?.dispatchEvent(new Event('click'));
+    }
+    // Ctrl+3: Profile tab
+    if (e.ctrlKey && e.key === '3') {
+      e.preventDefault();
+      document.querySelector('.tab[data-tab="profile"]')?.dispatchEvent(new Event('click'));
+    }
+    // Ctrl+P: Pause/Resume
+    if (e.ctrlKey && e.key.toLowerCase() === 'p') {
+      e.preventDefault();
+      const pauseBtn = document.getElementById('pauseBtn') as HTMLButtonElement;
+      if (pauseBtn && pauseBtn.style.display !== 'none') pauseBtn.click();
+    }
+  });
+}
+
 ipcRenderer.on('get-session-info', () => {
   showModal({
     title: 'Session Info',
@@ -163,4 +199,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initUI();
   applyAccentColor();
   setupRecordAndPauseBtns();
+  setupHotkeys();
 });
