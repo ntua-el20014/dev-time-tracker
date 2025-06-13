@@ -1,26 +1,19 @@
 import { ipcRenderer } from 'electron';
 import { renderLineChartJS } from './components';
+import { getMonday, getWeekDates, getLocalDateString, filterDailyDataForWeek } from './utils';
+import type { DailySummaryRow, SessionRow } from '../src/logger';
 
 export async function renderDashboard() {
-  const container = document.getElementById('tab-dashboard');
+  const container = document.getElementById('dashboardContent');
   if (!container) return;
   container.innerHTML = `
-    <h2>Dashboard</h2>
-    <div id="dashboard-quickstats"></div>
-    <div id="dashboard-calendar"></div>
-    <div id="dashboard-charts"></div>
+    <div id="dashboard-inner">
+      <h1 class="dashboard-title">Developer Time Tracker</h1>
+      <div id="dashboard-calendar"></div>
+      <div id="dashboard-quickstats"></div>
+      <div id="dashboard-charts"></div>
+    </div>
   `;
-
-  // Quick stats (you can uncomment and adjust as needed)
-  // const statsDiv = document.getElementById('dashboard-quickstats');
-  // const summary = await ipcRenderer.invoke('get-summary');
-  // const today = summary?.reduce((sum: number, row: any) => sum + row.time_spent, 0) || 0;
-  // statsDiv!.innerHTML = `
-  //   <div style="display:flex;gap:32px;margin-bottom:24px;">
-  //     <div><b>Today:</b> ${Math.round(today/60)} min</div>
-  //     <div><b>Sessions:</b> ${summary?.length || 0}</div>
-  //   </div>
-  // `;
 
   // --- Calendar Widget ---
   const calendarDiv = document.getElementById('dashboard-calendar');
@@ -29,16 +22,18 @@ export async function renderDashboard() {
     calendarDiv.appendChild(calendar);
   }
 
+  // --- Recent Activity Stats ---
+  await renderRecentActivity();
+
   // Recent activity chart (example: last 7 days total usage)
   const chartsDiv = document.getElementById('dashboard-charts');
   const daily = await ipcRenderer.invoke('get-daily-summary');
   const last7 = daily.slice(0, 7).reverse();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = last7.map((row: any) => ({
+  const data = last7.map((row: DailySummaryRow) => ({
     title: 'Total Usage',
     name: 'Total',
     date: row.date,
-    usage: row.total_time / 60 // minutes
+    usage: row.total_time / 60
   }));
   if (chartsDiv) {
     chartsDiv.innerHTML = `<div id="dashboard-usage-chart" style="max-width:400px"></div>`;
@@ -152,4 +147,73 @@ async function renderCalendarWidget(): Promise<HTMLDivElement> {
   }, 0);
 
   return calendar;
+}
+
+// --- Recent Activity Stats ---
+async function renderRecentActivity() {
+  const statsDiv = document.getElementById('dashboard-quickstats');
+  if (!statsDiv) return;
+
+  // Fetch data
+  const dailySummary: DailySummaryRow[] = await ipcRenderer.invoke('get-daily-summary');
+  const sessions: SessionRow[] = await ipcRenderer.invoke('get-sessions');
+
+  // Get current week dates
+  const monday = getMonday(new Date());
+  const weekDate = getWeekDates(monday)
+  const weekDates = weekDate.map(getLocalDateString);
+
+  // Filter daily summary for this week
+  const weekSummary = filterDailyDataForWeek(dailySummary, monday);
+
+  // Top language of the week
+  const startDate = getLocalDateString(weekDate[0]);
+  const endDate = getLocalDateString(weekDate[6]);
+  const weeklyLangSummary = await ipcRenderer.invoke('get-language-summary-by-date-range', startDate, endDate);
+  // weeklyLangSummary: Array<{ language: string, total_time: number }>
+  const topLang = weeklyLangSummary[0];
+
+  // Top editor of the week
+  const editorTotals: Record<string, number> = {};
+  weekSummary.forEach((row: DailySummaryRow) => {
+    if (row.app) editorTotals[row.app] = (editorTotals[row.app] || 0) + row.total_time;
+  });
+  const topEditor = Object.entries(editorTotals).sort((a, b) => b[1] - a[1])[0];
+
+  // 3 largest sessions of the week
+  const weekSessions = sessions.filter((s: SessionRow) => weekDates.includes(getLocalDateString(new Date(s.timestamp))));
+  const topSessions = weekSessions.sort((a: SessionRow, b: SessionRow) => b.duration - a.duration).slice(0, 3);
+
+  // Longest streak (consecutive days with activity)
+  const allDates = dailySummary.map((row: DailySummaryRow) => row.date).sort();
+  let maxStreak = 0, curStreak = 0, prevDate: string | null = null;
+  for (const date of allDates) {
+    if (!prevDate) {
+      curStreak = 1;
+    } else {
+      const prev = new Date(prevDate);
+      const curr = new Date(date);
+      const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+      curStreak = diff === 1 ? curStreak + 1 : 1;
+    }
+    if (curStreak > maxStreak) maxStreak = curStreak;
+    prevDate = date;
+  }
+
+  // Render quick stats
+  statsDiv.innerHTML = `
+    <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:24px;">
+      <div><b>Top Language (week):</b> ${topLang ? `${topLang.language} (${Math.round(topLang.total_time/60)} min)` : '—'}</div>
+      <div><b>Top Editor (week):</b> ${topEditor ? `${topEditor[0]} (${Math.round(topEditor[1]/60)} min)` : '—'}</div>
+      <div>
+        <b>Largest Sessions (week):</b>
+        <ul style="margin:0;padding-left:0;list-style:none;">
+          ${topSessions.map((s: SessionRow) =>
+            `<li>${s.title} (${Math.floor(s.duration/60)}m ${s.duration%60}s)</li>`
+          ).join('')}
+        </ul>
+      </div>
+      <div><b>Longest Streak:</b> ${maxStreak} day${maxStreak === 1 ? '' : 's'}</div>
+    </div>
+  `;
 }

@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { DailySummaryRow } from '../src/logger';
+
 // Escapes HTML special characters
 export function escapeHtml(text: string) {
   const div = document.createElement('div');
@@ -38,7 +40,7 @@ export function getMonday(date: Date): Date {
 }
 
 // Helper to filter daily data for a specific week
-export function filterDailyDataForWeek(dailyData: any[], weekMonday: Date): any[] {
+export function filterDailyDataForWeek(dailyData: DailySummaryRow[], weekMonday: Date): DailySummaryRow[] {
   const weekDates = getWeekDates(weekMonday).map(d => getLocalDateString(d));
   return dailyData.filter(row => weekDates.includes(row.date));
 }

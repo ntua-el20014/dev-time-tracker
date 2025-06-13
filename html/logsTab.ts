@@ -1,17 +1,11 @@
 import { ipcRenderer } from 'electron';
 import { formatTimeSpent } from '../src/utils/timeFormat';
+import type { LogEntry } from '../src/logger';
 
 function escapeHtml(text: string) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
-}
-
-interface LogEntry {
-  icon: string;
-  app: string;
-  language: string;
-  time_spent: number;
 }
 
 export async function renderLogs(date?: string) {
@@ -24,14 +18,7 @@ export async function renderLogs(date?: string) {
   const oldTodayTitle = container.querySelector('.today-title');
   if (oldTodayTitle) oldTodayTitle.remove();
 
-  // Insert main title above logs
-  const mainTitle = document.createElement('h1');
-  mainTitle.textContent = 'Developer Time Tracker';
-  mainTitle.className = 'main-title';
-  mainTitle.style.marginBottom = '10px';
-  container.insertBefore(mainTitle, container.firstChild);
-
-  // Insert TODAY title below main title
+  // Insert TODAY title
   const todayTitle = document.createElement('h2');
   todayTitle.textContent = 'TODAY';
   todayTitle.className = 'today-title';
@@ -39,7 +26,7 @@ export async function renderLogs(date?: string) {
   todayTitle.style.fontSize = '1.1em';
   todayTitle.style.letterSpacing = '2px';
   todayTitle.style.color = 'var(--accent)';
-  container.insertBefore(todayTitle, mainTitle.nextSibling);
+  container.insertBefore(todayTitle, container.firstChild);
 
   const logs = await ipcRenderer.invoke('get-logs', date) as LogEntry[];
   const tbody = document.querySelector('#logTable tbody');

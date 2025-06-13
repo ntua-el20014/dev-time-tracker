@@ -169,6 +169,23 @@ export function getDailySummary() {
   }
 }
 
+export function getLanguageSummaryByDateRange(startDate: string, endDate: string) {
+  try {
+    return db.prepare(`
+      SELECT language, SUM(time_spent) as total_time
+      FROM usage_summary
+      WHERE date BETWEEN ? AND ?
+        AND language IS NOT NULL
+      GROUP BY language
+      ORDER BY total_time DESC
+    `).all(startDate, endDate);
+  } catch (err) {
+    showNotification('Failed to load language summary for date range.', 5000);
+    console.error(err);
+    return [];
+  }
+}
+
 export function getSessions() {
   try {
     type SessionRow = {
@@ -219,9 +236,9 @@ export function deleteSession(id: number) {
   }
 }
 
-export function getAllTags() {
+export function getAllTags(): Tag[] {
   try {
-    return db.prepare(`SELECT * FROM tags ORDER BY name COLLATE NOCASE`).all();
+    return db.prepare(`SELECT * FROM tags ORDER BY name COLLATE NOCASE`).all() as Tag[];
   } catch (err) {
     showNotification('Failed to load tags.', 5000);
     console.error(err);
@@ -312,3 +329,38 @@ export function deleteTag(name: string) {
   }
 }
 
+export interface DailySummaryRow {
+  date: string;         // 'YYYY-MM-DD'
+  app: string;
+  language?: string;
+  icon?: string;
+  total_time: number;   // seconds
+}
+
+export interface SessionRow {
+  id: number;
+  timestamp: string;      // ISO string
+  start_time: string;
+  duration: number;       // seconds
+  title: string;
+  description: string | null;
+  tags?: string[];
+  date: string;           // 'YYYY-MM-DD'
+}
+
+export interface LogEntry {
+  icon: string;
+  app: string;
+  language: string;
+  time_spent: number;
+}
+
+export interface Tag {
+  id: number;
+  name: string;
+}
+
+export interface SessionTag {
+  session_id: number;
+  tag_id: number;
+}

@@ -14,6 +14,7 @@ import './styles/calendar.css';
 import './styles/timeline.css';
 import './styles/profile.css';
 import './styles/theme.css';
+import './styles/dashboard.css';
 
 function setupTabs() {
   const tabs = Array.from(document.querySelectorAll('.tab')) as HTMLButtonElement[];

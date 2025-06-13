@@ -2,7 +2,6 @@ TODO / Ideas for Improvements
 
 - [ ] Daily goals: Allow users to set and track daily coding time or session goals and get notified when done.
 - [ ] Multi-user support: Allow switching between different user profiles.
-- [ ] Add a dashboard/home tab with quick stats and recent activity.
 - [ ] Present customizable charts with filtering options (language, editor, time per day on specified date range)
 - [ ] Add language icons and editing options for unknown results.
 - [ ] Session export: Export sessions or summaries to CSV/JSON for reporting.

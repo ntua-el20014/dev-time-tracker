@@ -1,10 +1,11 @@
 import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
-import { logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions, editSession, deleteSession, getAllTags, setSessionTags, deleteTag } from './logger';
+import { logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions, editSession, deleteSession, getAllTags, setSessionTags, deleteTag, getLanguageSummaryByDateRange } from './logger';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
 import { activeWindow } from '@miniben90/x-win';
 import { loadEditorColors, saveEditorColors, loadConfig, saveConfig, getAccentColor, setAccentColor } from './config';
 import os from 'os';
+import type { Tag } from './logger';
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -271,7 +272,7 @@ ipcMain.handle('delete-session', async (_event, id) => {
   }
 });
 
-ipcMain.handle('get-all-tags', () => {
+ipcMain.handle('get-all-tags', (): Tag[] => {
   return getAllTags();
 });
 
@@ -283,6 +284,10 @@ ipcMain.handle('set-session-tags', (_event, sessionId: number, tagNames: string[
 ipcMain.handle('delete-tag', (_event, name: string) => {
   deleteTag(name);
   return true;
+});
+
+ipcMain.handle('get-language-summary-by-date-range', async (_event, startDate: string, endDate: string) => {
+  return getLanguageSummaryByDateRange(startDate, endDate);
 });
 
 app.on('window-all-closed', () => {

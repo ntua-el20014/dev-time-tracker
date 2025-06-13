@@ -1,24 +1,24 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
 import { formatTimeSpent } from '../src/utils/timeFormat';
 import edit from '../data/edit.png';
 import { escapeHtml, getLocalDateString, getWeekDates, getMonday, filterDailyDataForWeek } from './utils';
 import { showModal } from './components';
+import type { DailySummaryRow, SessionRow, Tag } from '../src/logger';
 
 // Store the current week start date (Monday)
 let currentWeekMonday = getMonday(new Date());
 // Store all daily data for all dates (for client-side week switching)
-let allDailyData: any[] = [];
+let allDailyData: DailySummaryRow[] = [];
 
 // render timeline
-function renderTimelineChart(dailyData: any[], weekMonday: Date) {
+function renderTimelineChart(dailyData: DailySummaryRow[], weekMonday: Date) {
   const timelineContainer = document.createElement('div');
   timelineContainer.className = 'timeline-container';
 
   // Group data by date and calculate total time per day (in seconds)
   const timeByDate: Record<string, number> = {};
-  dailyData.forEach(row => {
+  dailyData.forEach((row: DailySummaryRow) => {
     const date = row.date;
     timeByDate[date] = (timeByDate[date] || 0) + row.total_time;
   });
@@ -169,8 +169,8 @@ export async function renderSummary() {
   byDateContainer.appendChild(detailsTitle);
 
   // Group data by date for detailed view
-  const grouped: { [date: string]: any[] } = {};
-  allDailyData.forEach((row: any) => {
+  const grouped: { [date: string]: DailySummaryRow[] } = {};
+  allDailyData.forEach((row: DailySummaryRow) => {
     if (!grouped[row.date]) grouped[row.date] = [];
     grouped[row.date].push(row);
   });
@@ -190,7 +190,7 @@ export async function renderSummary() {
         </tr>
       </thead>
       <tbody>
-        ${rows.map((row: any) => `
+        ${rows.map((row: DailySummaryRow) => `
           <tr>
             <td><img src="${row.icon}" alt="${escapeHtml(row.app)} icon" class="icon" /></td>
             <td>${escapeHtml(row.app)}</td>
@@ -224,9 +224,9 @@ export async function renderSummary() {
 
   // Helper to render sessions and attach edit logic
   async function renderSessionRows() {
-    const sessions = await ipcRenderer.invoke('get-sessions');
+    const sessions: SessionRow[] = await ipcRenderer.invoke('get-sessions');
     const sessionTableBody = sessionTable.querySelector('tbody')!;
-    sessionTableBody.innerHTML = sessions.map((session: any) => {
+    sessionTableBody.innerHTML = sessions.map((session: SessionRow) => {
       // Use the new duration field directly
       const durationSec = session.duration || 0;
       const h = Math.floor(durationSec / 3600);
@@ -261,16 +261,16 @@ export async function renderSummary() {
         e.stopPropagation();
         const tr = (btn as HTMLElement).closest('tr');
         const sessionId = tr?.getAttribute('data-session-id');
-        const session = sessions.find((s: any) => String(s.id) === String(sessionId));
+        const session = sessions.find((s: SessionRow) => String(s.id) === String(sessionId));
         if (session) showEditSessionModal(session, renderSessionRows);
       });
     });
   }
 
-  async function showEditSessionModal(session: any, onChange: () => void) {
+  async function showEditSessionModal(session: SessionRow, onChange: () => void) {
     // Fetch all tags for suggestions
-    const allTags = await ipcRenderer.invoke('get-all-tags');
-    const currentTags = session.tags || [];
+    const allTags: Tag[] = await ipcRenderer.invoke('get-all-tags');
+    const currentTags: string[] = session.tags || [];
 
     let selectedTags = [...currentTags];
 
@@ -318,8 +318,8 @@ export async function renderSummary() {
         <select id="tag-select">
           <option value="">-- no tag selected --</option>
           ${allTags
-            .filter((t: any) => !selectedTags.includes(t.name))
-            .map((t: any) => `<option value="${t.name}">${t.name}</option>`)
+            .filter((t: Tag) => !selectedTags.includes(t.name))
+            .map((t: Tag) => `<option value="${t.name}">${t.name}</option>`)
             .join('')}
         </select>
       `;
@@ -350,8 +350,8 @@ export async function renderSummary() {
       function updateTagSelect() {
         tagSelect.innerHTML = `<option value="">Add existing tag</option>` +
           allTags
-            .filter((t: any) => !selectedTags.includes(t.name))
-            .map((t: any) => `<option value="${t.name}">${t.name}</option>`)
+            .filter((t: Tag) => !selectedTags.includes(t.name))
+            .map((t: Tag) => `<option value="${t.name}">${t.name}</option>`)
             .join('');
       }
 

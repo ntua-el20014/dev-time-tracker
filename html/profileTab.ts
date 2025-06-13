@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
 import { applyAccentColor } from './renderer';
 import { renderPercentBar, renderPieChartJS } from './components';
 import { loadHotkey } from './theme';
+import type { Tag } from '../src/logger';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function escapeHtml(text: string) {
@@ -13,7 +13,8 @@ function escapeHtml(text: string) {
 }
 
 async function renderEditorUsage(container: HTMLElement) {
-  const usage = await ipcRenderer.invoke('get-editor-usage');
+  type EditorUsageRow = { app: string; total_time: number };
+  const usage: EditorUsageRow[] = await ipcRenderer.invoke('get-editor-usage');
   if (!usage || usage.length === 0) {
     container.innerHTML = '<p>No data available.</p>';
     return;
@@ -21,12 +22,12 @@ async function renderEditorUsage(container: HTMLElement) {
   const config = await ipcRenderer.invoke('get-editor-colors');
   const defaultColors = ['#4f8cff', '#ffb347', '#7ed957', '#ff6961', '#b19cd9'];
   const colorMap: { [key: string]: string } = {};
-  usage.forEach((row: any, i: number) => {
+  usage.forEach((row: EditorUsageRow, i: number) => {
     colorMap[row.app] = config[row.app] || defaultColors[i % defaultColors.length];
   });
-  usage.sort((a: any, b: any) => b.total_time - a.total_time);
-  const total = usage.reduce((sum: number, row: any) => sum + row.total_time, 0);
-  const items = usage.map((row: any) => ({
+  usage.sort((a: EditorUsageRow, b: EditorUsageRow) => b.total_time - a.total_time);
+  const total = usage.reduce((sum: number, row: EditorUsageRow) => sum + row.total_time, 0);
+  const items = usage.map((row: EditorUsageRow) => ({
     label: row.app,
     percent: (row.total_time / total) * 100,
     color: colorMap[row.app]
@@ -35,7 +36,7 @@ async function renderEditorUsage(container: HTMLElement) {
     <h2>Editor Usage Breakdown</h2>
     ${renderPercentBar(items)}
     <ul style="list-style:none;padding:0;margin:0;">
-      ${usage.map((row: any) => {
+      ${usage.map((row: EditorUsageRow) => {
         const percent = ((row.total_time / total) * 100).toFixed(1);
         const color = colorMap[row.app];
         return `<li style="margin-bottom:4px;">
@@ -44,7 +45,7 @@ async function renderEditorUsage(container: HTMLElement) {
       }).join('')}
     </ul>
     <h3>Customize Colors</h3>
-    ${usage.map((row: any) => {
+    ${usage.map((row: EditorUsageRow) => {
       const color = colorMap[row.app];
       return `
         <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 12px;">
@@ -85,15 +86,16 @@ async function renderEditorUsage(container: HTMLElement) {
 }
 
 async function renderLanguageUsage(container: HTMLElement) {
-  const usage = await ipcRenderer.invoke('get-language-usage');
+  type LanguageUsageRow = { language: string; total_time: number };
+  const usage: LanguageUsageRow[] = await ipcRenderer.invoke('get-language-usage');
   if (!usage || usage.length === 0) {
     container.innerHTML = '<p>No data available.</p>';
     return;
   }
-  usage.sort((a: any, b: any) => b.total_time - a.total_time);
-  const total = usage.reduce((sum: number, row: any) => sum + row.total_time, 0);
+  usage.sort((a: LanguageUsageRow, b: LanguageUsageRow) => b.total_time - a.total_time);
+  const total = usage.reduce((sum: number, row: LanguageUsageRow) => sum + row.total_time, 0);
   const defaultColors = ['#4f8cff', '#ffb347', '#7ed957', '#ff6961', '#b19cd9', '#f67280', '#355c7d'];
-  const items = usage.map((row: any, i: number) => ({
+  const items = usage.map((row: LanguageUsageRow, i: number) => ({
     label: row.language,
     percent: (row.total_time / total) * 100,
     color: defaultColors[i % defaultColors.length]
@@ -104,7 +106,7 @@ async function renderLanguageUsage(container: HTMLElement) {
     <h2>Language Usage Breakdown</h2>
     <div id="languagePieChart" style="width:180px;height:180px;margin-bottom:16px;"></div>
     <ul style="list-style:none;padding:0;margin:0;">
-      ${usage.map((row: any, i: number) => {
+      ${usage.map((row: LanguageUsageRow, i: number) => {
         const percent = ((row.total_time / total) * 100).toFixed(1);
         const color = defaultColors[i % defaultColors.length];
         return `<li style="margin-bottom:4px;">
@@ -150,7 +152,7 @@ async function renderSettings(container: HTMLElement) {
   });
 
   // --- Tag management ---
-  const tags: { name: string }[] = await ipcRenderer.invoke('get-all-tags');
+  const tags: Tag[] = await ipcRenderer.invoke('get-all-tags');
   container.innerHTML += `
     <h2 style="margin-top:32px;">Manage Tags</h2>
     ${
