@@ -32,26 +32,60 @@ export function saveConfig(cfg: any) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf-8');
 }
 
-export function loadEditorColors(): EditorColorConfig {
+export function loadEditorColors(userId?: number): EditorColorConfig {
   const cfg = loadConfig();
+  if (userId !== undefined) {
+    return (cfg.userSettings?.[userId]?.editorColors) || {};
+  }
   return cfg.editorColors || {};
 }
 
-export function saveEditorColors(editorColors: EditorColorConfig) {
+export function saveEditorColors(editorColors: EditorColorConfig, userId?: number) {
   const cfg = loadConfig();
-  cfg.editorColors = editorColors;
+  if (userId !== undefined) {
+    cfg.userSettings = cfg.userSettings || {};
+    cfg.userSettings[userId] = cfg.userSettings[userId] || {};
+    cfg.userSettings[userId].editorColors = editorColors;
+  } else {
+    cfg.editorColors = editorColors;
+  }
   saveConfig(cfg);
 }
 
-export function getAccentColor(theme: 'dark' | 'light' = 'dark'): string {
+export function getAccentColor(theme: 'dark' | 'light' = 'dark', userId?: number): string {
   const cfg = loadConfig();
-  if (theme === 'light') return cfg.accentColorLight || '#f0db4f';
+  if (userId !== undefined) {
+    const userCfg = cfg.userSettings?.[userId] || {};
+    if (theme === 'light') return userCfg.accentColorLight || '#007acc'; // Default light blue for light mode
+    return userCfg.accentColorDark || '#f0db4f'; // Default yellow for dark mode
+  }
+  if (theme === 'light') return cfg.accentColorLight || '#007acc';
   return cfg.accentColorDark || '#f0db4f';
 }
 
-export function setAccentColor(color: string, theme: 'dark' | 'light' = 'dark') {
+export function setAccentColor(color: string, theme: 'dark' | 'light' = 'dark', userId?: number) {
   const cfg = loadConfig();
-  if (theme === 'light') cfg.accentColorLight = color;
-  else cfg.accentColorDark = color;
+  if (userId !== undefined) {
+    cfg.userSettings = cfg.userSettings || {};
+    cfg.userSettings[userId] = cfg.userSettings[userId] || {};
+    if (theme === 'light') cfg.userSettings[userId].accentColorLight = color;
+    else cfg.userSettings[userId].accentColorDark = color;
+  } else {
+    if (theme === 'light') cfg.accentColorLight = color;
+    else cfg.accentColorDark = color;
+  }
+  saveConfig(cfg);
+}
+
+export function getUserTheme(userId: number): 'light' | 'dark' {
+  const cfg = loadConfig();
+  return (cfg.userSettings?.[userId]?.theme) || 'dark';
+}
+
+export function setUserTheme(theme: 'light' | 'dark', userId: number) {
+  const cfg = loadConfig();
+  cfg.userSettings = cfg.userSettings || {};
+  cfg.userSettings[userId] = cfg.userSettings[userId] || {};
+  cfg.userSettings[userId].theme = theme;
   saveConfig(cfg);
 }

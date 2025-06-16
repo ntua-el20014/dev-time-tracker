@@ -115,6 +115,15 @@ export function getCurrentUser(): number {
   return row ? Number(row.value) : 1;
 }
 
+export function deleteUser(userId: number) {
+  try {
+    db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
+  } catch (err) {
+    notifyRenderer('Failed to delete user.', 5000);
+    console.error(err);
+  }
+}
+
 // --- Usage logging and queries (all user-specific, user_id as input) ---
 export function logWindow(userId: number, app: string, title: string, lang: string | null, icon: string, intervalSeconds: number) {
   try {

@@ -11,6 +11,5 @@ TODO / Ideas for Improvements
 - [ ] Add onboarding/help screen for new users.
 
 Users:
-- Fix ui in landing page
-- Add logout button
+- Fix: theme changing, accent color and profile rerendering is broken
 - Make local storage configs user specific

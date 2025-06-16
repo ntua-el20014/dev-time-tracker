@@ -31,3 +31,10 @@
   color: #222;
   box-shadow: 0 4px 16px rgba(0,0,0,0.08);
 }
+
+#logoutBtn {
+  outline: none;
+}
+#logoutBtn:active {
+  transform: scale(0.97);
+}

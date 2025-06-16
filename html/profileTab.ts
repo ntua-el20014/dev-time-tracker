@@ -1,7 +1,7 @@
 import { ipcRenderer } from 'electron';
 import { applyAccentColor } from './renderer';
 import { renderPercentBar, renderPieChartJS } from './components';
-import { loadHotkey } from './theme';
+import { loadHotkey, setUserTheme } from './theme';
 import { getCurrentUserId } from './utils';
 import type { Tag } from '../src/logger';
 
@@ -129,16 +129,25 @@ async function renderLanguageUsage(container: HTMLElement) {
 }
 
 async function renderSettings(container: HTMLElement) {
-  // Get current idleTimeout from main process (in seconds)
   let idleTimeout = await ipcRenderer.invoke('get-idle-timeout');
   if (!idleTimeout || typeof idleTimeout !== 'number') idleTimeout = 60;
 
+  // Get current theme
+  const currentTheme = document.body.classList.contains('light') ? 'light' : 'dark';
+  
   container.innerHTML = `
     <h2>Settings</h2>
     <div style="margin-bottom:24px;">
       <label for="idleTimeoutRange" style="font-weight:bold;">Idle Timeout:</label>
       <input type="range" id="idleTimeoutRange" min="60" max="300" step="30" value="${idleTimeout}" style="vertical-align:middle; accent-color: var(--accent);">
       <span id="idleTimeoutValue" style="margin-left:8px;">${(idleTimeout/60).toFixed(1)} min</span>
+    </div>
+    
+    <div style="margin-bottom:24px;">
+      <label style="font-weight:bold;">Theme:</label>
+      <button id="themeToggleBtn" style="margin-left:12px; padding:6px 12px; border:none; border-radius:6px; background:var(--accent); color:#222; cursor:pointer;">
+        Switch to ${currentTheme === 'dark' ? 'Light' : 'Dark'} Mode
+      </button>
     </div>
   `;
 
@@ -161,9 +170,8 @@ async function renderSettings(container: HTMLElement) {
   `;
 
   // --- Accent color management ---
-  
   const theme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
-  const accentColor: string = await ipcRenderer.invoke('get-accent-color', theme);
+  const accentColor: string = await ipcRenderer.invoke('get-accent-color', theme, getCurrentUserId());
 
   container.innerHTML += `
     <h2 style="margin-top:32px;">Accent Color</h2>
@@ -194,6 +202,17 @@ async function renderSettings(container: HTMLElement) {
 
   // Attach all event listeners
 
+  // Add theme toggle handler
+  const themeToggleBtn = container.querySelector('#themeToggleBtn') as HTMLButtonElement;
+  themeToggleBtn.addEventListener('click', async () => {
+    document.body.classList.toggle('light');
+    const newTheme = document.body.classList.contains('light') ? 'light' : 'dark';
+    await setUserTheme(newTheme);
+    await applyAccentColor();
+    window.dispatchEvent(new Event('theme-changed'));
+    themeToggleBtn.textContent = `Switch to ${newTheme === 'dark' ? 'Light' : 'Dark'} Mode`;
+  });
+
   if (range && valueSpan) {
     range.addEventListener('input', async () => {
       const seconds = parseInt(range.value, 10);
@@ -221,32 +240,32 @@ async function renderSettings(container: HTMLElement) {
 
   saveAccentBtn.addEventListener('click', async () => {
     const currentTheme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
-    const colorToSave = accentInput.value; // Always use the picker's current value
+    const colorToSave = accentInput.value;
     const confirmed = confirm(`Apply new accent color ${colorToSave} for ${currentTheme} theme?`);
     if (!confirmed) return;
 
-    await ipcRenderer.invoke('set-accent-color', colorToSave, currentTheme);
+    await ipcRenderer.invoke('set-accent-color', colorToSave, currentTheme, getCurrentUserId());
     await applyAccentColor();
-
+    window.dispatchEvent(new Event('theme-changed')); // Force UI refresh
     accentInput.value = colorToSave;
   });
 
   resetAccentBtn.addEventListener('click', async () => {
     if (!confirm('Reset both accent colors to default values?')) return;
-    await ipcRenderer.invoke('set-accent-color', '#f0db4f', 'dark');
-    await ipcRenderer.invoke('set-accent-color', '#007acc', 'light');
+    await ipcRenderer.invoke('set-accent-color', '#f0db4f', 'dark', getCurrentUserId());
+    await ipcRenderer.invoke('set-accent-color', '#007acc', 'light', getCurrentUserId());
     await applyAccentColor();
 
     // Always get the current theme at the moment of reset
     const currentTheme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
-    const newAccent = await ipcRenderer.invoke('get-accent-color', currentTheme);
+    const newAccent = await ipcRenderer.invoke('get-accent-color', currentTheme, getCurrentUserId());
     accentInput.value = newAccent;
     accentInput.parentElement.style.background = newAccent;
   });
 
   function updateAccentPickerForTheme() {
     const theme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
-    ipcRenderer.invoke('get-accent-color', theme).then((color: string) => {
+    ipcRenderer.invoke('get-accent-color', theme, getCurrentUserId()).then((color: string) => {
       accentInput.value = color;
       accentInput.parentElement.style.background = color;
     });
@@ -285,7 +304,7 @@ export async function refreshProfile() {
     } else if (chapter === 'settings') {
       await renderSettings(contentDiv);
     } else if (chapter === 'hotkeys') {
-      renderHotkeys(contentDiv);
+      await renderHotkeys(contentDiv);
     }
     // Highlight active
     buttons.forEach(btn => {
@@ -300,24 +319,60 @@ export async function refreshProfile() {
       showChapter((btn as HTMLButtonElement).dataset.chapter);
     });
   });
+
+  // Logout button
+  const logoutBtn = document.createElement('button');
+  logoutBtn.id = 'logoutBtn';
+  logoutBtn.textContent = 'Log Out';
+  logoutBtn.style.cssText = `
+    display: block;
+    margin: 0 auto 24px auto;
+    padding: 10px 32px;
+    background: linear-gradient(90deg, #ff5858 0%, #f09819 100%);
+    color: #fff;
+    border: none;
+    border-radius: 24px;
+    font-size: 1.1em;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 2px 8px #0002;
+    transition: background 0.2s, box-shadow 0.2s;
+  `;
+  logoutBtn.onmouseenter = () => {
+    logoutBtn.style.background = 'linear-gradient(90deg, #f09819 0%, #ff5858 100%)';
+    logoutBtn.style.boxShadow = '0 4px 16px #0003';
+  };
+  logoutBtn.onmouseleave = () => {
+    logoutBtn.style.background = 'linear-gradient(90deg, #ff5858 0%, #f09819 100%)';
+    logoutBtn.style.boxShadow = '0 2px 8px #0002';
+  };
+  logoutBtn.onclick = () => {
+    localStorage.removeItem('currentUserId');
+    // Always set dark theme for landing page
+    document.body.classList.remove('light');
+    document.documentElement.style.setProperty('--accent', '#f0db4f');
+    document.body.style.setProperty('--accent', '#f0db4f');
+    // Show landing page, hide main UI
+    const landing = document.getElementById('userLanding');
+    const mainUI = document.getElementById('mainUI');
+    if (mainUI) mainUI.style.display = 'none';
+    if (landing) {
+      landing.style.display = '';
+      // Re-render landing page and use the global showMainUIForUser for login
+      import('./userLanding').then(mod => {
+        mod.renderUserLanding(landing, (userId: number) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).showMainUIForUser(userId);
+        });
+      });
+    }
+  };
+
+  profileDiv.insertBefore(logoutBtn, profileDiv.firstChild);
 }
 
-let lastHotkeysContainer: HTMLElement | null = null;
-
-function rerenderHotkeysIcons() {
-  // Only re-render if the Hotkeys tab is currently visible
-  if (
-    lastHotkeysContainer &&
-    lastHotkeysContainer.offsetParent !== null // visible in DOM
-  ) {
-    renderHotkeys(lastHotkeysContainer);
-  }
-}
-
-window.addEventListener('theme-changed', rerenderHotkeysIcons);
 
 function renderHotkeys(container: HTMLElement) {
-  lastHotkeysContainer = container;
 
   function keyImg(key: string) {
     const isLight = document.body.classList.contains('light');

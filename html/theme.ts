@@ -5,6 +5,42 @@ import stopBtn from '../data/stop-button.png';
 import pauseIconImg from '../data/pause-button.png';
 import playIconImg from '../data/play-button.png';
 import { applyAccentColor } from './renderer';
+import { getCurrentUserId } from './utils';
+import { ipcRenderer } from 'electron';
+
+// --- User Theme Preference Helpers ---
+
+export async function initTheme() {
+  const toggleBtn = document.getElementById('toggleTheme');
+  const themeIcon = document.getElementById('themeIcon') as HTMLImageElement;
+  const userId = getCurrentUserId();
+
+  if (toggleBtn && themeIcon) {
+    toggleBtn.addEventListener('click', async () => {
+      const isLight = !document.body.classList.contains('light');
+      document.body.classList.toggle('light', isLight);
+      await ipcRenderer.invoke('set-user-theme', isLight ? 'light' : 'dark', userId);
+      updateThemeIcon(themeIcon);
+      await applyAccentColor();
+      window.dispatchEvent(new Event('theme-changed'));
+    });
+
+    // Load theme from config
+    const savedTheme = await ipcRenderer.invoke('get-user-theme', userId) as 'light' | 'dark';
+    if (savedTheme === 'light') {
+      document.body.classList.add('light');
+    } else {
+      document.body.classList.remove('light');
+    }
+    updateThemeIcon(themeIcon);
+    applyAccentColor();
+  }
+}
+
+export async function setUserTheme(theme: 'light' | 'dark') {
+  const userId = getCurrentUserId();
+  await ipcRenderer.invoke('set-user-theme', theme, userId);
+}
 
 export function updateThemeIcon(themeIcon: HTMLImageElement) {
   if (!themeIcon) return;
@@ -12,29 +48,6 @@ export function updateThemeIcon(themeIcon: HTMLImageElement) {
     themeIcon.src = themeDark;
   } else {
     themeIcon.src = themeLight;
-  }
-}
-
-export function initTheme() {
-  const toggleBtn = document.getElementById('toggleTheme');
-  const themeIcon = document.getElementById('themeIcon') as HTMLImageElement;
-
-  if (toggleBtn && themeIcon) {
-    toggleBtn.addEventListener('click', async () => {
-      document.body.classList.toggle('light');
-      localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
-      updateThemeIcon(themeIcon);
-      await applyAccentColor();
-      // Dispatch custom event
-      window.dispatchEvent(new Event('theme-changed'));
-    });
-
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'light') {
-      document.body.classList.add('light');
-    }
-    updateThemeIcon(themeIcon);
-    applyAccentColor(); // Set accent color on load
   }
 }
 

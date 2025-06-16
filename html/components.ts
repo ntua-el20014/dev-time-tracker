@@ -22,7 +22,7 @@ export interface ModalOptions {
   submitText?: string;
   cancelText?: string;
   cancelClass?: string;
-  onSubmit: (values: Record<string, string>) => void;
+  onSubmit?: (values: Record<string, string>) => void;
   onCancel?: () => void;
   show?: boolean;
 }
@@ -52,11 +52,11 @@ export function showModal(options: ModalOptions) {
       : `<input id="modal-${f.name}" name="${f.name}" type="text" value="${f.value || ''}" ${f.required ? 'required' : ''}><br>`
     }
   `).join('') + `
-    <div class="session-modal-actions">
-      <button type="button" id="customModalCancelBtn" class="${options.cancelClass || ''}">${options.cancelText || 'Cancel'}</button>
-      <button type="submit">${options.submitText || 'Save'}</button>
-    </div>
-  `;
+  <div class="session-modal-actions">
+    <button type="button" id="customModalCancelBtn" class="${options.cancelClass || ''}">${options.cancelText || 'Cancel'}</button>
+    ${options.submitText ? `<button type="submit">${options.submitText}</button>` : ''}
+  </div>
+`;
 
   modal.classList.add('active');
   setTimeout(() => {
@@ -72,12 +72,14 @@ export function showModal(options: ModalOptions) {
   // Submit handler
   form.onsubmit = (e) => {
     e.preventDefault();
+    if (!options.onSubmit) return;
     const values: Record<string, string> = {};
     options.fields.forEach(f => {
       const el = form.querySelector(`[name="${f.name}"]`) as HTMLInputElement | HTMLTextAreaElement;
       values[f.name] = el.value.trim();
     });
     modal!.classList.remove('active');
+    modal.remove();
     options.onSubmit(values);
   };
 
@@ -85,6 +87,7 @@ export function showModal(options: ModalOptions) {
   if (cancelBtn) {
     cancelBtn.onclick = () => {
       modal!.classList.remove('active');
+      modal.remove();
       if (options.onCancel) options.onCancel();
     };
   }

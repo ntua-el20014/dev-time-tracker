@@ -1,9 +1,9 @@
 import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
-import { createUser, getAllUsers, setCurrentUser, getCurrentUser, logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions, editSession, deleteSession, getAllTags, addTag, setSessionTags, deleteTag, getLanguageSummaryByDateRange } from './logger';
+import { createUser, getAllUsers, setCurrentUser, getCurrentUser, deleteUser, logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions, editSession, deleteSession, getAllTags, addTag, setSessionTags, deleteTag, getLanguageSummaryByDateRange } from './logger';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
 import { activeWindow } from '@miniben90/x-win';
-import { loadEditorColors, saveEditorColors, loadConfig, saveConfig, getAccentColor, setAccentColor } from './config';
+import { loadEditorColors, saveEditorColors, loadConfig, saveConfig, getAccentColor, setAccentColor, getUserTheme, setUserTheme } from './config';
 import os from 'os';
 import type { Tag } from './logger';
 
@@ -94,6 +94,7 @@ function createWindow() {
     },
   })
   
+  
   // Open DevTools in development mode
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools();
@@ -142,22 +143,31 @@ ipcMain.handle('get-daily-summary', async (_event, userId: number) => {
   }
 });
 
-ipcMain.handle('get-editor-colors', () => {
-  return loadEditorColors();
+ipcMain.handle('get-editor-colors', (_event, userId: number) => {
+  return loadEditorColors(userId);
 });
 
-ipcMain.handle('set-editor-color', (event, app: string, color: string) => {
-  const config = loadEditorColors();
+ipcMain.handle('set-editor-color', (event, app: string, color: string, userId: number) => {
+  const config = loadEditorColors(userId);
   config[app] = color;
-  saveEditorColors(config);
+  saveEditorColors(config, userId);
 });
 
-ipcMain.handle('get-accent-color', (_event, theme: 'dark' | 'light') => {
-  return getAccentColor(theme);
+ipcMain.handle('get-accent-color', (_event, theme: 'dark' | 'light', userId: number) => {
+  return getAccentColor(theme, userId);
 });
 
-ipcMain.handle('set-accent-color', (_event, color: string, theme: 'dark' | 'light') => {
-  setAccentColor(color, theme);
+ipcMain.handle('set-accent-color', (_event, color: string, theme: 'dark' | 'light', userId: number) => {
+  setAccentColor(color, theme, userId);
+  return true;
+});
+
+ipcMain.handle('get-user-theme', (_event, userId: number) => {
+  return getUserTheme(userId);
+});
+
+ipcMain.handle('set-user-theme', (_event, theme: 'light' | 'dark', userId: number) => {
+  setUserTheme(theme, userId);
   return true;
 });
 
@@ -336,3 +346,7 @@ ipcMain.handle('create-user', (_event, username: string, avatar: string) => crea
 ipcMain.handle('get-all-users', () => getAllUsers());
 ipcMain.handle('set-current-user', (_event, userId: number) => setCurrentUser(userId));
 ipcMain.handle('get-current-user', () => getCurrentUser());
+ipcMain.handle('delete-user', (_event, userId: number) => {
+  deleteUser(userId);
+  return true;
+});

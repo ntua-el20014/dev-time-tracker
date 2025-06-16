@@ -214,17 +214,29 @@ ipcRenderer.on('auto-resumed', () => {
 
 export async function applyAccentColor() {
   const theme = document.body.classList.contains('light') ? 'light' : 'dark';
-  const accentColor = await ipcRenderer.invoke('get-accent-color', theme);
+  const accentColor = await ipcRenderer.invoke('get-accent-color', theme, getCurrentUserId());
 
   if (theme === 'light') {
     document.body.style.setProperty('--accent', accentColor);
-    // Remove from dark theme root so it falls back to config when switching
     document.documentElement.style.removeProperty('--accent');
   } else {
     document.documentElement.style.setProperty('--accent', accentColor);
-    // Remove from light theme body so it falls back to config when switching
     document.body.style.removeProperty('--accent');
   }
+}
+
+async function applyUserTheme() {
+  const userId = getCurrentUserId();
+  const savedTheme = await ipcRenderer.invoke('get-user-theme', userId) as 'light' | 'dark';
+  if (savedTheme === 'light') {
+    document.body.classList.add('light');
+  } else {
+    document.body.classList.remove('light');
+  }
+  // Optionally update theme icon if you use one
+  // updateThemeIcon(document.getElementById('themeIcon') as HTMLImageElement);
+  await applyAccentColor();
+  window.dispatchEvent(new Event('theme-changed'));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -240,7 +252,13 @@ document.addEventListener('DOMContentLoaded', () => {
       renderMainUI();
     }
     if (landing) landing.style.display = 'none';
-  }
+
+    // --- Add this: ---
+    applyUserTheme();
+    // -----------------
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).showMainUIForUser = showMainUIForUser;
+}
 
   if (storedUserId) {
     console.log('Stored user ID found:', storedUserId);
