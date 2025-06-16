@@ -23,3 +23,91 @@
 #dashboard-charts {
   margin-bottom: 0;
 }
+
+.dashboard-bubbles {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.dashboard-bubble {
+  min-width: 180px;
+  background: linear-gradient(135deg, var(--accent), #ffe066 80%);
+  color: #222;
+  border-radius: 18px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+  padding: 22px 18px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-weight: 500;
+  position: relative;
+  transition: transform 0.15s;
+  border: 2px solid #fff3;
+}
+.dashboard-bubble:hover {
+  transform: translateY(-4px) scale(1.04);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+}
+
+.bubble-label {
+  font-size: 1.0em;
+  font-weight: bold;
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+  text-align: center;
+}
+
+.bubble-value {
+  text-align: center;
+}
+
+.bubble-main {
+  font-size: 1.3em;
+  font-weight: bold;
+  letter-spacing: 1px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.bubble-duration {
+  font-size: 0.6em;
+  font-weight: normal;
+  margin-left: 3px;
+}
+
+.bubble-sub {
+  font-size: 1em;
+  opacity: 0.8;
+}
+
+.bubble-session-row {
+  margin-bottom: 6px;
+}
+
+.bubble-lang {
+  background: linear-gradient(135deg, #4f8cff 60%, #b3e0ff 100%);
+  color: #fff;
+}
+.bubble-editor {
+  background: linear-gradient(135deg, #ffb347 60%, #ffe066 100%);
+  color: #222;
+}
+
+.editor-icon {
+  background: none;
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.bubble-session {
+  background: linear-gradient(135deg, #7ed957 60%, #d0ffb3 100%);
+  color: #222;
+}
+.bubble-streak {
+  background: linear-gradient(135deg, #ff6961 60%, #ffd6d6 100%);
+  color: #222;
+}

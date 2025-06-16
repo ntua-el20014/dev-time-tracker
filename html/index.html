@@ -7,6 +7,9 @@
   <title>Dev Time Tracker</title>
 </head>
 <body>
+  <div id="root">
+  <div id="userLanding"></div>
+  <div id="mainUI" style="display:none;">
   <div class="tab-bar">
     <button class="tab active" data-tab="dashboard">Dashboard</button>
     <button class="tab" data-tab="today">Today</button>
@@ -18,7 +21,7 @@
       <div id="dashboardContent"></div>
     </div>
   </div>
-  <div id="tab-today" class="tab-content active">
+  <div id="tab-today" class="tab-content" style="display:none;">
     <div class="container">
       <table id="logTable">
         <thead>
@@ -53,5 +56,7 @@
   <button id="toggleTheme">
     <img id="themeIcon" src="" alt="Theme" style="width:28px;height:28px;">
   </button>
+  </div>
+  </div>
 </body>
 </html>

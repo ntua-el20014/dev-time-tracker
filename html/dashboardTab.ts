@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron';
 import { renderLineChartJS } from './components';
-import { getMonday, getWeekDates, getLocalDateString, filterDailyDataForWeek } from './utils';
+import { getMonday, getWeekDates, getLocalDateString, filterDailyDataForWeek, getCurrentUserId } from './utils';
 import type { DailySummaryRow, SessionRow } from '../src/logger';
 
 export async function renderDashboard() {
@@ -27,7 +27,7 @@ export async function renderDashboard() {
 
   // Recent activity chart (example: last 7 days total usage)
   const chartsDiv = document.getElementById('dashboard-charts');
-  const daily = await ipcRenderer.invoke('get-daily-summary');
+  const daily = await ipcRenderer.invoke('get-daily-summary', getCurrentUserId());
   const last7 = daily.slice(0, 7).reverse();
   const data = last7.map((row: DailySummaryRow) => ({
     title: 'Total Usage',
@@ -71,8 +71,8 @@ async function renderCalendarWidget(): Promise<HTMLDivElement> {
 
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  // Get logged days from main process
-  const loggedDaysRaw = await ipcRenderer.invoke('get-logged-days-of-month', year, month) as LoggedDay[];
+  // Pass userId as first argument
+  const loggedDaysRaw = await ipcRenderer.invoke('get-logged-days-of-month', getCurrentUserId(), year, month) as LoggedDay[];
   const loggedDaysSet = new Set(
     loggedDaysRaw.map((row) => Number(row.date.split('-')[2]))
   );
@@ -154,9 +154,9 @@ async function renderRecentActivity() {
   const statsDiv = document.getElementById('dashboard-quickstats');
   if (!statsDiv) return;
 
-  // Fetch data
-  const dailySummary: DailySummaryRow[] = await ipcRenderer.invoke('get-daily-summary');
-  const sessions: SessionRow[] = await ipcRenderer.invoke('get-sessions');
+  // Pass userId as first argument
+  const dailySummary: DailySummaryRow[] = await ipcRenderer.invoke('get-daily-summary', getCurrentUserId());
+  const sessions: SessionRow[] = await ipcRenderer.invoke('get-sessions', getCurrentUserId());
 
   // Get current week dates
   const monday = getMonday(new Date());
@@ -169,7 +169,7 @@ async function renderRecentActivity() {
   // Top language of the week
   const startDate = getLocalDateString(weekDate[0]);
   const endDate = getLocalDateString(weekDate[6]);
-  const weeklyLangSummary = await ipcRenderer.invoke('get-language-summary-by-date-range', startDate, endDate);
+  const weeklyLangSummary = await ipcRenderer.invoke('get-language-summary-by-date-range', getCurrentUserId(), startDate, endDate);
   // weeklyLangSummary: Array<{ language: string, total_time: number }>
   const topLang = weeklyLangSummary[0];
 
@@ -179,6 +179,9 @@ async function renderRecentActivity() {
     if (row.app) editorTotals[row.app] = (editorTotals[row.app] || 0) + row.total_time;
   });
   const topEditor = Object.entries(editorTotals).sort((a, b) => b[1] - a[1])[0];
+  const topEditorName = topEditor ? topEditor[0] : null;
+  const topEditorRow = weekSummary.find(row => row.app === topEditorName);
+  const topEditorIcon = topEditorRow?.icon;
 
   // 3 largest sessions of the week
   const weekSessions = sessions.filter((s: SessionRow) => weekDates.includes(getLocalDateString(new Date(s.timestamp))));
@@ -202,18 +205,39 @@ async function renderRecentActivity() {
 
   // Render quick stats
   statsDiv.innerHTML = `
-    <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:24px;">
-      <div><b>Top Language (week):</b> ${topLang ? `${topLang.language} (${Math.round(topLang.total_time/60)} min)` : '—'}</div>
-      <div><b>Top Editor (week):</b> ${topEditor ? `${topEditor[0]} (${Math.round(topEditor[1]/60)} min)` : '—'}</div>
-      <div>
-        <b>Largest Sessions (week):</b>
-        <ul style="margin:0;padding-left:0;list-style:none;">
-          ${topSessions.map((s: SessionRow) =>
-            `<li>${s.title} (${Math.floor(s.duration/60)}m ${s.duration%60}s)</li>`
-          ).join('')}
-        </ul>
+    <div class="dashboard-bubbles">
+      <div class="dashboard-bubble bubble-lang">
+        <div class="bubble-label">Language of the Week</div>
+        <div class="bubble-value">${topLang ? `<span class="bubble-main">${topLang.language}</span><br><span class="bubble-sub">${Math.round(topLang.total_time/60)} min</span>` : '—'}</div>
       </div>
-      <div><b>Longest Streak:</b> ${maxStreak} day${maxStreak === 1 ? '' : 's'}</div>
+      <div class="dashboard-bubble bubble-editor">
+        <div class="bubble-label">Editor of the Week</div>
+          <div class="bubble-value">
+          ${
+            topEditor && topEditorIcon
+              ? `<img src="${topEditorIcon}" alt="${topEditorName}" class="editor-icon" title="${topEditorName}" style="width:36px;height:36px;vertical-align:middle;border-radius:8px;margin-bottom:6px;"><br>
+                <span class="bubble-sub">${Math.round(topEditor[1]/60)} min</span>`
+              : '—'
+          }
+          </div>
+        </div>
+      <div class="dashboard-bubble bubble-session">
+        <div class="bubble-label">Largest Sessions</div>
+        <div class="bubble-value">
+          ${topSessions.length ? topSessions.map((s: SessionRow) =>
+            `<div class="bubble-session-row">
+              <span class="bubble-main">
+                ${s.title}
+                <span class="bubble-duration">${Math.floor(s.duration/60)}m ${s.duration%60}s</span>
+              </span>
+            </div>`
+          ).join('') : '—'}
+        </div>
+      </div>
+      <div class="dashboard-bubble bubble-streak">
+        <div class="bubble-label">Longest Streak</div>
+        <div class="bubble-value"><span class="bubble-main">${maxStreak}</span><br><span class="bubble-sub">day${maxStreak === 1 ? '' : 's'}</span></div>
+      </div>
     </div>
   `;
 }

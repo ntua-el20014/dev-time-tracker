@@ -4,6 +4,7 @@ const preferredExtensionMap: Record<string, string> = {
   '.md': 'Markdown',
   '.sql': 'SQL',
   '.html': 'HTML',
+  '.txt': 'Text',
 };
 
 /**

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
 import { renderLogs } from './logsTab';
 import { refreshProfile } from './profileTab';
@@ -6,6 +5,8 @@ import { renderSummary } from './summaryTab';
 import { renderDashboard } from './dashboardTab';
 import { initTheme, updateRecordBtn, updatePauseBtn } from './theme';
 import { displayOSInfo, showModal, showNotification } from './components';
+import { renderUserLanding } from './userLanding';
+import { getCurrentUserId } from './utils';
 import './styles/base.css';
 import './styles/layout.css';
 import './styles/table.css';
@@ -15,6 +16,7 @@ import './styles/timeline.css';
 import './styles/profile.css';
 import './styles/theme.css';
 import './styles/dashboard.css';
+import './styles/users.css';
 
 function setupTabs() {
   const tabs = Array.from(document.querySelectorAll('.tab')) as HTMLButtonElement[];
@@ -98,12 +100,12 @@ function setupRecordAndPauseBtns() {
       isPaused = false;
       pauseBtn.style.display = '';
       updatePauseBtn(pauseBtn, pauseIcon, isPaused);
-      await ipcRenderer.invoke('start-tracking');
+      await ipcRenderer.invoke('start-tracking', getCurrentUserId());
     } else {
       isRecording = false;
       isPaused = false;
       pauseBtn.style.display = 'none';
-      await ipcRenderer.invoke('stop-tracking');
+      await ipcRenderer.invoke('stop-tracking', getCurrentUserId());
     }
     updateRecordBtn(recordBtn, recordIcon, isRecording);
   });
@@ -114,7 +116,7 @@ function setupRecordAndPauseBtns() {
       await ipcRenderer.invoke('pause-tracking');
     } else {
       isPaused = false;
-      await ipcRenderer.invoke('resume-tracking');
+      await ipcRenderer.invoke('resume-tracking', getCurrentUserId());
     }
     updatePauseBtn(pauseBtn, pauseIcon, isPaused);
   });
@@ -136,18 +138,23 @@ function setupHotkeys() {
       if (recordBtn) recordBtn.click();
     }
 
-    // Ctrl+1: Today tab
+    // Ctrl+1: Dashboard tab
     if (e.ctrlKey && e.key === '1') {
+      e.preventDefault();
+      document.querySelector('.tab[data-tab="dashboard"]')?.dispatchEvent(new Event('click'));
+    }
+    // Ctrl+2: Today tab
+    if (e.ctrlKey && e.key === '2') {
       e.preventDefault();
       document.querySelector('.tab[data-tab="today"]')?.dispatchEvent(new Event('click'));
     }
-    // Ctrl+2: Summary tab
-    if (e.ctrlKey && e.key === '2') {
+    // Ctrl+3: Summary tab
+    if (e.ctrlKey && e.key === '3') {
       e.preventDefault();
       document.querySelector('.tab[data-tab="summary"]')?.dispatchEvent(new Event('click'));
     }
-    // Ctrl+3: Profile tab
-    if (e.ctrlKey && e.key === '3') {
+    // Ctrl+4: Profile tab
+    if (e.ctrlKey && e.key === '4') {
       e.preventDefault();
       document.querySelector('.tab[data-tab="profile"]')?.dispatchEvent(new Event('click'));
     }
@@ -221,8 +228,34 @@ export async function applyAccentColor() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  localStorage.removeItem('currentUserId');
+  const landing = document.getElementById('userLanding');
+  const mainUI = document.getElementById('mainUI');
+  const storedUserId = localStorage.getItem('currentUserId');
+
+  function showMainUIForUser(userId: number) {
+    localStorage.setItem('currentUserId', String(userId));
+    if (mainUI) {
+      mainUI.style.display = '';
+      renderMainUI();
+    }
+    if (landing) landing.style.display = 'none';
+  }
+
+  if (storedUserId) {
+    console.log('Stored user ID found:', storedUserId);
+    showMainUIForUser(Number(storedUserId));
+  } else if (landing) {
+    console.log('No stored user ID, rendering user landing');
+    renderUserLanding(landing, (userId) => {
+      showMainUIForUser(userId);
+    });
+  }
+});
+
+function renderMainUI() {
   initUI();
   applyAccentColor();
   setupRecordAndPauseBtns();
   setupHotkeys();
-});
+}

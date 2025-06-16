@@ -2,7 +2,7 @@
 import { ipcRenderer } from 'electron';
 import { formatTimeSpent } from '../src/utils/timeFormat';
 import edit from '../data/edit.png';
-import { escapeHtml, getLocalDateString, getWeekDates, getMonday, filterDailyDataForWeek } from './utils';
+import { escapeHtml, getLocalDateString, getWeekDates, getMonday, filterDailyDataForWeek, getCurrentUserId } from './utils';
 import { showModal } from './components';
 import type { DailySummaryRow, SessionRow, Tag } from '../src/logger';
 
@@ -89,7 +89,7 @@ export async function renderSummary() {
 
   // Only fetch all data once, cache for week switching
   if (allDailyData.length === 0) {
-    allDailyData = await ipcRenderer.invoke('get-daily-summary');
+    allDailyData = await ipcRenderer.invoke('get-daily-summary', getCurrentUserId());
   }
   if (!allDailyData || allDailyData.length === 0) {
     summaryDiv.innerHTML = '<p>No summary data available.</p>';
@@ -224,7 +224,7 @@ export async function renderSummary() {
 
   // Helper to render sessions and attach edit logic
   async function renderSessionRows() {
-    const sessions: SessionRow[] = await ipcRenderer.invoke('get-sessions');
+    const sessions: SessionRow[] = await ipcRenderer.invoke('get-sessions', getCurrentUserId());
     const sessionTableBody = sessionTable.querySelector('tbody')!;
     sessionTableBody.innerHTML = sessions.map((session: SessionRow) => {
       // Use the new duration field directly
@@ -269,7 +269,7 @@ export async function renderSummary() {
 
   async function showEditSessionModal(session: SessionRow, onChange: () => void) {
     // Fetch all tags for suggestions
-    const allTags: Tag[] = await ipcRenderer.invoke('get-all-tags');
+    const allTags: Tag[] = await ipcRenderer.invoke('get-all-tags', getCurrentUserId());
     const currentTags: string[] = session.tags || [];
 
     let selectedTags = [...currentTags];
@@ -288,12 +288,13 @@ export async function renderSummary() {
         // Get tags from the tag input UI
         const tags = selectedTags;
         await ipcRenderer.invoke('edit-session', {
+          userId: getCurrentUserId(),
           id: session.id,
           title: values.title,
           description: values.description,
           tags
         });
-        await ipcRenderer.invoke('set-session-tags', session.id, tags);
+        await ipcRenderer.invoke('set-session-tags', getCurrentUserId(), session.id, tags);
         onChange();
       },
       onCancel: async () => {

@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { ipcRenderer } from 'electron';
 import { applyAccentColor } from './renderer';
 import { renderPercentBar, renderPieChartJS } from './components';
 import { loadHotkey } from './theme';
+import { getCurrentUserId } from './utils';
 import type { Tag } from '../src/logger';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -14,7 +14,7 @@ function escapeHtml(text: string) {
 
 async function renderEditorUsage(container: HTMLElement) {
   type EditorUsageRow = { app: string; total_time: number };
-  const usage: EditorUsageRow[] = await ipcRenderer.invoke('get-editor-usage');
+  const usage: EditorUsageRow[] = await ipcRenderer.invoke('get-editor-usage', getCurrentUserId());
   if (!usage || usage.length === 0) {
     container.innerHTML = '<p>No data available.</p>';
     return;
@@ -77,7 +77,7 @@ async function renderEditorUsage(container: HTMLElement) {
   container.querySelectorAll('input[type="color"]').forEach(input => {
     input.addEventListener('change', (e: Event) => {
       const target = e.target as HTMLInputElement;
-      const app = target.dataset.app!;
+      const app = target.dataset.app;
       const color = target.value;
       ipcRenderer.invoke('set-editor-color', app, color);
       refreshProfile();
@@ -87,7 +87,7 @@ async function renderEditorUsage(container: HTMLElement) {
 
 async function renderLanguageUsage(container: HTMLElement) {
   type LanguageUsageRow = { language: string; total_time: number };
-  const usage: LanguageUsageRow[] = await ipcRenderer.invoke('get-language-usage');
+  const usage: LanguageUsageRow[] = await ipcRenderer.invoke('get-language-usage', getCurrentUserId());
   if (!usage || usage.length === 0) {
     container.innerHTML = '<p>No data available.</p>';
     return;
@@ -142,17 +142,8 @@ async function renderSettings(container: HTMLElement) {
     </div>
   `;
 
-  const range = container.querySelector('#idleTimeoutRange') as HTMLInputElement;
-  const valueSpan = container.querySelector('#idleTimeoutValue') as HTMLSpanElement;
-
-  range?.addEventListener('input', async () => {
-    const seconds = parseInt(range.value, 10);
-    valueSpan.textContent = (seconds / 60).toFixed(1) + ' min';
-    await ipcRenderer.invoke('set-idle-timeout', seconds);
-  });
-
   // --- Tag management ---
-  const tags: Tag[] = await ipcRenderer.invoke('get-all-tags');
+  const tags: Tag[] = await ipcRenderer.invoke('get-all-tags', getCurrentUserId());
   container.innerHTML += `
     <h2 style="margin-top:32px;">Manage Tags</h2>
     ${
@@ -169,18 +160,8 @@ async function renderSettings(container: HTMLElement) {
     }
   `;
 
-  // Attach delete handlers
-  container.querySelectorAll('.delete-tag-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const tag = (btn as HTMLButtonElement).dataset.tag!;
-      if (confirm(`Delete tag "${tag}"? This will remove it from all sessions.`)) {
-        await ipcRenderer.invoke('delete-tag', tag);
-        renderSettings(container); // Refresh the list
-      }
-    });
-  });
-
   // --- Accent color management ---
+  
   const theme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
   const accentColor: string = await ipcRenderer.invoke('get-accent-color', theme);
 
@@ -204,13 +185,38 @@ async function renderSettings(container: HTMLElement) {
       <button id="resetAccentColorsBtn" style="padding:6px 18px;border:none;border-radius:6px;background:#eee;color:#222;cursor:pointer;">Reset Defaults</button>
     </div>
   `;
+  const range = container.querySelector('#idleTimeoutRange') as HTMLInputElement;
+  const valueSpan = container.querySelector('#idleTimeoutValue') as HTMLSpanElement;
 
   const accentInput = container.querySelector('#accentColorInput') as HTMLInputElement;
   const saveAccentBtn = container.querySelector('#saveAccentColorBtn') as HTMLButtonElement;
   const resetAccentBtn = container.querySelector('#resetAccentColorsBtn') as HTMLButtonElement;
 
+  // Attach all event listeners
+
+  if (range && valueSpan) {
+    range.addEventListener('input', async () => {
+      const seconds = parseInt(range.value, 10);
+      valueSpan.textContent = (seconds / 60).toFixed(1) + ' min';
+      await ipcRenderer.invoke('set-idle-timeout', seconds);
+    });
+  } else {
+    console.error('Idle timeout slider or value span not found!');
+  }
+
+   // Attach delete handlers
+  container.querySelectorAll('.delete-tag-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const tag = (btn as HTMLButtonElement).dataset.tag;
+      if (confirm(`Delete tag "${tag}"? This will remove it from all sessions.`)) {
+        await ipcRenderer.invoke('delete-tag', getCurrentUserId(), tag);
+        renderSettings(container); // Refresh the list
+      }
+    });
+  });
+
   accentInput.addEventListener('input', () => {
-    accentInput.parentElement!.style.background = accentInput.value; // Update preview
+    accentInput.parentElement.style.background = accentInput.value; // Update preview
   });
 
   saveAccentBtn.addEventListener('click', async () => {
@@ -235,14 +241,14 @@ async function renderSettings(container: HTMLElement) {
     const currentTheme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
     const newAccent = await ipcRenderer.invoke('get-accent-color', currentTheme);
     accentInput.value = newAccent;
-    accentInput.parentElement!.style.background = newAccent;
+    accentInput.parentElement.style.background = newAccent;
   });
 
   function updateAccentPickerForTheme() {
     const theme: 'dark' | 'light' = document.body.classList.contains('light') ? 'light' : 'dark';
     ipcRenderer.invoke('get-accent-color', theme).then((color: string) => {
       accentInput.value = color;
-      accentInput.parentElement!.style.background = color;
+      accentInput.parentElement.style.background = color;
     });
   }
 
@@ -291,7 +297,7 @@ export async function refreshProfile() {
   showChapter('editor');
   buttons.forEach(btn => {
     btn.addEventListener('click', () => {
-      showChapter((btn as HTMLButtonElement).dataset.chapter!);
+      showChapter((btn as HTMLButtonElement).dataset.chapter);
     });
   });
 }
@@ -328,7 +334,7 @@ function renderHotkeys(container: HTMLElement) {
     <ul style="list-style:none;padding:0;margin:0;line-height:2;">
       <li>${keyImg('ctrl')} + ${keyImg('r')}   Start/Stop recording</li>
       <li>${keyImg('ctrl')} + ${keyImg('p')}   Pause/Resume recording</li>
-      <li>${keyImg('ctrl')} + ${keyImg('hashtag')}   Switch Tabs [# = 1, 2, 3]</li>
+      <li>${keyImg('ctrl')} + ${keyImg('hashtag')}   Switch Tabs [# = 1, 2, 3, 4]</li>
     </ul>
     <p style="margin-top:16px;color:#888;font-size:0.98em;">
       <i>Shortcuts work globally except when typing in an input or textarea.</i>

@@ -44,3 +44,8 @@ export function filterDailyDataForWeek(dailyData: DailySummaryRow[], weekMonday:
   const weekDates = getWeekDates(weekMonday).map(d => getLocalDateString(d));
   return dailyData.filter(row => weekDates.includes(row.date));
 }
+
+export function getCurrentUserId(): number {
+  const stored = localStorage.getItem('currentUserId');
+  return stored ? Number(stored) : 1; // fallback to 1 if not set
+}

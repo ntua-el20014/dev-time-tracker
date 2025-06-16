@@ -1,6 +1,7 @@
 import { ipcRenderer } from 'electron';
 import { formatTimeSpent } from '../src/utils/timeFormat';
 import type { LogEntry } from '../src/logger';
+import { getCurrentUserId } from './utils';
 
 function escapeHtml(text: string) {
   const div = document.createElement('div');
@@ -28,7 +29,7 @@ export async function renderLogs(date?: string) {
   todayTitle.style.color = 'var(--accent)';
   container.insertBefore(todayTitle, container.firstChild);
 
-  const logs = await ipcRenderer.invoke('get-logs', date) as LogEntry[];
+  const logs = await ipcRenderer.invoke('get-logs', getCurrentUserId(), date) as LogEntry[];
   const tbody = document.querySelector('#logTable tbody');
   if (!tbody) return;
 
