@@ -190,13 +190,15 @@ export async function renderSummary() {
         </tr>
       </thead>
       <tbody>
-        ${rows.map((row: DailySummaryRow) => `
-          <tr>
-            <td><img src="${row.icon}" alt="${escapeHtml(row.app)} icon" class="icon" /></td>
-            <td>${escapeHtml(row.app)}</td>
-            <td>${escapeHtml(formatTimeSpent(row.total_time))}</td>
-          </tr>
-        `).join('')}
+        ${rows.map((row: DailySummaryRow) => {
+          return `
+            <tr>
+              <td><img src="${row.icon}" alt="${escapeHtml(row.app)} icon" class="icon" /></td>
+              <td>${escapeHtml(row.app)}</td>
+              <td>${escapeHtml(formatTimeSpent(row.total_time))}</td>
+            </tr>
+          `;
+        }).join('')}
       </tbody>
     </table>
   `).join('');

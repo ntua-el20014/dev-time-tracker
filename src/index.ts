@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
 import { createUser, getAllUsers, setCurrentUser, getCurrentUser, deleteUser, logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions, editSession, deleteSession, getAllTags, addTag, setSessionTags, deleteTag, getLanguageSummaryByDateRange } from './logger';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
+import './utils/langMap';
 import { activeWindow } from '@miniben90/x-win';
 import { loadEditorColors, saveEditorColors, loadConfig, saveConfig, getAccentColor, setAccentColor, getUserTheme, setUserTheme } from './config';
 import os from 'os';
@@ -73,12 +74,12 @@ function trackActiveWindow(userId: number) {
 
     const langData = getLanguageDataFromTitle(title);
     const language = langData?.language || 'Unknown';
+    const langExt = langData?.extension || null;
 
-    // logWindow now logs language and icon
-    logWindow(userId, editor.name || 'Unknown', title, language, icon, intervalSeconds);
+    // Pass langExt to logWindow
+    logWindow(userId, editor.name || 'Unknown', title, language, icon, intervalSeconds, langExt);
 
     mainWindow?.webContents.send('window-tracked');
-    //}
   } catch (err) {
     console.error('[Tracker Error]', err);
   }

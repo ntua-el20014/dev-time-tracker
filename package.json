@@ -34,6 +34,7 @@
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vercel/webpack-asset-relocator-loader": "^1.7.0",
+    "copy-webpack-plugin": "^13.0.0",
     "css-loader": "^6.11.0",
     "electron": "28.0.0",
     "eslint": "^8.57.1",
@@ -53,6 +54,7 @@
     "electron-squirrel-startup": "^1.0.1",
     "extract-file-icon": "^0.3.2",
     "language-icons": "^0.3.0",
-    "linguist-languages": "^7.30.0"
+    "linguist-languages": "^7.30.0",
+    "vscode-icons-js": "^11.6.1"
   }
 }

@@ -1,4 +1,7 @@
 import linguistLanguages from 'linguist-languages';
+import { getIconForFile } from 'vscode-icons-js';
+import { ipcRenderer } from 'electron';
+import { getCurrentUserId } from '../../html/utils';
 
 const preferredExtensionMap: Record<string, string> = {
   '.md': 'Markdown',
@@ -7,11 +10,12 @@ const preferredExtensionMap: Record<string, string> = {
   '.txt': 'Text',
 };
 
-/**
- * Extracts the programming language from a window title using known file extensions.
- * @param title The window title string (e.g. "logger.ts - dev-time-tracker - Visual Studio Code")
- * @returns { language: string } | null
- */
+let userLangMap: Record<string, string> = {};
+
+export async function loadUserLangMap() {
+  userLangMap = await ipcRenderer.invoke('get-user-lang-map', getCurrentUserId());
+}
+
 export function getLanguageDataFromTitle(title: string) {
   // Gather all known extensions from linguist-languages
   const allExts = new Set<string>();
@@ -24,7 +28,6 @@ export function getLanguageDataFromTitle(title: string) {
   // Find the first extension match in the title
   let foundExt: string | null = null;
   for (const ext of allExts) {
-    // Escape special regex characters in the extension
     const escapedExt = ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`${escapedExt}(\\W|$)`, 'i');
     if (regex.test(title)) {
@@ -34,6 +37,13 @@ export function getLanguageDataFromTitle(title: string) {
   }
 
   if (!foundExt) return null;
+
+  if (userLangMap[foundExt]) {
+    return {
+      language: userLangMap[foundExt],
+      extension: foundExt,
+    };
+  }
 
   let lang;
   if (preferredExtensionMap[foundExt]) {
@@ -46,10 +56,30 @@ export function getLanguageDataFromTitle(title: string) {
     );
   }
 
-  if (!lang) return null;
+  if (!lang) {
+    // Instead of returning 'Unknown', return the extension itself as the language
+    return {
+      language: foundExt, // e.g. '.foo'
+      extension: foundExt,
+    };
+  }
 
   return {
     language: lang.name,
+    extension: foundExt,
   };
 
+}
+
+export function getLangIconUrl(ext?: string): string | null {
+  if (!ext) return null;
+  const icon = getIconForFile(ext);
+  if (!icon) return null;
+
+  // development
+  if (process.env.NODE_ENV === 'development') {
+    return `/icons/${icon}`;
+  }
+  // production
+  return `icons/${icon}`;
 }

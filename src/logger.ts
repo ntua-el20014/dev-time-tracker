@@ -44,6 +44,7 @@ db.prepare(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     app TEXT,
     language TEXT,
+    lang_ext TEXT,
     date TEXT,
     icon TEXT,
     time_spent INTEGER DEFAULT 0,
@@ -125,21 +126,31 @@ export function deleteUser(userId: number) {
 }
 
 // --- Usage logging and queries (all user-specific, user_id as input) ---
-export function logWindow(userId: number, app: string, title: string, lang: string | null, icon: string, intervalSeconds: number) {
+export function logWindow(
+  userId: number,
+  app: string,
+  title: string,
+  lang: string | null,
+  icon: string,
+  intervalSeconds: number,
+  langExt: string | null
+) {
   try {
     const timestamp = new Date().toISOString();
     db.prepare(`INSERT INTO usage (app, title, language, timestamp, user_id) VALUES (?, ?, ?, ?, ?)`)
       .run(app, title, lang, timestamp, userId);
 
     const date = getLocalDateString();
+
     db.prepare(`
-      INSERT INTO usage_summary (app, language, date, icon, time_spent, user_id)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO usage_summary (app, language, lang_ext, date, icon, time_spent, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(app, language, date, user_id)
       DO UPDATE SET 
         time_spent = time_spent + excluded.time_spent,
-        icon = CASE WHEN usage_summary.icon IS NULL OR usage_summary.icon = '' THEN excluded.icon ELSE usage_summary.icon END
-    `).run(app, lang, date, icon, intervalSeconds, userId);
+        icon = CASE WHEN usage_summary.icon IS NULL OR usage_summary.icon = '' THEN excluded.icon ELSE usage_summary.icon END,
+        lang_ext = CASE WHEN excluded.lang_ext IS NOT NULL THEN excluded.lang_ext ELSE usage_summary.lang_ext END
+    `).run(app, lang, langExt, date, icon, intervalSeconds, userId);
   } catch (err) {
     notifyRenderer('Failed to log window usage. Please try again.', 5000);
     console.error(err);
@@ -184,7 +195,7 @@ export function getSummary(userId: number, date?: string) {
       date = getLocalDateString();
     }
     return db.prepare(
-      'SELECT app, language, icon, time_spent FROM usage_summary WHERE date = ? AND user_id = ? ORDER BY time_spent DESC'
+      'SELECT app, language, lang_ext, icon, time_spent FROM usage_summary WHERE date = ? AND user_id = ? ORDER BY time_spent DESC'
     ).all(date, userId);
   } catch (err) {
     notifyRenderer('Failed to load summary.', 5000);
@@ -403,6 +414,7 @@ export interface DailySummaryRow {
   date: string;
   app: string;
   language?: string;
+  lang_ext?: string;
   icon?: string;
   total_time: number;
 }
@@ -422,6 +434,7 @@ export interface LogEntry {
   icon: string;
   app: string;
   language: string;
+  lang_ext?: string;
   time_spent: number;
 }
 

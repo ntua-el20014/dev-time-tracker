@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
 import { renderLogs } from './logsTab';
 import { refreshProfile } from './profileTab';
@@ -7,6 +8,7 @@ import { initTheme, updateRecordBtn, updatePauseBtn } from './theme';
 import { displayOSInfo, showModal, showNotification } from './components';
 import { renderUserLanding } from './userLanding';
 import { getCurrentUserId } from './utils';
+import { loadUserLangMap } from '../src/utils/extractData';
 import './styles/base.css';
 import './styles/layout.css';
 import './styles/table.css';
@@ -83,46 +85,56 @@ function initUI() {
   }
 }
 
-let isRecording = false;
-let isPaused = false;
+(window as any).isRecording = false;
+(window as any).isPaused = false;
 
 function setupRecordAndPauseBtns() {
-  const recordBtn = document.getElementById('recordBtn') as HTMLButtonElement;
+  // Remove old listeners by replacing buttons with clones
+  const recordBtnOld = document.getElementById('recordBtn') as HTMLButtonElement;
+  const pauseBtnOld = document.getElementById('pauseBtn') as HTMLButtonElement;
+
+  if (!recordBtnOld || !pauseBtnOld) return;
+
+  const recordBtn = recordBtnOld.cloneNode(true) as HTMLButtonElement;
+  const pauseBtn = pauseBtnOld.cloneNode(true) as HTMLButtonElement;
+
+  recordBtnOld.parentNode?.replaceChild(recordBtn, recordBtnOld);
+  pauseBtnOld.parentNode?.replaceChild(pauseBtn, pauseBtnOld);
+
   const recordIcon = document.getElementById('recordIcon') as HTMLImageElement;
-  const pauseBtn = document.getElementById('pauseBtn') as HTMLButtonElement;
   const pauseIcon = document.getElementById('pauseIcon') as HTMLImageElement;
 
   if (!recordBtn || !recordIcon || !pauseBtn || !pauseIcon) return;
 
   recordBtn.addEventListener('click', async () => {
-    if (!isRecording) {
-      isRecording = true;
-      isPaused = false;
+    if (!(window as any).isRecording) {
+      (window as any).isRecording = true;
+      (window as any).isPaused = false;
       pauseBtn.style.display = '';
-      updatePauseBtn(pauseBtn, pauseIcon, isPaused);
+      updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
       await ipcRenderer.invoke('start-tracking', getCurrentUserId());
     } else {
-      isRecording = false;
-      isPaused = false;
+      (window as any).isRecording = false;
+      (window as any).isPaused = false;
       pauseBtn.style.display = 'none';
       await ipcRenderer.invoke('stop-tracking', getCurrentUserId());
     }
-    updateRecordBtn(recordBtn, recordIcon, isRecording);
+    updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
   });
 
   pauseBtn.addEventListener('click', async () => {
-    if (!isPaused) {
-      isPaused = true;
+    if (!(window as any).isPaused) {
+      (window as any).isPaused = true;
       await ipcRenderer.invoke('pause-tracking');
     } else {
-      isPaused = false;
+      (window as any).isPaused = false;
       await ipcRenderer.invoke('resume-tracking', getCurrentUserId());
     }
-    updatePauseBtn(pauseBtn, pauseIcon, isPaused);
+    updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
   });
 
-  updateRecordBtn(recordBtn, recordIcon, isRecording);
-  updatePauseBtn(pauseBtn, pauseIcon, isPaused);
+  updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
+  updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
   pauseBtn.style.display = 'none';
 }
 
@@ -195,20 +207,20 @@ ipcRenderer.on('notify', (_event, data) => {
 });
 
 ipcRenderer.on('auto-paused', () => {
-  isPaused = true;
+  (window as any).isPaused = true;
   const pauseBtn = document.getElementById('pauseBtn') as HTMLButtonElement;
   const pauseIcon = document.getElementById('pauseIcon') as HTMLImageElement;
   if (pauseBtn && pauseIcon) {
-    updatePauseBtn(pauseBtn, pauseIcon, isPaused);
+    updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
   }
 });
 
 ipcRenderer.on('auto-resumed', () => {
-  isPaused = false;
+  (window as any).isPaused = false;
   const pauseBtn = document.getElementById('pauseBtn') as HTMLButtonElement;
   const pauseIcon = document.getElementById('pauseIcon') as HTMLImageElement;
   if (pauseBtn && pauseIcon) {
-    updatePauseBtn(pauseBtn, pauseIcon, isPaused);
+    updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
   }
 });
 
@@ -250,14 +262,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (mainUI) {
       mainUI.style.display = '';
       renderMainUI();
+      setupRecordAndPauseBtns();
     }
     if (landing) landing.style.display = 'none';
 
-    // --- Add this: ---
+    loadUserLangMap();
     applyUserTheme();
-    // -----------------
+    
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).showMainUIForUser = showMainUIForUser;
+    (window as any).showMainUIForUser = showMainUIForUser;
 }
 
   if (storedUserId) {
@@ -274,6 +287,5 @@ document.addEventListener('DOMContentLoaded', () => {
 function renderMainUI() {
   initUI();
   applyAccentColor();
-  setupRecordAndPauseBtns();
   setupHotkeys();
 }

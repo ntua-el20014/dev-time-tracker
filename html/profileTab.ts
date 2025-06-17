@@ -114,6 +114,25 @@ async function renderLanguageUsage(container: HTMLElement) {
         </li>`;
       }).join('')}
     </ul>
+    <div style="margin-top:24px;padding:14px 18px;background:var(--row-odd);border-radius:10px;">
+      <b>How to map unknown file extensions to languages:</b><br>
+      Edit the file <code>lang.json</code> in your app data folder:<br>
+      <code style="user-select:all;">%APPDATA%/dev-time-tracker/lang.json</code>
+      <button id="openLangJsonBtn" style="margin-left:12px;padding:4px 12px;border-radius:6px;border:none;background:var(--accent);color:#222;cursor:pointer;">
+        Open lang.json
+      </button>
+      <br>
+      Example content:
+      <pre style="background:var(--row-hover);padding:8px 12px;border-radius:6px;margin:8px 0 0 0;">
+{
+  ".foo": "My Custom Language",
+  ".bar": "AnotherLang"
+}
+      </pre>
+      <span style="font-size:0.97em;color:#888;">
+        After saving, your changes will be applied automatically.
+      </span>
+    </div>
   `;
 
   // Render the Chart.js pie chart
@@ -126,6 +145,13 @@ async function renderLanguageUsage(container: HTMLElement) {
     renderPieChartJS('languagePieChart', items, 180);
   }
   window.addEventListener('theme-changed', rerenderPieChartOnThemeChange);
+
+  const openBtn = container.querySelector('#openLangJsonBtn');
+  if (openBtn) {
+    openBtn.addEventListener('click', () => {
+    ipcRenderer.invoke('open-lang-json', getCurrentUserId());
+  });
+  }
 }
 
 async function renderSettings(container: HTMLElement) {
@@ -352,6 +378,10 @@ export async function refreshProfile() {
     document.body.classList.remove('light');
     document.documentElement.style.setProperty('--accent', '#f0db4f');
     document.body.style.setProperty('--accent', '#f0db4f');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).isRecording = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).isPaused = false;
     // Show landing page, hide main UI
     const landing = document.getElementById('userLanding');
     const mainUI = document.getElementById('mainUI');

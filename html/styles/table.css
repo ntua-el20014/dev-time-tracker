@@ -81,6 +81,14 @@ th {
   margin-right: 8px;
 }
 
+.lang-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
 .summary-table td:nth-child(3) {
   width: 100px;
 }

@@ -16,6 +16,14 @@ rules.push({
   }
 });
 
+rules.push({
+  test: /\.svg$/,
+  type: 'asset/resource',
+  generator: {
+    filename: 'icons/[name][ext]'
+  }
+});
+
 export const rendererConfig: Configuration = {
   entry: './html/renderer.ts', // <- Your renderer entry point
   output: {

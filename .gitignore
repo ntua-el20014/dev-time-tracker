@@ -1,3 +1,6 @@
+# Svg files
+/public/icons
+
 # Logs
 logs
 *.log

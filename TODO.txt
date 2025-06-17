@@ -2,14 +2,10 @@ TODO / Ideas for Improvements
 
 - [ ] Daily goals: Allow users to set and track daily coding time or session goals and get notified when done.
 - [ ] Present customizable charts with filtering options (language, editor, time per day on specified date range)
-- [ ] Add language icons and editing options for unknown results.
 - [ ] Session export: Export sessions or summaries to CSV/JSON for reporting.
 - [ ] Weekly/monthly reports: Generate and display reports for longer periods.
 - [ ] Integration with calendar/task apps: Link sessions to calendar events or tasks.
 - [ ] Cloud sync: Sync data across devices (optional, with user opt-in).
 - [ ] Backup/restore: Export and import the database for backup or migration.
 - [ ] Add onboarding/help screen for new users.
-
-Users:
-- Fix: theme changing, accent color and profile rerendering is broken
-- Make local storage configs user specific
+- [ ] Admin profile to monitor all users and statistics.

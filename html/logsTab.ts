@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron';
 import { formatTimeSpent } from '../src/utils/timeFormat';
 import type { LogEntry } from '../src/logger';
 import { getCurrentUserId } from './utils';
+import { getLangIconUrl } from '../src/utils/extractData';
 
 function escapeHtml(text: string) {
   const div = document.createElement('div');
@@ -36,10 +37,12 @@ export async function renderLogs(date?: string) {
   tbody.innerHTML = '';
   logs.forEach((log) => {
     const timeSpent = formatTimeSpent(log.time_spent);
+    const langIcon = getLangIconUrl(log.lang_ext);
     const row = document.createElement('tr');
     row.innerHTML = `
       <td><img src="${log.icon}" alt="${escapeHtml(log.app)} icon" class="icon" /></td>
       <td>${escapeHtml(log.app)}</td>
+      <td>${langIcon ? `<img src="${langIcon}" alt="${escapeHtml(log.language)}" class="lang-icon" />` : ''}</td>
       <td>${escapeHtml(log.language)}</td>
       <td>${escapeHtml(timeSpent)}</td>
     `;
