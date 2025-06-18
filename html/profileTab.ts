@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
 import { applyAccentColor } from './renderer';
 import { renderPercentBar, renderPieChartJS } from './components';
@@ -374,24 +375,24 @@ export async function refreshProfile() {
   };
   logoutBtn.onclick = () => {
     localStorage.removeItem('currentUserId');
-    // Always set dark theme for landing page
     document.body.classList.remove('light');
     document.documentElement.style.setProperty('--accent', '#f0db4f');
     document.body.style.setProperty('--accent', '#f0db4f');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).isRecording = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).isPaused = false;
-    // Show landing page, hide main UI
     const landing = document.getElementById('userLanding');
     const mainUI = document.getElementById('mainUI');
     if (mainUI) mainUI.style.display = 'none';
     if (landing) {
       landing.style.display = '';
-      // Re-render landing page and use the global showMainUIForUser for login
+      const summaryDiv = document.getElementById('summaryContent');
+      if (summaryDiv) summaryDiv.innerHTML = '';
+      // Reset summaryTab state
+      if (window) {
+        (window as any).__resetSummaryTabState = true;
+      }
       import('./userLanding').then(mod => {
         mod.renderUserLanding(landing, (userId: number) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).showMainUIForUser(userId);
         });
       });

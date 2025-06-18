@@ -74,9 +74,12 @@ th {
   border-bottom: none;
 }
 
-.summary-table .icon {
+.icon {
   width: 28px;
   height: 28px;
+  max-width: 28px;
+  max-height: 28px;
+  vertical-align: middle;
   object-fit: contain;
   margin-right: 8px;
 }

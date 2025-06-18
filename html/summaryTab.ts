@@ -84,13 +84,18 @@ function renderTimelineChart(dailyData: DailySummaryRow[], weekMonday: Date) {
 }
 
 export async function renderSummary() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((window as any).__resetSummaryTabState) {
+    currentWeekMonday = getMonday(new Date());
+    allDailyData = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__resetSummaryTabState;
+  }
   const summaryDiv = document.getElementById('summaryContent');
   if (!summaryDiv) return;
+  summaryDiv.innerHTML = '';
 
-  // Only fetch all data once, cache for week switching
-  if (allDailyData.length === 0) {
-    allDailyData = await ipcRenderer.invoke('get-daily-summary', getCurrentUserId());
-  }
+  allDailyData = await ipcRenderer.invoke('get-daily-summary', getCurrentUserId());
   if (!allDailyData || allDailyData.length === 0) {
     summaryDiv.innerHTML = '<p>No summary data available.</p>';
     return;

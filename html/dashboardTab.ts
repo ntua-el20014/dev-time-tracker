@@ -1,6 +1,7 @@
 import { ipcRenderer } from 'electron';
 import { renderLineChartJS } from './components';
 import { getMonday, getWeekDates, getLocalDateString, filterDailyDataForWeek, getCurrentUserId } from './utils';
+import { getLangIconUrl } from '../src/utils/extractData';
 import type { DailySummaryRow, SessionRow } from '../src/logger';
 
 export async function renderDashboard() {
@@ -173,6 +174,16 @@ async function renderRecentActivity() {
   // weeklyLangSummary: Array<{ language: string, total_time: number }>
   const topLang = weeklyLangSummary[0];
 
+  // Get icon for topLang
+  let topLangIconHtml = '';
+  if (topLang && topLang.language) {
+    const langExt = topLang.lang_ext;
+    const langIconUrl = getLangIconUrl(langExt);
+    if (langIconUrl) {
+      topLangIconHtml = `<img src="${langIconUrl}" alt="${topLang.language}" class="lang-icon" style="width:32px;height:32px;display:block;margin:6px auto 0 auto;" />`;
+    }
+  }
+
   // Top editor of the week
   const editorTotals: Record<string, number> = {};
   weekSummary.forEach((row: DailySummaryRow) => {
@@ -208,7 +219,15 @@ async function renderRecentActivity() {
     <div class="dashboard-bubbles">
       <div class="dashboard-bubble bubble-lang">
         <div class="bubble-label">Language of the Week</div>
-        <div class="bubble-value">${topLang ? `<span class="bubble-main">${topLang.language}</span><br><span class="bubble-sub">${Math.round(topLang.total_time/60)} min</span>` : '—'}</div>
+        <div class="bubble-value">
+          ${
+            topLang
+              ? `<span class="bubble-main">${topLang.language}</span>
+                 ${topLangIconHtml}
+                 <br><span class="bubble-sub">${Math.round(topLang.total_time/60)} min</span>`
+              : '—'
+          }
+        </div>
       </div>
       <div class="dashboard-bubble bubble-editor">
         <div class="bubble-label">Editor of the Week</div>

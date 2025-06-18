@@ -251,12 +251,12 @@ export function getDailySummary(userId: number) {
 export function getLanguageSummaryByDateRange(userId: number, startDate: string, endDate: string) {
   try {
     return db.prepare(`
-      SELECT language, SUM(time_spent) as total_time
+      SELECT language, lang_ext, SUM(time_spent) as total_time
       FROM usage_summary
       WHERE date BETWEEN ? AND ?
         AND language IS NOT NULL
         AND user_id = ?
-      GROUP BY language
+      GROUP BY language, lang_ext
       ORDER BY total_time DESC
     `).all(startDate, endDate, userId);
   } catch (err) {

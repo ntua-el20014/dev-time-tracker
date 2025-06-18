@@ -24,8 +24,15 @@ function setupTabs() {
   const tabs = Array.from(document.querySelectorAll('.tab')) as HTMLButtonElement[];
   const tabContents = Array.from(document.querySelectorAll('.tab-content')) as HTMLDivElement[];
 
+  // Remove old listeners by replacing each tab with a clone
+  tabs.forEach((tab, i) => {
+    const newTab = tab.cloneNode(true) as HTMLButtonElement;
+    tab.parentNode?.replaceChild(newTab, tab);
+    tabs[i] = newTab;
+  });
+
   tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
+    tab.addEventListener('click', async () => {
       tabs.forEach(t => t.classList.remove('active'));
       tabContents.forEach(tc => {
         tc.classList.remove('active');
