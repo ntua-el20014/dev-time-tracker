@@ -4,7 +4,7 @@ import { applyAccentColor } from './renderer';
 import { renderPercentBar, renderPieChartJS, showColorGridPicker } from './components';
 import { loadHotkey, setUserTheme } from './theme';
 import { getCurrentUserId, prettyDate} from './utils';
-import type { Tag } from '../src/logger';
+import type { Tag } from '../src/backend/types';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function escapeHtml(text: string) {

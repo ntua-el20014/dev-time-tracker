@@ -1,4 +1,4 @@
-// main/langMap.ts (main process)
+// utils/langMap.ts (attaches handlers)
 import { shell, app, ipcMain } from 'electron';
 import fs from 'fs';
 import path from 'path';

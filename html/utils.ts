@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { DailySummaryRow } from '../src/logger';
+import type { DailySummaryRow } from '../src/backend/types';
 
 // Escapes HTML special characters
 export function escapeHtml(text: string) {

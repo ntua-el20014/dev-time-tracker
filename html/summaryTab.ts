@@ -4,7 +4,7 @@ import { formatTimeSpent } from '../src/utils/timeFormat';
 import edit from '../data/edit.png';
 import { escapeHtml, getLocalDateString, getWeekDates, getMonday, filterDailyDataForWeek, getCurrentUserId, prettyDate } from './utils';
 import { showModal } from './components';
-import type { DailySummaryRow, SessionRow, Tag } from '../src/logger';
+import type { DailySummaryRow, SessionRow, Tag } from '../src/backend/types';
 
 // Store the current week start date (Monday)
 let currentWeekMonday = getMonday(new Date());

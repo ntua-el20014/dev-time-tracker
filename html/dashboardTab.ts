@@ -1,8 +1,8 @@
 import { ipcRenderer } from 'electron';
-import { renderLineChartJS, renderPercentBar } from './components';
+import { renderPercentBar } from './components';
 import { getMonday, getWeekDates, getLocalDateString, filterDailyDataForWeek, getCurrentUserId } from './utils';
 import { getLangIconUrl } from '../src/utils/extractData';
-import type { DailySummaryRow, SessionRow } from '../src/logger';
+import type { DailySummaryRow, SessionRow } from '../src/backend/types';
 
 export async function renderDashboard() {
   const container = document.getElementById('dashboardContent');

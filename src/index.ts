@@ -1,11 +1,16 @@
 import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
-import * as logger from './logger';
 import * as config from './config';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
 import './utils/langMap';
 import { activeWindow } from '@miniben90/x-win';
 import os from 'os';
+import * as usage from './backend/usage';
+import * as sessions from './backend/sessions';
+import * as users from './backend/users';
+import './ipc/usageHandlers';
+import './ipc/sessionHandlers';
+import './ipc/userHandlers';
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -53,9 +58,9 @@ app.whenReady().then(() => {
     }
   }, 2000);
 
-  if (logger.getAllUsers().length === 0) {
+  if (users.getAllUsers().length === 0) {
     console.log('No users found, creating default user');
-    logger.createUser('Default');
+    users.createUser('Default');
   }
 });
 
@@ -76,7 +81,7 @@ function trackActiveWindow(userId: number) {
     const langExt = langData?.extension || null;
 
     // Pass langExt to logWindow
-    logger.logWindow(userId, editor.name || 'Unknown', title, language, icon, intervalSeconds, langExt);
+    usage.logWindow(userId, editor.name || 'Unknown', title, language, icon, intervalSeconds, langExt);
 
     mainWindow?.webContents.send('window-tracked');
   } catch (err) {
@@ -106,42 +111,6 @@ function createWindow() {
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 }
-
-ipcMain.handle('get-logs', async (_event, userId: number, date?: string) => {
-  try {
-    return logger.getSummary(userId, date);
-  } catch (err) {
-    console.error('[Get Logs Error]', err);
-    return [];
-  }
-});
-
-ipcMain.handle('get-logged-days-of-month', async (_event, userId: number, year: number, month: number) => {
-  try {
-    return logger.getLoggedDaysOfMonth(userId, year, month);
-  } catch (err) {
-    console.error('[Get Logged Days Of Month Error]', err);
-    return [];
-  }
-});
-
-ipcMain.handle('get-editor-usage', async (_event, userId: number) => {
-  try {
-    return logger.getEditorUsage(userId);
-  } catch (err) {
-    console.error('[Get Editor Usage Error]', err);
-    return [];
-  }
-});
-
-ipcMain.handle('get-daily-summary', async (_event, userId: number) => {
-  try {
-    return logger.getDailySummary(userId);
-  } catch (err) {
-    console.error('[Get Daily Summary Error]', err);
-    return [];
-  }
-});
 
 ipcMain.handle('get-editor-colors', (_event, userId: number) => {
   return config.loadEditorColors(userId);
@@ -181,15 +150,6 @@ ipcMain.handle('set-idle-timeout', (_event, seconds: number) => {
   cfg.idleTimeoutSeconds = seconds;
   config.saveConfig(cfg);
   return true;
-});
-
-ipcMain.handle('get-language-usage', async (_event, userId: number) => {
-  try {
-    return logger.getLanguageUsage(userId);
-  } catch (err) {
-    console.error('[Get Language Usage Error]', err);
-    return [];
-  }
 });
 
 ipcMain.handle('start-tracking', (_event, userId:number) => {
@@ -249,7 +209,7 @@ ipcMain.handle('stop-tracking', async (_event, userId: number) => {
       if (title && title.trim() !== '') {
         const date = sessionStart.toLocaleDateString('en-CA');
         const start_time = sessionStart.toISOString();
-        logger.addSession(userId, date, start_time, duration, title, description);
+        sessions.addSession(userId, date, start_time, duration, title, description);
       }
     }
   }
@@ -258,59 +218,6 @@ ipcMain.handle('stop-tracking', async (_event, userId: number) => {
   sessionActiveDuration = 0;
   lastActiveTimestamp = null;
   isPaused = false;
-});
-
-ipcMain.handle('get-sessions', async (_event, userId: number) => {
-  try {
-    return logger.getSessions(userId);
-  } catch (err) {
-    console.error('[Get Sessions Error]', err);
-    return [];
-  }
-});
-
-ipcMain.handle('edit-session', async (_event, {userId, id, title, description }) => {
-  try {
-    logger.editSession(userId, id, title, description);
-    return true;
-  } catch (err) {
-    console.error('[Edit Session Error]', err);
-    return false;
-  }
-});
-
-ipcMain.handle('delete-session', async (_event, id) => {
-  try {
-    logger.deleteSession(id);
-    return true;
-  } catch (err) {
-    console.error('[Delete Session Error]', err);
-    return false;
-  }
-});
-
-ipcMain.handle('get-all-tags', (_event, userId: number): logger.Tag[] => {
-  return logger.getAllTags(userId);
-});
-
-ipcMain.handle('set-tag-color', (_event, userId: number, tagName: string, color: string) => {
-  logger.setTagColor(userId, tagName, color);
-  return true;
-});
-
-
-ipcMain.handle('set-session-tags', (_event, userId, sessionId, tagNames) => {
-  logger.setSessionTags(userId, sessionId, tagNames);
-  return true;
-});
-
-ipcMain.handle('delete-tag', (_event, userId: number, name: string) => {
-  logger.deleteTag(userId, name);
-  return true;
-});
-
-ipcMain.handle('get-language-summary-by-date-range', async (_event, userId: number, startDate: string, endDate: string) => {
-  return logger.getLanguageSummaryByDateRange(userId, startDate, endDate);
 });
 
 app.on('window-all-closed', () => {
@@ -335,47 +242,4 @@ ipcMain.on('auto-resume', (_event, userId) => {
     trackingInterval = setInterval(() => trackActiveWindow(userId), intervalSeconds * 1000);
     isPaused = false;
   }
-});
-
-ipcMain.handle('get-or-create-default-users', () => {
-  if (logger.getAllUsers().length === 0) {
-    logger.createUser('Default');
-  }
-  return logger.getAllUsers();
-});
-
-ipcMain.handle('create-user', (_event, username: string, avatar: string) => logger.createUser(username, avatar));
-ipcMain.handle('get-all-users', () => logger.getAllUsers());
-ipcMain.handle('set-current-user', (_event, userId: number) => logger.setCurrentUser(userId));
-ipcMain.handle('get-current-user', () => logger.getCurrentUser());
-ipcMain.handle('delete-user', (_event, userId: number) => {
-  logger.deleteUser(userId);
-  return true;
-});
-
-ipcMain.handle('set-daily-goal', (_event, userId: number, date: string, time: number, description: string) => {
-  logger.setDailyGoal(userId, date, time, description);
-  return true;
-});
-
-ipcMain.handle('get-daily-goal', (_event, userId: number, date: string) => {
-  return logger.getDailyGoal(userId, date);
-});
-
-ipcMain.handle('delete-daily-goal', (_event, userId: number, date: string) => {
-  logger.deleteDailyGoal(userId, date);
-  return true;
-});
-
-ipcMain.handle('get-total-time-for-day', (_event, userId: number, date: string) => {
-  return logger.getTotalTimeForDay(userId, date);
-});
-
-ipcMain.handle('complete-daily-goal', (_event, userId: number, date: string) => {
-  logger.completeDailyGoal(userId, date);
-  return true;
-});
-
-ipcMain.handle('get-all-daily-goals', (_event, userId: number) => {
-  return logger.getAllDailyGoals(userId);
 });

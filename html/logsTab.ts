@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron';
 import { formatTimeSpent } from '../src/utils/timeFormat';
-import type { LogEntry } from '../src/logger';
+import type { LogEntry } from '../src/backend/types';
 import { getCurrentUserId } from './utils';
 import { getLangIconUrl } from '../src/utils/extractData';
 import { showModal, showInAppNotification } from './components';

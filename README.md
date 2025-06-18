@@ -92,41 +92,31 @@ html/
   utils.ts            # Utility functions for renderer
   styles/             # Modular CSS (see below)
 src/
-  index.ts            # Electron main process (IPC, window)
-  logger.ts           # Database interaction (SQLite)
+  backend/
+    db.ts               # Database connection and table creation
+    usage.ts            # Usage logging and summary queries
+    sessions.ts         # Session and tag management
+    types.ts            # Shared TypeScript types/interfaces
+    users.ts            # User management
+  ipc/
+    usageHandlers.ts      # IPC handlers for usage/statistics
+    sessionHandlers.ts    # IPC handlers for sessions and tags
+    userHandlers.ts       # IPC handlers for user management
+  index.ts            # Electron main process (window, app events, misc IPC)
   config.ts           # User and theme configuration
   utils/              # Utility modules (editors, extractData, langMap, etc.)
 populateDummyData.ts  # Script to populate the database with dummy data
 ```
 
-### CSS Organization
+### 🎨 Styles
 
-| File                | Purpose                                                                 |
-|---------------------|-------------------------------------------------------------------------|
-| base.css            | Variables, body, global elements, notification, record/pause buttons    |
-| layout.css          | Main container and layout, tab bar, tab content                         |
-| table.css           | Table styles, summary tables, icons, edit buttons, filter buttons       |
-| modal.css           | Modal overlay, modal content, modal form and actions                    |
-| calendar.css        | Calendar widget and grid, calendar day labels and cells                 |
-| timeline.css        | Timeline chart container and bars, day labels and hours                 |
-| profile.css         | Profile tab sidebar/menu, tag color picker, logout button, color grid   |
-| theme.css           | Theme toggle button, theme-specific overrides                           |
-| dashboard.css       | Dashboard tab, bubbles, quick stats, calendar, charts                   |
-| users.css           | User landing page, user selection, avatars                              |
+View the [CSS organization](./html/styles/styles.md) for details on how styles are structured and used.
 
 ---
 
 ## 📝 TODO / Ideas
 
-See [`TODO.txt`](./TODO.txt) for planned features and ideas, including:
-- Daily goals & notifications
-- Session tags and export
-- Idle detection
-- Weekly/monthly reports
-- More charts and themes
-- Cloud sync and backup
-- Keyboard shortcuts
-- ...and more!
+See [`TODO.txt`](./TODO.txt) for planned features and ideas, including
 
 ---
 

@@ -10,3 +10,8 @@ export function formatTimeSpent(seconds: number): string {
     
   return result.trim();
 }
+
+// Formats a date to YYYY-MM-DD format
+export function getLocalDateString(date = new Date()): string {
+  return date.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+}
