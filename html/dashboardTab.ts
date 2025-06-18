@@ -25,7 +25,7 @@ export async function renderDashboard() {
 
   // --- Recent Activity Stats ---
   await renderRecentActivity();
-
+/*
   // Recent activity chart (example: last 7 days total usage)
   const chartsDiv = document.getElementById('dashboard-charts');
   const daily = await ipcRenderer.invoke('get-daily-summary', getCurrentUserId());
@@ -57,6 +57,7 @@ export async function renderDashboard() {
       yLabel: 'Minutes'
     });
   }
+  */
 }
 interface LoggedDay {
   date: string; // 'YYYY-MM-DD'

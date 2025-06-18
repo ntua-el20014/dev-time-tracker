@@ -36,43 +36,22 @@ async function renderEditorUsage(container: HTMLElement) {
   container.innerHTML = `
     <h2>Editor Usage Breakdown</h2>
     ${renderPercentBar(items)}
-    <ul style="list-style:none;padding:0;margin:0;">
+    <ul class="editor-usage-list">
       ${usage.map((row: EditorUsageRow) => {
         const percent = ((row.total_time / total) * 100).toFixed(1);
         const color = colorMap[row.app];
-        return `<li style="margin-bottom:4px;">
-          <b style="color:${color};">${row.app}</b>: ${percent}%
+        return `<li class="editor-usage-item">
+          <span class="editor-usage-app" style="color:${color};">${row.app}</span>
+          <span class="editor-usage-percent">${percent}%</span>
+          <div class="color-picker-wrapper" data-app="${row.app}" style="background-color: ${color};">
+            <input type="color" value="${color}" data-app="${row.app}" class="editor-color-input" />
+          </div>
         </li>`;
       }).join('')}
     </ul>
-    <h3>Customize Colors</h3>
-    ${usage.map((row: EditorUsageRow) => {
-      const color = colorMap[row.app];
-      return `
-        <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 12px;">
-          <label style="min-width: 80px;">${row.app}</label>
-          <div class="color-picker-wrapper" data-app="${row.app}" style="
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            border: 2px solid #aaa;
-            background-color: ${color};
-            cursor: pointer;
-            position: relative;
-          ">
-            <input type="color" value="${color}" data-app="${row.app}" style="
-              opacity: 0;
-              width: 100%;
-              height: 100%;
-              position: absolute;
-              top: 0;
-              left: 0;
-              cursor: pointer;
-            " />
-          </div>
-        </div>
-      `;
-    }).join('')}
+    <div class="info-note">
+      Pick your color for each editor and press <b>Enter</b>.
+    </div>
   `;
 
   container.querySelectorAll('input[type="color"]').forEach(input => {
@@ -102,44 +81,35 @@ async function renderLanguageUsage(container: HTMLElement) {
     color: defaultColors[i % defaultColors.length]
   }));
 
-  // Prepare container for Chart.js pie chart
   container.innerHTML = `
-    <h2>Language Usage Breakdown</h2>
-    <div id="languagePieChart" style="width:180px;height:180px;margin-bottom:16px;"></div>
-    <ul style="list-style:none;padding:0;margin:0;">
-      ${usage.map((row: LanguageUsageRow, i: number) => {
-        const percent = ((row.total_time / total) * 100).toFixed(1);
-        const color = defaultColors[i % defaultColors.length];
-        return `<li style="margin-bottom:4px;">
-          <b style="color:${color};">${row.language}</b>: ${percent}%
-        </li>`;
-      }).join('')}
-    </ul>
-    <div style="margin-top:24px;padding:14px 18px;background:var(--row-odd);border-radius:10px;">
-      <b>How to map unknown file extensions to languages:</b><br>
-      Edit the file <code>lang.json</code> in your app data folder:<br>
-      <code style="user-select:all;">%APPDATA%/dev-time-tracker/lang.json</code>
-      <button id="openLangJsonBtn" style="margin-left:12px;padding:4px 12px;border-radius:6px;border:none;background:var(--accent);color:#222;cursor:pointer;">
+  <h2>Language Usage Breakdown</h2>
+  <div class="language-usage-flex">
+    <div>
+      <div id="languagePieChart" class="language-pie-chart"></div>
+    </div>
+  </div>
+  <div class="language-pie-info">
+    <b>How to map unknown file extensions to languages:</b><br>
+    Edit the file <code>lang.json</code> in your app data folder:<br>
+    <div class="centered-btn">
+      <button id="openLangJsonBtn" class="open-lang-json-btn">
         Open lang.json
       </button>
-      <br>
-      Example content:
-      <pre style="background:var(--row-hover);padding:8px 12px;border-radius:6px;margin:8px 0 0 0;">
+    </div>
+    Example content:
+    <pre>
 {
   ".foo": "My Custom Language",
   ".bar": "AnotherLang"
-}
-      </pre>
-      <span style="font-size:0.97em;color:#888;">
-        After saving, your changes will be applied automatically.
-      </span>
+}</pre>
+    <div class="info-note">
+      After saving, your changes will be applied automatically.
     </div>
+  </div>
   `;
 
-  // Render the Chart.js pie chart
-  renderPieChartJS('languagePieChart', items, 180);
+  renderPieChartJS('languagePieChart', items, 420);
 
-  // Remove previous listener to avoid duplicates
   window.removeEventListener('theme-changed', rerenderPieChartOnThemeChange);
 
   function rerenderPieChartOnThemeChange() {
@@ -150,8 +120,8 @@ async function renderLanguageUsage(container: HTMLElement) {
   const openBtn = container.querySelector('#openLangJsonBtn');
   if (openBtn) {
     openBtn.addEventListener('click', () => {
-    ipcRenderer.invoke('open-lang-json', getCurrentUserId());
-  });
+      ipcRenderer.invoke('open-lang-json', getCurrentUserId());
+    });
   }
 }
 
@@ -164,15 +134,14 @@ async function renderSettings(container: HTMLElement) {
   
   container.innerHTML = `
     <h2>Settings</h2>
-    <div style="margin-bottom:24px;">
-      <label for="idleTimeoutRange" style="font-weight:bold;">Idle Timeout:</label>
-      <input type="range" id="idleTimeoutRange" min="60" max="300" step="30" value="${idleTimeout}" style="vertical-align:middle; accent-color: var(--accent);">
-      <span id="idleTimeoutValue" style="margin-left:8px;">${(idleTimeout/60).toFixed(1)} min</span>
+    <div class="settings-row">
+      <label for="idleTimeoutRange" class="settings-label">Idle Timeout:</label>
+      <input type="range" id="idleTimeoutRange" min="60" max="300" step="30" value="${idleTimeout}" class="settings-range">
+      <span id="idleTimeoutValue" class="settings-range-value">${(idleTimeout/60).toFixed(1)} min</span>
     </div>
-    
-    <div style="margin-bottom:24px;">
-      <label style="font-weight:bold;">Theme:</label>
-      <button id="themeToggleBtn" style="margin-left:12px; padding:6px 12px; border:none; border-radius:6px; background:var(--accent); color:#222; cursor:pointer;">
+    <div class="settings-row">
+      <label class="settings-label">Theme:</label>
+      <button id="themeToggleBtn" class="theme-toggle-btn">
         Switch to ${currentTheme === 'dark' ? 'Light' : 'Dark'} Mode
       </button>
     </div>
@@ -181,18 +150,18 @@ async function renderSettings(container: HTMLElement) {
   // --- Tag management ---
   const tags: Tag[] = await ipcRenderer.invoke('get-all-tags', getCurrentUserId());
   container.innerHTML += `
-    <h2 style="margin-top:32px;">Manage Tags</h2>
+    <h2 class="settings-tags-title">Manage Tags</h2>
     ${
       tags.length === 0
         ? `<p>No tags added yet.</p>`
-        : `<ul id="tag-list-settings" style="list-style:none;padding:0;">
+        : `<ul id="tag-list-settings" class="tag-list-settings">
             ${tags.map(tag => `
-              <li style="margin-bottom:8px;display:flex;align-items:center;gap:12px;">
-                <span style="background:${tag.color};color:#222;padding:2px 12px;border-radius:12px;display:flex;align-items:center;gap:6px;">
+              <li class="tag-list-item">
+                <span class="tag-label" style="background:${tag.color};">
                   ${escapeHtml(tag.name)}
-                  <span class="tag-color-chip" data-tag="${escapeHtml(tag.name)}" style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${tag.color};border:1.5px solid #888;cursor:pointer;"></span>
+                  <span class="tag-color-chip" data-tag="${escapeHtml(tag.name)}" style="background:${tag.color};"></span>
                 </span>
-                <button class="delete-tag-btn" data-tag="${escapeHtml(tag.name)}" style="background:#d32f2f;color:#fff;border:none;border-radius:6px;padding:2px 10px;cursor:pointer;">Delete</button>
+                <button class="delete-tag-btn" data-tag="${escapeHtml(tag.name)}">Delete</button>
               </li>
             `).join('')}
           </ul>`
@@ -204,23 +173,18 @@ async function renderSettings(container: HTMLElement) {
   const accentColor: string = await ipcRenderer.invoke('get-accent-color', theme, getCurrentUserId());
 
   container.innerHTML += `
-    <h2 style="margin-top:32px;">Accent Color</h2>
-    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
-      <div style="width:32px;height:32px;border-radius:50%;border:2px solid #aaa;background:${accentColor};position:relative;">
-        <input type="color" id="accentColorInput" value="${accentColor}" style="
-          opacity: 0;
-          width: 100%;
-          height: 100%;
-          position: absolute;
-          top: 0;
-          left: 0;
-          cursor: pointer;
-        " />
-      </div>
-      <button id="saveAccentColorBtn" style="padding:6px 12px;border:none;border-radius:6px;background:var(--accent);color:#222;cursor:pointer;">Save</button>
+    <div class="accent-color-header">
+      <h2 class="accent-color-title">Accent Color</h2>
+      <button id="resetAccentColorsBtn" class="reset-accent-btn">Reset</button>
     </div>
-    <div style="margin-bottom:24px;">
-      <button id="resetAccentColorsBtn" style="padding:6px 18px;border:none;border-radius:6px;background:#eee;color:#222;cursor:pointer;">Reset Defaults</button>
+    <div class="accent-color-row">
+      <div class="accent-color-preview" style="background:${accentColor};">
+        <input type="color" id="accentColorInput" value="${accentColor}" class="accent-color-input" />
+      </div>
+      <button id="saveAccentColorBtn" class="save-accent-btn">Save</button>
+    </div>
+    <div class="info-note">
+      Change the accent color for the current theme and <b>Save</b>.<br>
     </div>
   `;
   const range = container.querySelector('#idleTimeoutRange') as HTMLInputElement;
@@ -335,18 +299,18 @@ export async function refreshProfile() {
   const profileDiv = document.getElementById('profileContent');
   if (!profileDiv) return;
 
-  // Layout: sidebar + content
   profileDiv.innerHTML = `
-  <div style="display: flex; min-height: 400px;">
-    <nav id="profileSidebar" style="min-width:180px;max-width:180px;padding:24px 0 0 0;">
-      <ul style="list-style:none;padding:0;margin:0;">
-        <li><button class="profile-chapter-btn" data-chapter="editor" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Editors</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="language" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Languages</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="settings" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Settings</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="hotkeys" style="width:100%;padding:12px 0;border:none;font-size:1em;cursor:pointer;">Hotkeys</button></li>
+  <div class="profile-main-flex">
+    <nav id="profileSidebar" class="profile-sidebar">
+      <ul class="profile-chapter-list">
+        <li><button class="profile-chapter-btn" data-chapter="editor">Editors</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="language">Languages</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="settings">Settings</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="hotkeys">Hotkeys</button></li>
       </ul>
+      <button id="logoutBtn" class="logout-btn">Log Out</button>
     </nav>
-    <div id="profileChapterContent" style="flex:1;padding:0 0 0 32px;"></div>
+    <div id="profileChapterContent" class="profile-chapter-content"></div>
   </div>
   `;
 
@@ -377,24 +341,8 @@ export async function refreshProfile() {
     });
   });
 
-  // Logout button
-  const logoutBtn = document.createElement('button');
-  logoutBtn.id = 'logoutBtn';
-  logoutBtn.textContent = 'Log Out';
-  logoutBtn.style.cssText = `
-    display: block;
-    margin: 0 auto 24px auto;
-    padding: 10px 32px;
-    background: linear-gradient(90deg, #ff5858 0%, #f09819 100%);
-    color: #fff;
-    border: none;
-    border-radius: 24px;
-    font-size: 1.1em;
-    font-weight: bold;
-    cursor: pointer;
-    box-shadow: 0 2px 8px #0002;
-    transition: background 0.2s, box-shadow 0.2s;
-  `;
+  // Logout button logic
+  const logoutBtn = profileDiv.querySelector('#logoutBtn') as HTMLButtonElement;
   logoutBtn.onmouseenter = () => {
     logoutBtn.style.background = 'linear-gradient(90deg, #f09819 0%, #ff5858 100%)';
     logoutBtn.style.boxShadow = '0 4px 16px #0003';
@@ -428,8 +376,6 @@ export async function refreshProfile() {
       });
     }
   };
-
-  profileDiv.insertBefore(logoutBtn, profileDiv.firstChild);
 }
 
 
@@ -448,12 +394,12 @@ function renderHotkeys(container: HTMLElement) {
   container.innerHTML = `
     <h2>Keyboard Shortcuts</h2>
     <ul style="list-style:none;padding:0;margin:0;line-height:2;">
-      <li>${keyImg('ctrl')} + ${keyImg('r')}   Start/Stop recording</li>
-      <li>${keyImg('ctrl')} + ${keyImg('p')}   Pause/Resume recording</li>
-      <li>${keyImg('ctrl')} + ${keyImg('hashtag')}   Switch Tabs [# = 1, 2, 3, 4]</li>
+      <li><span style="min-width:100px;display:inline-block;">${keyImg('ctrl')} + ${keyImg('r')}</span> Start/Stop recording</li>
+      <li><span style="min-width:100px;display:inline-block;">${keyImg('ctrl')} + ${keyImg('p')}</span> Pause/Resume recording</li>
+      <li><span style="min-width:100px;display:inline-block;">${keyImg('ctrl')} + ${keyImg('hashtag')}</span> Switch Tabs [# = 1, 2, 3, 4]</li>
     </ul>
-    <p style="margin-top:16px;color:#888;font-size:0.98em;">
-      <i>Shortcuts work globally except when typing in an input or textarea.</i>
-    </p>
+    <div class="info-note" style="margin-top:16px;">
+      Shortcuts work globally except when typing in an input or textarea.
+    </div>
   `;
 }

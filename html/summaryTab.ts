@@ -2,7 +2,7 @@
 import { ipcRenderer } from 'electron';
 import { formatTimeSpent } from '../src/utils/timeFormat';
 import edit from '../data/edit.png';
-import { escapeHtml, getLocalDateString, getWeekDates, getMonday, filterDailyDataForWeek, getCurrentUserId } from './utils';
+import { escapeHtml, getLocalDateString, getWeekDates, getMonday, filterDailyDataForWeek, getCurrentUserId, prettyDate } from './utils';
 import { showModal } from './components';
 import type { DailySummaryRow, SessionRow, Tag } from '../src/logger';
 
@@ -40,8 +40,8 @@ function renderTimelineChart(dailyData: DailySummaryRow[], weekMonday: Date) {
     <div class="timeline-header" style="display: flex; align-items: center; justify-content: space-between;">
       <button id="week-prev-btn" style="font-size:1.5em; background:none; border:none; cursor:pointer;">&#8592;</button>
       <h3 style="flex:1; text-align:center; margin:0;">
-        ${weekDays[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - 
-        ${weekDays[6].toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+        ${prettyDate(weekDays[0])} - 
+        ${prettyDate(weekDays[6])}
       </h3>
       ${
         // Hide right arrow if at current week
@@ -184,7 +184,7 @@ export async function renderSummary() {
   detailsContainer.className = 'details-container';
   detailsContainer.innerHTML = Object.entries(grouped).map(([date, rows]) => `
     <div class="summary-date-header">
-      <h3>${date}</h3>
+      <h3>${prettyDate(date)}</h3>
     </div>
     <table class="summary-table">
       <thead>
@@ -257,7 +257,7 @@ export async function renderSummary() {
               }).join('')}
             </div>` : ''}
           </td>
-          <td>${escapeHtml(session.date)}</td>
+          <td>${prettyDate(session.date)}</td>
           <td>${durationStr.trim()}</td>
           <td>
             <button class="session-edit-btn" title="Edit session">

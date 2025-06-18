@@ -1,44 +1,291 @@
 /* profile.css */
+
+/* --- Layout --- */
+.profile-main-flex {
+  display: flex;
+  min-height: 400px;
+}
+.profile-sidebar {
+  min-width: 180px;
+  max-width: 180px;
+  padding: 24px 0 0 0;
+}
+.profile-chapter-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.profile-chapter-content {
+  flex: 1;
+  padding: 0 0 0 32px;
+}
+
+/* --- Chapter Buttons --- */
 .profile-chapter-btn {
+  width: 100%;
+  padding: 12px 0;
+  border: none;
+  font-size: 1em;
+  cursor: pointer;
   background: none;
   border-radius: 8px;
   transition: background 0.2s, color 0.2s;
 }
-
-.profile-chapter-btn.active {
-  background: var(--row-hover);
-}
-
+.profile-chapter-btn.active,
 .profile-chapter-btn:hover {
   background: var(--row-hover);
 }
 
-#resetAccentColorsBtn {
-  background: #eee;
-  color: #222;
+/* --- Logout Button --- */
+.logout-btn, #logoutBtn {
+  display: block;
+  margin: 40px auto 0 auto;
+  padding: 6px 18px;
+  background: linear-gradient(90deg, #ff5858 0%, #f09819 100%);
+  color: #fff;
   border: none;
-  border-radius: 8px;
-  padding: 8px 20px;
+  border-radius: 14px;
   font-size: 1em;
+  font-weight: bold;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  margin-top: 4px;
+  box-shadow: 0 2px 8px #0002;
+  transition: background 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+.logout-btn:active, #logoutBtn:active {
+  transform: scale(0.97);
+}
+.logout-btn:hover, #logoutBtn:hover {
+  background: linear-gradient(90deg, #f09819 0%, #ff5858 100%);
+  box-shadow: 0 4px 16px #0003;
 }
 
-#resetAccentColorsBtn:hover {
+/* --- Editor Usage List --- */
+.editor-usage-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.editor-usage-item {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.editor-usage-app {
+  font-weight: bold;
+  min-width: 80px;
+}
+.editor-usage-percent {
+  min-width: 48px;
+}
+.color-picker-wrapper {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid #aaa;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.editor-color-input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: pointer;
+}
+
+/* --- Language Pie Chart Layout --- */
+.language-usage-flex {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.language-pie-chart {
+  min-width: 320px;
+  width: 100%;
+  max-width: 500px;
+  margin-bottom: 0;
+  display: inline-block;
+}
+.language-pie-info {
+  margin-top: 24px;
+  padding: 14px 18px;
+  background: var(--row-odd);
+  border-radius: 10px;
+}
+.language-pie-info pre {
+  background: var(--row-hover);
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin: 8px 0 0 0;
+}
+.centered-btn {
+  text-align: center;
+}
+.open-lang-json-btn {
+  margin-top: 4px;
+  margin-bottom: 4px;
+  margin-left: 12px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent);
+  color: #222;
+  cursor: pointer;
+}
+
+/* --- Settings --- */
+.settings-row {
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settings-label {
+  font-weight: bold;
+}
+.settings-range {
+  vertical-align: middle;
+  accent-color: var(--accent);
+}
+.settings-range-value {
+  margin-left: 8px;
+}
+.theme-toggle-btn {
+  margin-left: 12px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #222;
+  cursor: pointer;
+}
+.settings-tags-title {
+  margin-top: 32px;
+}
+
+/* --- Tag List --- */
+.tag-list-settings {
+  list-style: none;
+  padding: 0;
+}
+.tag-list-item {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tag-label {
+  color: #222;
+  padding: 2px 12px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tag-color-chip {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid #888;
+  cursor: pointer;
+}
+.delete-tag-btn {
+  background: #d32f2f;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+/* --- Accent Color --- */
+.accent-color-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  margin-top: 32px;
+}
+.accent-color-title {
+  margin: 0;
+}
+.reset-accent-btn, #resetAccentColorsBtn {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 5px;
+  background: #eee;
+  color: #222;
+  cursor: pointer;
+  margin-left: 8px;
+  font-size: 0.98em;
+  margin-top: 0;
+}
+.reset-accent-btn:hover, #resetAccentColorsBtn:hover {
   background: var(--accent);
   color: #222;
   box-shadow: 0 4px 16px rgba(0,0,0,0.08);
 }
-
-#logoutBtn {
-  outline: none;
+.accent-color-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  margin-top: 10px;
 }
-#logoutBtn:active {
-  transform: scale(0.97);
+.accent-color-preview {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid #aaa;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.accent-color-input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: pointer;
+}
+.save-accent-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #222;
+  cursor: pointer;
 }
 
+/* --- Info Note --- */
+.info-note {
+  font-size: 0.98em;
+  color: #888;
+  margin-top: 10px;
+  font-style: italic;
+}
+
+/* --- Color Grid Picker --- */
 .color-grid-picker {
   box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+
+/* --- Responsive --- */
+@media (max-width: 700px) {
+  .language-usage-flex {
+    flex-direction: column;
+    gap: 0;
+  }
 }

@@ -174,16 +174,13 @@ export function renderPieChartJS(
   // Create and append canvas
   const canvas = document.createElement('canvas');
   canvas.width = size;
-  canvas.height = size;
+  canvas.height = size/2;
   container.appendChild(canvas);
 
   // Destroy previous chart instance if any
   if (container._pieChartInstance) {
     container._pieChartInstance.destroy();
   }
-
-  // Use CSS variable for legend label color
-  const legendLabelColor = getComputedStyle(document.body).getPropertyValue('--fg').trim() || '#fff';
 
   // Prepare data
   const data = {
@@ -205,15 +202,34 @@ export function renderPieChartJS(
       plugins: {
         legend: {
           display: true,
-          position: 'bottom',
+          position: 'right',
           labels: {
-            color: legendLabelColor,
+            boxWidth: 14,
+            boxHeight: 12,
+            generateLabels: function(chart: Chart) {
+              const data = chart.data;
+              if (!data.labels || !data.datasets.length) return [];
+              const dataset = data.datasets[0];
+              return data.labels.map(function(label, i) {
+                const value = dataset.data[i];
+                const color = (dataset.backgroundColor as string[])[i];
+                return {
+                  text: `${label} (${typeof value === 'number' ? value.toFixed(1) : Array.isArray(value) && typeof value[0] === 'number' ? value[0].toFixed(1) : ''}%)`,
+                  fillStyle: color,
+                  borderRadius: 3,
+                  fontColor: color,
+                  strokeStyle: color,
+                  hidden: !chart.getDataVisibility(i),
+                  index: i
+                };
+              });
+            },
             font: { size: 14 }
           }
         },
         tooltip: {
           callbacks: {
-            label: (ctx) => {
+            label: function(ctx) {
               const label = ctx.label || '';
               const value = ctx.parsed || 0;
               return `${label}: ${value.toFixed(1)}%`;

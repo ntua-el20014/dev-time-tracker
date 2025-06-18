@@ -94,11 +94,11 @@ function createWindow() {
     },
   })
   
-  
+  /*
   // Open DevTools in development mode
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools();
-  }
+  }*/
   
   mainWindow.webContents.on('did-finish-load', () => {
   mainWindow.webContents.send('os-info', { os: os.platform() });

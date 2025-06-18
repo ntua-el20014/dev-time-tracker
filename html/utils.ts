@@ -8,6 +8,11 @@ export function escapeHtml(text: string) {
   return div.innerHTML;
 }
 
+export function prettyDate(dateStr: string | Date): string {
+  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 // Returns YYYY-MM-DD format for a Date
 export function getLocalDateString(date: Date): string {
   return date.toLocaleDateString('en-CA');
