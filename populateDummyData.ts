@@ -41,6 +41,13 @@ const sessionTitles = [
   'Database migration', 'Code review', 'Optimize queries', 'UI improvements'
 ];
 const tags = ['work', 'personal', 'urgent', 'review', 'frontend', 'backend', 'docs'];
+const tagColors = [
+  '#f0db4f', '#ff6961', '#7ed957', '#4f8cff', '#ffb347',
+  '#b19cd9', '#f67280', '#355c7d', '#ffb6b9', '#c1c8e4',
+  '#ffe156', '#6a0572', '#ff6f3c', '#00b8a9', '#f6416c',
+  '#43dde6', '#e7e6e1', '#f9f871', '#a28089', '#f7b32b',
+  '#2d4059', '#ea5455', '#ffd460', '#40514e', '#11999e'
+];
 
 // --- Main population logic ---
 function populateDummyUsers() {
@@ -102,8 +109,9 @@ function populateSessions(userId: number, days= 30) {
 }
 
 function populateTags(userId: number) {
-  tags.forEach(tag => {
-    db.prepare(`INSERT OR IGNORE INTO tags (name, user_id) VALUES (?, ?)`).run(tag, userId);
+  tags.forEach((tag, i) => {
+    const color = tagColors[i % tagColors.length];
+    db.prepare(`INSERT OR IGNORE INTO tags (name, user_id, color) VALUES (?, ?, ?)`).run(tag, userId, color);
   });
 }
 

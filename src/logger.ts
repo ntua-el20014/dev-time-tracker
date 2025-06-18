@@ -72,6 +72,7 @@ db.prepare(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     user_id INTEGER NOT NULL,
+    color TEXT,
     UNIQUE(name, user_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
@@ -351,9 +352,10 @@ export function getAllTags(userId: number): Tag[] {
   }
 }
 
-export function addTag(userId: number, name: string): number | undefined {
+export function addTag(userId: number, name: string, color?: string): number | undefined {
   try {
-    const info = db.prepare(`INSERT INTO tags (name, user_id) VALUES (?, ?)`).run(name, userId);
+    if (!color) color = '#f0db4f';
+    const info = db.prepare(`INSERT INTO tags (name, user_id, color) VALUES (?, ?, ?)`).run(name, userId, color);
     return info.lastInsertRowid as number;
   } catch {
     try {
@@ -367,11 +369,23 @@ export function addTag(userId: number, name: string): number | undefined {
   }
 }
 
+export function setTagColor(userId: number, tagName: string, color: string) {
+  db.prepare(`UPDATE tags SET color = ? WHERE name = ? AND user_id = ?`).run(color, tagName, userId);
+}
+
 export function setSessionTags(userId: number, sessionId: number, tagNames: string[]) {
   try {
     db.prepare(`DELETE FROM session_tags WHERE session_id = ?`).run(sessionId);
     for (const name of tagNames) {
-      const tagId = addTag(userId, name);
+      // Try to get existing tag color
+      const tag = db.prepare(`SELECT id, color FROM tags WHERE name = ? AND user_id = ?`).get(name, userId) as { id: number, color?: string } | undefined;
+      let tagId: number | undefined;
+      if (tag) {
+        tagId = tag.id;
+      } else {
+        // Use default accent color if not found
+        tagId = addTag(userId, name, '#f0db4f');
+      }
       if (tagId !== undefined) {
         db.prepare(`INSERT OR IGNORE INTO session_tags (session_id, tag_id) VALUES (?, ?)`).run(sessionId, tagId);
       }
@@ -441,6 +455,7 @@ export interface LogEntry {
 export interface Tag {
   id: number;
   name: string;
+  color?: string;
 }
 
 export interface SessionTag {

@@ -350,3 +350,56 @@ export function renderLineChartJS(opts: LineChartOptions) {
   // Store chart instance for later cleanup
   container._lineChartInstance = chart;
 }
+
+export function showColorGridPicker(options: {
+  colors: string[],
+  selected: string,
+  onSelect: (color: string) => void,
+  anchorEl: HTMLElement
+}) {
+  // Remove any existing picker
+  document.querySelectorAll('.color-grid-picker').forEach(e => e.remove());
+
+  const picker = document.createElement('div');
+  picker.className = 'color-grid-picker';
+  picker.style.position = 'absolute';
+  picker.style.zIndex = '9999';
+  picker.style.background = '#fff';
+  picker.style.border = '1px solid #ccc';
+  picker.style.borderRadius = '8px';
+  picker.style.padding = '8px';
+  picker.style.display = 'grid';
+  picker.style.gridTemplateColumns = 'repeat(5, 24px)';
+  picker.style.gridGap = '6px';
+
+  options.colors.forEach(color => {
+    const swatch = document.createElement('div');
+    swatch.style.width = '24px';
+    swatch.style.height = '24px';
+    swatch.style.borderRadius = '6px';
+    swatch.style.background = color;
+    swatch.style.cursor = 'pointer';
+    swatch.style.border = color === options.selected ? '2px solid #222' : '2px solid #fff';
+    swatch.onclick = () => {
+      options.onSelect(color);
+      picker.remove();
+    };
+    picker.appendChild(swatch);
+  });
+
+  // Position below anchorEl
+  const rect = options.anchorEl.getBoundingClientRect();
+  picker.style.left = `${rect.left + window.scrollX}px`;
+  picker.style.top = `${rect.bottom + window.scrollY + 4}px`;
+
+  document.body.appendChild(picker);
+
+  // Remove on click outside
+  setTimeout(() => {
+    const remove = (e: MouseEvent) => {
+      if (!picker.contains(e.target as Node)) picker.remove();
+      document.removeEventListener('mousedown', remove);
+    };
+    document.addEventListener('mousedown', remove);
+  }, 10);
+}

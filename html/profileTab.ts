@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
 import { applyAccentColor } from './renderer';
-import { renderPercentBar, renderPieChartJS } from './components';
+import { renderPercentBar, renderPieChartJS, showColorGridPicker } from './components';
 import { loadHotkey, setUserTheme } from './theme';
 import { getCurrentUserId } from './utils';
 import type { Tag } from '../src/logger';
@@ -188,7 +188,10 @@ async function renderSettings(container: HTMLElement) {
         : `<ul id="tag-list-settings" style="list-style:none;padding:0;">
             ${tags.map(tag => `
               <li style="margin-bottom:8px;display:flex;align-items:center;gap:12px;">
-                <span style="background:var(--accent);color:#222;padding:2px 12px;border-radius:12px;">${escapeHtml(tag.name)}</span>
+                <span style="background:${tag.color};color:#222;padding:2px 12px;border-radius:12px;display:flex;align-items:center;gap:6px;">
+                  ${escapeHtml(tag.name)}
+                  <span class="tag-color-chip" data-tag="${escapeHtml(tag.name)}" style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${tag.color};border:1.5px solid #888;cursor:pointer;"></span>
+                </span>
                 <button class="delete-tag-btn" data-tag="${escapeHtml(tag.name)}" style="background:#d32f2f;color:#fff;border:none;border-radius:6px;padding:2px 10px;cursor:pointer;">Delete</button>
               </li>
             `).join('')}
@@ -229,7 +232,6 @@ async function renderSettings(container: HTMLElement) {
 
   // Attach all event listeners
 
-  // Add theme toggle handler
   const themeToggleBtn = container.querySelector('#themeToggleBtn') as HTMLButtonElement;
   themeToggleBtn.addEventListener('click', async () => {
     document.body.classList.toggle('light');
@@ -250,7 +252,8 @@ async function renderSettings(container: HTMLElement) {
     console.error('Idle timeout slider or value span not found!');
   }
 
-   // Attach delete handlers
+  
+
   container.querySelectorAll('.delete-tag-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const tag = (btn as HTMLButtonElement).dataset.tag;
@@ -299,6 +302,33 @@ async function renderSettings(container: HTMLElement) {
   }
 
   window.addEventListener('theme-changed', updateAccentPickerForTheme);
+
+    const tagColors = [
+    '#f0db4f', '#ff6961', '#7ed957', '#4f8cff', '#ffb347',
+    '#b19cd9', '#f67280', '#355c7d', '#ffb6b9', '#c1c8e4',
+    '#ffe156', '#6a0572', '#ff6f3c', '#00b8a9', '#f6416c',
+    '#43dde6', '#e7e6e1', '#f9f871', '#a28089', '#f7b32b',
+    '#2d4059', '#ea5455', '#ffd460', '#40514e', '#11999e'
+  ];
+  container.querySelectorAll('.tag-color-chip').forEach(chip => {
+    chip.addEventListener('click', (e) => {
+      const tagName = (chip as HTMLElement).dataset.tag;
+      if (!tagName) {
+        console.error('Tag name not found on chip element.');
+        return;
+      }
+      showColorGridPicker({
+        colors: tagColors,
+        selected: (chip as HTMLElement).style.backgroundColor,
+        anchorEl: chip as HTMLElement,
+        onSelect: async (color) => {
+          await ipcRenderer.invoke('set-tag-color', getCurrentUserId(), tagName, color);
+          renderSettings(container); // or rerender tag list
+        }
+      });
+      e.stopPropagation();
+    });
+  });
 }
   
 export async function refreshProfile() {

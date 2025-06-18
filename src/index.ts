@@ -1,12 +1,11 @@
 import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
-import { createUser, getAllUsers, setCurrentUser, getCurrentUser, deleteUser, logWindow, getSummary, getEditorUsage, getDailySummary, getLoggedDaysOfMonth, getLanguageUsage, addSession, getSessions, editSession, deleteSession, getAllTags, addTag, setSessionTags, deleteTag, getLanguageSummaryByDateRange } from './logger';
+import * as logger from './logger';
+import * as config from './config';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
 import './utils/langMap';
 import { activeWindow } from '@miniben90/x-win';
-import { loadEditorColors, saveEditorColors, loadConfig, saveConfig, getAccentColor, setAccentColor, getUserTheme, setUserTheme } from './config';
 import os from 'os';
-import type { Tag } from './logger';
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -20,7 +19,7 @@ let isPaused = false;
 
 let idleTimeoutSeconds = 60;
 try {
-  const cfg = loadConfig();
+  const cfg = config.loadConfig();
   if (cfg && typeof cfg.idleTimeoutSeconds === 'number') {
     idleTimeoutSeconds = cfg.idleTimeoutSeconds;
   }
@@ -54,9 +53,9 @@ app.whenReady().then(() => {
     }
   }, 2000);
 
-  if (getAllUsers().length === 0) {
+  if (logger.getAllUsers().length === 0) {
     console.log('No users found, creating default user');
-    createUser('Default');
+    logger.createUser('Default');
   }
 });
 
@@ -77,7 +76,7 @@ function trackActiveWindow(userId: number) {
     const langExt = langData?.extension || null;
 
     // Pass langExt to logWindow
-    logWindow(userId, editor.name || 'Unknown', title, language, icon, intervalSeconds, langExt);
+    logger.logWindow(userId, editor.name || 'Unknown', title, language, icon, intervalSeconds, langExt);
 
     mainWindow?.webContents.send('window-tracked');
   } catch (err) {
@@ -110,7 +109,7 @@ function createWindow() {
 
 ipcMain.handle('get-logs', async (_event, userId: number, date?: string) => {
   try {
-    return getSummary(userId, date);
+    return logger.getSummary(userId, date);
   } catch (err) {
     console.error('[Get Logs Error]', err);
     return [];
@@ -119,7 +118,7 @@ ipcMain.handle('get-logs', async (_event, userId: number, date?: string) => {
 
 ipcMain.handle('get-logged-days-of-month', async (_event, userId: number, year: number, month: number) => {
   try {
-    return getLoggedDaysOfMonth(userId, year, month);
+    return logger.getLoggedDaysOfMonth(userId, year, month);
   } catch (err) {
     console.error('[Get Logged Days Of Month Error]', err);
     return [];
@@ -128,7 +127,7 @@ ipcMain.handle('get-logged-days-of-month', async (_event, userId: number, year: 
 
 ipcMain.handle('get-editor-usage', async (_event, userId: number) => {
   try {
-    return getEditorUsage(userId);
+    return logger.getEditorUsage(userId);
   } catch (err) {
     console.error('[Get Editor Usage Error]', err);
     return [];
@@ -137,7 +136,7 @@ ipcMain.handle('get-editor-usage', async (_event, userId: number) => {
 
 ipcMain.handle('get-daily-summary', async (_event, userId: number) => {
   try {
-    return getDailySummary(userId);
+    return logger.getDailySummary(userId);
   } catch (err) {
     console.error('[Get Daily Summary Error]', err);
     return [];
@@ -145,30 +144,30 @@ ipcMain.handle('get-daily-summary', async (_event, userId: number) => {
 });
 
 ipcMain.handle('get-editor-colors', (_event, userId: number) => {
-  return loadEditorColors(userId);
+  return config.loadEditorColors(userId);
 });
 
-ipcMain.handle('set-editor-color', (event, app: string, color: string, userId: number) => {
-  const config = loadEditorColors(userId);
-  config[app] = color;
-  saveEditorColors(config, userId);
+ipcMain.handle('set-editor-color', (event, appName: string, color: string, userId: number) => {
+  const editorColors = config.loadEditorColors(userId);
+  editorColors[appName] = color;
+  config.saveEditorColors(editorColors, userId);
 });
 
 ipcMain.handle('get-accent-color', (_event, theme: 'dark' | 'light', userId: number) => {
-  return getAccentColor(theme, userId);
+  return config.getAccentColor(theme, userId);
 });
 
 ipcMain.handle('set-accent-color', (_event, color: string, theme: 'dark' | 'light', userId: number) => {
-  setAccentColor(color, theme, userId);
+  config.setAccentColor(color, theme, userId);
   return true;
 });
 
 ipcMain.handle('get-user-theme', (_event, userId: number) => {
-  return getUserTheme(userId);
+  return config.getUserTheme(userId);
 });
 
 ipcMain.handle('set-user-theme', (_event, theme: 'light' | 'dark', userId: number) => {
-  setUserTheme(theme, userId);
+  config.setUserTheme(theme, userId);
   return true;
 });
 
@@ -178,15 +177,15 @@ ipcMain.handle('get-idle-timeout', () => {
 
 ipcMain.handle('set-idle-timeout', (_event, seconds: number) => {
   idleTimeoutSeconds = seconds;
-  const cfg = loadConfig();
+  const cfg = config.loadConfig();
   cfg.idleTimeoutSeconds = seconds;
-  saveConfig(cfg);
+  config.saveConfig(cfg);
   return true;
 });
 
 ipcMain.handle('get-language-usage', async (_event, userId: number) => {
   try {
-    return getLanguageUsage(userId);
+    return logger.getLanguageUsage(userId);
   } catch (err) {
     console.error('[Get Language Usage Error]', err);
     return [];
@@ -250,7 +249,7 @@ ipcMain.handle('stop-tracking', async (_event, userId: number) => {
       if (title && title.trim() !== '') {
         const date = sessionStart.toLocaleDateString('en-CA');
         const start_time = sessionStart.toISOString();
-        addSession(userId, date, start_time, duration, title, description);
+        logger.addSession(userId, date, start_time, duration, title, description);
       }
     }
   }
@@ -263,7 +262,7 @@ ipcMain.handle('stop-tracking', async (_event, userId: number) => {
 
 ipcMain.handle('get-sessions', async (_event, userId: number) => {
   try {
-    return getSessions(userId);
+    return logger.getSessions(userId);
   } catch (err) {
     console.error('[Get Sessions Error]', err);
     return [];
@@ -272,7 +271,7 @@ ipcMain.handle('get-sessions', async (_event, userId: number) => {
 
 ipcMain.handle('edit-session', async (_event, {userId, id, title, description }) => {
   try {
-    editSession(userId, id, title, description);
+    logger.editSession(userId, id, title, description);
     return true;
   } catch (err) {
     console.error('[Edit Session Error]', err);
@@ -282,7 +281,7 @@ ipcMain.handle('edit-session', async (_event, {userId, id, title, description })
 
 ipcMain.handle('delete-session', async (_event, id) => {
   try {
-    deleteSession(id);
+    logger.deleteSession(id);
     return true;
   } catch (err) {
     console.error('[Delete Session Error]', err);
@@ -290,26 +289,27 @@ ipcMain.handle('delete-session', async (_event, id) => {
   }
 });
 
-ipcMain.handle('get-all-tags', (_event, userId: number): Tag[] => {
-  return getAllTags(userId);
+ipcMain.handle('get-all-tags', (_event, userId: number): logger.Tag[] => {
+  return logger.getAllTags(userId);
 });
 
-ipcMain.handle('add-tag', (_event, userId: number, name: string) => {
-  return addTag(userId, name);
+ipcMain.handle('set-tag-color', (_event, userId: number, tagName: string, color: string) => {
+  logger.setTagColor(userId, tagName, color);
+  return true;
 });
 
 ipcMain.handle('set-session-tags', (_event, userId, sessionId, tagNames) => {
-  setSessionTags(userId, sessionId, tagNames);
+  logger.setSessionTags(userId, sessionId, tagNames);
   return true;
 });
 
 ipcMain.handle('delete-tag', (_event, userId: number, name: string) => {
-  deleteTag(userId, name);
+  logger.deleteTag(userId, name);
   return true;
 });
 
 ipcMain.handle('get-language-summary-by-date-range', async (_event, userId: number, startDate: string, endDate: string) => {
-  return getLanguageSummaryByDateRange(userId, startDate, endDate);
+  return logger.getLanguageSummaryByDateRange(userId, startDate, endDate);
 });
 
 app.on('window-all-closed', () => {
@@ -337,17 +337,17 @@ ipcMain.on('auto-resume', (_event, userId) => {
 });
 
 ipcMain.handle('get-or-create-default-users', () => {
-  if (getAllUsers().length === 0) {
-    createUser('Default');
+  if (logger.getAllUsers().length === 0) {
+    logger.createUser('Default');
   }
-  return getAllUsers();
+  return logger.getAllUsers();
 });
 
-ipcMain.handle('create-user', (_event, username: string, avatar: string) => createUser(username, avatar));
-ipcMain.handle('get-all-users', () => getAllUsers());
-ipcMain.handle('set-current-user', (_event, userId: number) => setCurrentUser(userId));
-ipcMain.handle('get-current-user', () => getCurrentUser());
+ipcMain.handle('create-user', (_event, username: string, avatar: string) => logger.createUser(username, avatar));
+ipcMain.handle('get-all-users', () => logger.getAllUsers());
+ipcMain.handle('set-current-user', (_event, userId: number) => logger.setCurrentUser(userId));
+ipcMain.handle('get-current-user', () => logger.getCurrentUser());
 ipcMain.handle('delete-user', (_event, userId: number) => {
-  deleteUser(userId);
+  logger.deleteUser(userId);
   return true;
 });

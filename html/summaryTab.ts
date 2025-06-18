@@ -232,9 +232,10 @@ export async function renderSummary() {
   // Helper to render sessions and attach edit logic
   async function renderSessionRows() {
     const sessions: SessionRow[] = await ipcRenderer.invoke('get-sessions', getCurrentUserId());
+    // Fetch all tags for color lookup
+    const allTags: Tag[] = await ipcRenderer.invoke('get-all-tags', getCurrentUserId());
     const sessionTableBody = sessionTable.querySelector('tbody')!;
     sessionTableBody.innerHTML = sessions.map((session: SessionRow) => {
-      // Use the new duration field directly
       const durationSec = session.duration || 0;
       const h = Math.floor(durationSec / 3600);
       const m = Math.floor((durationSec % 3600) / 60);
@@ -247,8 +248,13 @@ export async function renderSummary() {
         <tr data-session-id="${session.id}">
           <td>
             ${escapeHtml(session.title)}
-            ${session.tags && session.tags.length ? `<div style="margin-top:2px;font-size:0.9em;color:var(--accent);">
-              ${session.tags.map((t: string) => `<span style="background:var(--row-hover);padding:2px 8px;border-radius:8px;margin-right:4px;">${escapeHtml(t)}</span>`).join('')}
+            ${session.tags && session.tags.length ? `<div style="margin-top:2px;font-size:0.9em;">
+              ${session.tags.map((t: string) => {
+                const tagObj = allTags.find(tag => tag.name === t);
+                // Use tag color or fallback to accent
+                const color = tagObj?.color || getComputedStyle(document.body).getPropertyValue('--accent') || '#f0db4f';
+                return `<span style="background:${color};color:#222;padding:2px 8px;border-radius:8px;margin-right:4px;">${escapeHtml(t)}</span>`;
+              }).join('')}
             </div>` : ''}
           </td>
           <td>${escapeHtml(session.date)}</td>

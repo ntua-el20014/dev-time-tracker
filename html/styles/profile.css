@@ -38,3 +38,7 @@
 #logoutBtn:active {
   transform: scale(0.97);
 }
+
+.color-grid-picker {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
