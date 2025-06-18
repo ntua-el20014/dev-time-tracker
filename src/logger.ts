@@ -88,6 +88,19 @@ db.prepare(`
   )
 `).run();
 
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS daily_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    time INTEGER NOT NULL, -- in minutes
+    description TEXT,
+    isCompleted INTEGER DEFAULT 0,
+    UNIQUE(user_id, date)
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )
+`).run();
+
 // --- Helper ---
 function getLocalDateString(date = new Date()): string {
   return date.toLocaleDateString('en-CA'); // YYYY-MM-DD format
@@ -422,6 +435,43 @@ export function deleteTag(userId: number, name: string) {
     notifyRenderer('Failed to delete tag.', 5000);
     console.error(err);
   }
+}
+
+export function setDailyGoal(userId: number, date: string, time: number, description: string) {
+  db.prepare(`
+    INSERT OR IGNORE INTO daily_goals (user_id, date, time, description, isCompleted)
+    VALUES (?, ?, ?, ?, 0)
+  `).run(userId, date, time, description);
+}
+
+export function getDailyGoal(userId: number, date: string) {
+  return db.prepare(`
+    SELECT * FROM daily_goals WHERE user_id = ? AND date = ?
+  `).get(userId, date);
+}
+
+export function deleteDailyGoal(userId: number, date: string) {
+  db.prepare(`DELETE FROM daily_goals WHERE user_id = ? AND date = ?`).run(userId, date);
+}
+
+export function completeDailyGoal(userId: number, date: string) {
+  db.prepare(`UPDATE daily_goals SET isCompleted = 1 WHERE user_id = ? AND date = ?`).run(userId, date);
+}
+
+export function getTotalTimeForDay(userId: number, date: string): number {
+  const row = db.prepare(`
+    SELECT SUM(time_spent) as total FROM usage_summary WHERE user_id = ? AND date = ?
+  `).get(userId, date) as { total: number } | undefined;
+  return row?.total ? row.total / 60 : 0;
+}
+
+export function getAllDailyGoals(userId: number) {
+  return db.prepare(`
+    SELECT date, time, description, isCompleted
+    FROM daily_goals
+    WHERE user_id = ?
+    ORDER BY date DESC
+  `).all(userId);
 }
 
 export interface DailySummaryRow {

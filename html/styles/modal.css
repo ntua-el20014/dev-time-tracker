@@ -26,6 +26,13 @@
   position: relative;
 }
 
+.session-modal-content, .custom-modal-content {
+  max-height: 80vh;
+  overflow-y: auto;
+  z-index: 1000;
+  padding-bottom: 24px;
+}
+
 #customModal h2 {
   margin-top: 0;
 }
@@ -125,9 +132,32 @@ select#tag-select option {
   color: #222;
 }
 
-.custom-modal-overlay {
+.custom-modal-overlay, #customModalOverlay {
   position: fixed;
+  inset: 0;
+  display: block;
   top: 0; left: 0; width: 100vw; height: 100vh;
   background: rgba(0,0,0,0.3);
-  z-index: 9999;
+  transition: opacity 0.2s;
+  z-index: 999;
+}
+
+#customModal, .session-modal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: auto;
+  background: rgba(0,0,0,0.18);
+}
+
+@media (max-width: 600px) {
+  .session-modal-content, .custom-modal-content {
+    width: 98vw !important;
+    min-width: 0 !important;
+    max-width: 98vw !important;
+    border-radius: 8px;
+  }
 }

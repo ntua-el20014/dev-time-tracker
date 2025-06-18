@@ -1,7 +1,6 @@
 TODO / Ideas for Improvements
 
 - [ ] Add filters in sessions/summaries (language, editor, date, tag)
-- [ ] Daily goals: Allow users to set and track daily coding time or session goals and get notified when done.
 - [ ] Present customizable charts with filtering options (language, editor, time per day on specified date range)
 - [ ] Session export: Export sessions or summaries to CSV/JSON for reporting.
 - [ ] Weekly/monthly reports: Generate and display reports for longer periods.

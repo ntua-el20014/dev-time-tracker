@@ -3,6 +3,7 @@ import { formatTimeSpent } from '../src/utils/timeFormat';
 import type { LogEntry } from '../src/logger';
 import { getCurrentUserId } from './utils';
 import { getLangIconUrl } from '../src/utils/extractData';
+import { showModal, showInAppNotification } from './components';
 
 function escapeHtml(text: string) {
   const div = document.createElement('div');
@@ -13,6 +14,74 @@ function escapeHtml(text: string) {
 export async function renderLogs(date?: string) {
   const container = document.querySelector('#logTable')?.parentElement;
   if (!container) return;
+
+  // --- Daily Goal UI ---
+  let dailyGoalDiv = container.querySelector('.daily-goal-div') as HTMLDivElement | null;
+  if (!dailyGoalDiv) {
+    dailyGoalDiv = document.createElement('div');
+    dailyGoalDiv.className = 'daily-goal-div';
+    dailyGoalDiv.style.marginBottom = '12px';
+    container.insertBefore(dailyGoalDiv, container.firstChild);
+  }
+
+  const userId = getCurrentUserId();
+  const today = date || new Date().toLocaleDateString('en-CA');
+  const dailyGoal = await ipcRenderer.invoke('get-daily-goal', userId, today);
+
+  dailyGoalDiv.innerHTML = '';
+
+  if (dailyGoal) {
+    // Show goal info and delete button
+    const completed = dailyGoal.isCompleted;
+    dailyGoalDiv.innerHTML = `
+      <span class="daily-goal-info${completed ? ' completed' : ''}">
+        <span class="goal-label">🎯 Daily goal</span>
+        <b>${dailyGoal.time}</b> mins${dailyGoal.description ? ': ' + escapeHtml(dailyGoal.description) : ''}
+        ${completed ? '<span class="goal-completed">(Completed)</span>' : ''}
+      </span>
+      <button id="deleteDailyGoalBtn" class="goal-btn">Delete</button>
+    `;
+    dailyGoalDiv.querySelector('#deleteDailyGoalBtn')?.addEventListener('click', async () => {
+      await ipcRenderer.invoke('delete-daily-goal', userId, today);
+      showInAppNotification('Daily goal deleted.');
+      renderLogs(date);
+    });
+  } else {
+    // Show add button
+    const addBtn = document.createElement('button');
+    addBtn.textContent = 'Add Daily Goal';
+    addBtn.className = 'goal-btn';
+    addBtn.onclick = () => {
+      showModal({
+        title: 'Set Daily Goal',
+        fields: [
+          { name: 'time', label: 'Time (minutes):', type: 'text', required: true },
+          { name: 'description', label: 'Description:', type: 'text' }
+        ],
+        submitText: 'Set Goal',
+        onSubmit: async (values) => {
+          const mins = Number(values.time);
+          const now = new Date();
+          const endOfDay = new Date(now);
+          endOfDay.setHours(23,59,59,999);
+          const maxMins = Math.floor((endOfDay.getTime() - now.getTime()) / 60000);
+          if (isNaN(mins) || mins < 5 || mins > maxMins) {
+            showInAppNotification(`Goal must be between 5 and ${maxMins} minutes.`);
+            return;
+          }
+          else if (maxMins <= 5) {
+            showInAppNotification('You have no time left today to set a goal.');
+            return;
+          }
+            
+          await ipcRenderer.invoke('set-daily-goal', userId, today, mins, values.description || '');
+          showInAppNotification('Daily goal set!');
+          renderLogs(date);
+        }
+      });
+    };
+    dailyGoalDiv.appendChild(addBtn);
+  }
 
   // Remove any existing custom title or today title
   const oldMainTitle = container.querySelector('.main-title');

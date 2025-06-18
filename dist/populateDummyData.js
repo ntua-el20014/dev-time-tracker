@@ -48,7 +48,7 @@ var tagColors = [
 ];
 // --- Main population logic ---
 function populateDummyUsers() {
-    db.prepare("INSERT OR IGNORE INTO users (id, username, avatar) VALUES (1, 'Alice', ''), (2, 'Bob', '')").run();
+    db.prepare("INSERT OR IGNORE INTO users (id, username, avatar) VALUES (1, 'Default', ''), (2, 'Bob', '')").run();
 }
 function populateUsageAndSummary(userId, days) {
     if (days === void 0) { days = 30; }
@@ -108,6 +108,29 @@ function svgToDataUri(svgPath) {
     var base64 = Buffer.from(svg, 'utf8').toString('base64');
     return "data:image/svg+xml;base64,".concat(base64);
 }
+function populateDailyGoals(userId, days) {
+    if (days === void 0) { days = 10; }
+    for (var i = 0; i < days; ++i) {
+        var date = new Date();
+        date.setDate(date.getDate() - i);
+        var dateStr = toDateString(date);
+        var time = randomInt(30, 180); // 30 to 180 minutes
+        var description = randomChoice([
+            'Focus on bug fixes',
+            'UI improvements',
+            'Write tests',
+            'Documentation',
+            'Refactor modules',
+            'Experiment with new tech',
+            'Pair programming',
+            'Code review',
+            'Optimize performance',
+            'General coding'
+        ]);
+        var isCompleted = Math.random() > 0.3 ? 1 : 0; // Most goals completed
+        db.prepare("\n      INSERT OR IGNORE INTO daily_goals (user_id, date, time, description, isCompleted)\n      VALUES (?, ?, ?, ?, ?)\n    ").run(userId, dateStr, time, description, isCompleted);
+    }
+}
 // --- Run population ---
 console.log('Populating dummy data...');
 populateDummyUsers();
@@ -116,6 +139,7 @@ populateDummyUsers();
     populateSessions(userId, 30);
     populateTags(userId);
     assignTagsToSessions(userId);
+    populateDailyGoals(userId, 10); // <-- Add this line
 });
 console.log('Done!');
 // Exit the process

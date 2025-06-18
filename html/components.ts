@@ -28,6 +28,16 @@ export interface ModalOptions {
 }
 
 export function showModal(options: ModalOptions) {
+  // --- Overlay logic ---
+  let overlay = document.getElementById('customModalOverlay') as HTMLDivElement | null;
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'customModalOverlay';
+    overlay.className = 'custom-modal-overlay';
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = 'block';
+
   let modal = document.getElementById('customModal') as HTMLDivElement | null;
   if (!modal) {
     modal = document.createElement('div');
@@ -59,6 +69,8 @@ export function showModal(options: ModalOptions) {
 `;
 
   modal.classList.add('active');
+  overlay.classList.add('active');
+
   setTimeout(() => {
     const firstInput = form.querySelector('input,textarea') as HTMLElement;
     if (firstInput) firstInput.focus();
@@ -80,6 +92,7 @@ export function showModal(options: ModalOptions) {
     });
     modal!.classList.remove('active');
     modal.remove();
+    overlay?.remove();
     options.onSubmit(values);
   };
 
@@ -88,6 +101,7 @@ export function showModal(options: ModalOptions) {
     cancelBtn.onclick = () => {
       modal!.classList.remove('active');
       modal.remove();
+      overlay?.remove();
       if (options.onCancel) options.onCancel();
     };
   }
@@ -129,6 +143,26 @@ export function showNotification(message: string, durationMs = 3500) {
   } catch {
     // Fallback if sound cannot be played
   }
+
+  setTimeout(() => {
+    notif!.style.opacity = '0';
+    setTimeout(() => notif?.remove(), 350);
+  }, durationMs);
+}
+
+export function showInAppNotification(message: string, durationMs = 3500) {
+  // Remove any existing notification
+  let notif = document.getElementById('custom-notification') as HTMLDivElement | null;
+  if (notif) notif.remove();
+
+  notif = document.createElement('div');
+  notif.id = 'custom-notification';
+  notif.textContent = message;
+  notif.className = 'custom-notification'; // Use CSS class for styling
+
+  document.body.appendChild(notif);
+
+  // Removed all sound and system notification related code
 
   setTimeout(() => {
     notif!.style.opacity = '0';

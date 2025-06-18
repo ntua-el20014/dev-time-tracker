@@ -3,7 +3,7 @@ import { ipcRenderer } from 'electron';
 import { applyAccentColor } from './renderer';
 import { renderPercentBar, renderPieChartJS, showColorGridPicker } from './components';
 import { loadHotkey, setUserTheme } from './theme';
-import { getCurrentUserId } from './utils';
+import { getCurrentUserId, prettyDate} from './utils';
 import type { Tag } from '../src/logger';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -294,7 +294,59 @@ async function renderSettings(container: HTMLElement) {
     });
   });
 }
-  
+
+async function renderDailyGoalHistory(container: HTMLElement) {
+  const userId = getCurrentUserId();
+  // Fetch all daily goals for the user, newest first
+  const goals: {
+    date: string;
+    time: number;
+    description: string;
+    isCompleted: number;
+  }[] = await ipcRenderer.invoke('get-all-daily-goals', userId);
+
+  container.innerHTML = `
+    <h2>Daily Goal History</h2>
+    ${
+      goals.length === 0
+        ? `<p>No daily goals set yet.</p>`
+        : `<table class="goal-history-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Time (min)</th>
+                <th>Description</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${goals
+                .map(
+                  (g) => `
+                <tr>
+                  <td>${prettyDate(g.date)}</td>
+                  <td>${g.time}</td>
+                  <td>${escapeHtml(g.description || '')}</td>
+                  <td>
+                    ${
+                      g.isCompleted
+                        ? '<span style="color:green;">Completed</span>'
+                        : '<span style="color:#aaa;">Not completed</span>'
+                    }
+                  </td>
+                </tr>
+              `
+                )
+                .join('')}
+            </tbody>
+          </table>`
+    }
+    <div class="info-note" style="margin-top:12px;">
+      Only one daily goal can be set per day. Completed goals are marked in green.
+    </div>
+  `;
+}
+
 export async function refreshProfile() {
   const profileDiv = document.getElementById('profileContent');
   if (!profileDiv) return;
@@ -305,6 +357,7 @@ export async function refreshProfile() {
       <ul class="profile-chapter-list">
         <li><button class="profile-chapter-btn" data-chapter="editor">Editors</button></li>
         <li><button class="profile-chapter-btn" data-chapter="language">Languages</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="goals">Daily Goals</button></li>
         <li><button class="profile-chapter-btn" data-chapter="settings">Settings</button></li>
         <li><button class="profile-chapter-btn" data-chapter="hotkeys">Hotkeys</button></li>
       </ul>
@@ -326,6 +379,8 @@ export async function refreshProfile() {
       await renderSettings(contentDiv);
     } else if (chapter === 'hotkeys') {
       await renderHotkeys(contentDiv);
+    } else if (chapter === 'goals') {
+      await renderDailyGoalHistory(contentDiv);
     }
     // Highlight active
     buttons.forEach(btn => {

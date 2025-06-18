@@ -51,7 +51,7 @@ const tagColors = [
 
 // --- Main population logic ---
 function populateDummyUsers() {
-  db.prepare(`INSERT OR IGNORE INTO users (id, username, avatar) VALUES (1, 'Alice', ''), (2, 'Bob', '')`).run();
+  db.prepare(`INSERT OR IGNORE INTO users (id, username, avatar) VALUES (1, 'Default', ''), (2, 'Bob', '')`).run();
 }
 
 function populateUsageAndSummary(userId: number, days = 30) {
@@ -137,6 +137,33 @@ function svgToDataUri(svgPath: string): string {
   return `data:image/svg+xml;base64,${base64}`;
 }
 
+function populateDailyGoals(userId: number, days = 10) {
+  for (let i = 0; i < days; ++i) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    const dateStr = toDateString(date);
+    const time = randomInt(30, 180); // 30 to 180 minutes
+    const description = randomChoice([
+      'Focus on bug fixes',
+      'UI improvements',
+      'Write tests',
+      'Documentation',
+      'Refactor modules',
+      'Experiment with new tech',
+      'Pair programming',
+      'Code review',
+      'Optimize performance',
+      'General coding'
+    ]);
+    const isCompleted = Math.random() > 0.3 ? 1 : 0; // Most goals completed
+
+    db.prepare(`
+      INSERT OR IGNORE INTO daily_goals (user_id, date, time, description, isCompleted)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(userId, dateStr, time, description, isCompleted);
+  }
+}
+
 // --- Run population ---
 console.log('Populating dummy data...');
 populateDummyUsers();
@@ -145,6 +172,7 @@ populateDummyUsers();
   populateSessions(userId, 30);
   populateTags(userId);
   assignTagsToSessions(userId);
+  populateDailyGoals(userId, 10); // <-- Add this line
 });
 console.log('Done!');
 // Exit the process

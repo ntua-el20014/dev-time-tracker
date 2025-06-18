@@ -298,6 +298,7 @@ ipcMain.handle('set-tag-color', (_event, userId: number, tagName: string, color:
   return true;
 });
 
+
 ipcMain.handle('set-session-tags', (_event, userId, sessionId, tagNames) => {
   logger.setSessionTags(userId, sessionId, tagNames);
   return true;
@@ -350,4 +351,31 @@ ipcMain.handle('get-current-user', () => logger.getCurrentUser());
 ipcMain.handle('delete-user', (_event, userId: number) => {
   logger.deleteUser(userId);
   return true;
+});
+
+ipcMain.handle('set-daily-goal', (_event, userId: number, date: string, time: number, description: string) => {
+  logger.setDailyGoal(userId, date, time, description);
+  return true;
+});
+
+ipcMain.handle('get-daily-goal', (_event, userId: number, date: string) => {
+  return logger.getDailyGoal(userId, date);
+});
+
+ipcMain.handle('delete-daily-goal', (_event, userId: number, date: string) => {
+  logger.deleteDailyGoal(userId, date);
+  return true;
+});
+
+ipcMain.handle('get-total-time-for-day', (_event, userId: number, date: string) => {
+  return logger.getTotalTimeForDay(userId, date);
+});
+
+ipcMain.handle('complete-daily-goal', (_event, userId: number, date: string) => {
+  logger.completeDailyGoal(userId, date);
+  return true;
+});
+
+ipcMain.handle('get-all-daily-goals', (_event, userId: number) => {
+  return logger.getAllDailyGoals(userId);
 });

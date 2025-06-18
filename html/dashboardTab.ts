@@ -1,5 +1,5 @@
 import { ipcRenderer } from 'electron';
-import { renderLineChartJS } from './components';
+import { renderLineChartJS, renderPercentBar } from './components';
 import { getMonday, getWeekDates, getLocalDateString, filterDailyDataForWeek, getCurrentUserId } from './utils';
 import { getLangIconUrl } from '../src/utils/extractData';
 import type { DailySummaryRow, SessionRow } from '../src/logger';
@@ -9,12 +9,36 @@ export async function renderDashboard() {
   if (!container) return;
   container.innerHTML = `
     <div id="dashboard-inner">
+      <div id="dashboard-goal-progress"></div>
       <h1 class="dashboard-title">Developer Time Tracker</h1>
       <div id="dashboard-calendar"></div>
       <div id="dashboard-quickstats"></div>
       <div id="dashboard-charts"></div>
     </div>
   `;
+
+  
+  // --- Daily Goal Progress Bar ---
+  const userId = getCurrentUserId();
+  const today = new Date().toLocaleDateString('en-CA');
+  const dailyGoal = await ipcRenderer.invoke('get-daily-goal', userId, today);
+  const totalMins = await ipcRenderer.invoke('get-total-time-for-day', userId, today);
+
+  const goalDiv = document.getElementById('dashboard-goal-progress');
+  if (goalDiv && dailyGoal) {
+    const percent = Math.min(100, (totalMins / dailyGoal.time) * 100);
+    goalDiv.innerHTML = `
+      <div style="margin-bottom:8px;">
+        <b>Daily Goal:</b> ${totalMins.toFixed(0)} / ${dailyGoal.time} mins (${percent.toFixed(0)}%)
+      </div>
+      ${renderPercentBar([
+        { label: 'Progress', percent, color: percent >= 100 ? '#4caf50' : 'var(--accent)' },
+        { label: '', percent: 100 - percent, color: '#eee' }
+      ], 18, 8)}
+    `;
+  } else if (goalDiv) {
+    goalDiv.innerHTML = '';
+  }
 
   // --- Calendar Widget ---
   const calendarDiv = document.getElementById('dashboard-calendar');

@@ -10,14 +10,15 @@ import { renderUserLanding } from './userLanding';
 import { getCurrentUserId } from './utils';
 import { loadUserLangMap } from '../src/utils/extractData';
 import './styles/base.css';
-import './styles/layout.css';
-import './styles/table.css';
-import './styles/modal.css';
 import './styles/calendar.css';
-import './styles/timeline.css';
-import './styles/profile.css';
-import './styles/theme.css';
 import './styles/dashboard.css';
+import './styles/goals.css';
+import './styles/layout.css';
+import './styles/modal.css';
+import './styles/profile.css';
+import './styles/table.css';
+import './styles/theme.css';
+import './styles/timeline.css';
 import './styles/users.css';
 
 function setupTabs() {
@@ -296,3 +297,33 @@ function renderMainUI() {
   applyAccentColor();
   setupHotkeys();
 }
+
+let dailyGoalCheckInterval: NodeJS.Timeout | null = null;
+
+async function checkDailyGoalProgress() {
+  const userId = getCurrentUserId();
+  const today = new Date().toLocaleDateString('en-CA');
+  const dailyGoal = await ipcRenderer.invoke('get-daily-goal', userId, today);
+  if (!dailyGoal) return;
+
+  const totalMins = await ipcRenderer.invoke('get-total-time-for-day', userId, today);
+
+  if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {
+    await ipcRenderer.invoke('complete-daily-goal', userId, today);
+    showNotification('🎉 Daily goal achieved!');
+    // Optionally, re-render dashboard/logs
+    renderDashboard();
+    renderLogs(today);
+  }
+}
+
+function startDailyGoalChecker() {
+  if (dailyGoalCheckInterval) clearInterval(dailyGoalCheckInterval);
+  checkDailyGoalProgress();
+  dailyGoalCheckInterval = setInterval(checkDailyGoalProgress, 60 * 1000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // ...existing code...
+  startDailyGoalChecker();
+});
