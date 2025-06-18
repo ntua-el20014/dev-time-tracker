@@ -10,7 +10,9 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 - **Automatic Tracking:**  
   Monitors time spent in code editors (like VSCode) and logs active window data every 10 seconds.
 - **Session Management:**  
-  Start/pause/stop recording sessions, add titles and descriptions, edit or delete past sessions, add tags, set idle timeout. Great for tracking focused work periods.
+  Start/pause/stop recording sessions, add titles and descriptions, edit or delete past sessions, add colored tags, set idle timeout. Great for tracking focused work periods.
+- **User Profiles:**  
+  Create multiple user profiles to track different coding activities separately.
 - **Global Hotkeys:**  
   Control tracking (start, pause, stop) from anywhere and switch between tabs using keyboard shortcuts.
 - **Detailed Summaries:**  
@@ -18,11 +20,13 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 - **Timeline & Calendar:**  
   Visualize your coding activity with a weekly timeline and a monthly calendar.
 - **Editor & Language Stats:**  
-  See which editors and programming languages you use most through charts and statistics.
+  See which editors and programming languages you use most through charts and statistics. Editor and language icons are shown where available.
 - **Customizable Themes:**  
   Switch between dark and light mode, pick custom accent color for each one.
 - **Local-First:**  
   All data is stored locally—your privacy is respected.
+- **Database Population Script:**  
+  Easily populate your database with realistic dummy data for testing and development.
 
 ---
 
@@ -58,6 +62,13 @@ yarn start
 npm start
 ```
 
+### Populating the Database with Dummy Data
+
+```bash
+npm run populate
+```
+This will fill your database with sample users, sessions, tags (with colors), and usage data.
+
 ### Building for Production
 
 ```bash
@@ -73,30 +84,35 @@ npm run make
 ```
 html/
   renderer.ts         # Main renderer process entry
-  summaryTab.ts       # Summary tab logic
-  logsTab.ts          # Logs tab logic
-  profileTab.ts       # Profile tab logic
-  components.ts       # Reusable UI components (modal, OS info, etc.)
-  utils.ts            # Utility functions
+  summaryTab.ts       # Summary tab logic (summary, sessions)
+  logsTab.ts          # Logs tab logic (today's activity)
+  profileTab.ts       # Profile tab logic (settings, hotkeys, editors, languages)
+  dashboardTab.ts     # Dashboard tab logic (calendar, recent activity, charts)
+  components.ts       # Reusable UI components (modal, color picker, etc.)
+  utils.ts            # Utility functions for renderer
   styles/             # Modular CSS (see below)
 src/
-  index.ts            # Electron main process
-  logger.ts           # Database and tracking logic
-  ...
+  index.ts            # Electron main process (IPC, window)
+  logger.ts           # Database interaction (SQLite)
+  config.ts           # User and theme configuration
+  utils/              # Utility modules (editors, extractData, langMap, etc.)
+populateDummyData.ts  # Script to populate the database with dummy data
 ```
 
 ### CSS Organization
 
-| File                | Purpose                                 |
-|---------------------|-----------------------------------------|
-| base.css            | Variables, body, global elements        |
-| layout.css          | Layout, container, tabs                 |
-| table.css           | Tables, summary, filters                |
-| modal.css           | Modal dialogs                           |
-| calendar.css        | Calendar widget                         |
-| timeline.css        | Timeline chart                          |
-| profile.css         | Profile tab sidebar/menu                |
-| theme.css           | Theme toggle and overrides              |
+| File                | Purpose                                                                 |
+|---------------------|-------------------------------------------------------------------------|
+| base.css            | Variables, body, global elements, notification, record/pause buttons    |
+| layout.css          | Main container and layout, tab bar, tab content                         |
+| table.css           | Table styles, summary tables, icons, edit buttons, filter buttons       |
+| modal.css           | Modal overlay, modal content, modal form and actions                    |
+| calendar.css        | Calendar widget and grid, calendar day labels and cells                 |
+| timeline.css        | Timeline chart container and bars, day labels and hours                 |
+| profile.css         | Profile tab sidebar/menu, tag color picker, logout button, color grid   |
+| theme.css           | Theme toggle button, theme-specific overrides                           |
+| dashboard.css       | Dashboard tab, bubbles, quick stats, calendar, charts                   |
+| users.css           | User landing page, user selection, avatars                              |
 
 ---
 

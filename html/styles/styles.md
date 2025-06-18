@@ -7,7 +7,8 @@ This project’s CSS is modularized by feature/component for maintainability:
 ## base.css
 - CSS variables (`:root`)
 - Body, headings, general typography
-- Global elements (e.g. `#os-info`, `#recordBtn`)
+- Global elements (e.g. `#os-info`, `#recordBtn`, notification)
+- Accent color, theme variables
 
 ## layout.css
 - Main container and layout (`.container`, `.header`)
@@ -35,8 +36,19 @@ This project’s CSS is modularized by feature/component for maintainability:
 
 ## profile.css
 - Profile tab sidebar/menu buttons (`.profile-chapter-btn`)
+- Tag color chip and color grid picker (`.tag-color-chip`, `.color-grid-picker`)
+- Logout button
 
 ## theme.css
 - Theme toggle button (`button#toggleTheme`)
+- Theme-specific overrides
+
+## dashboard.css
+- Dashboard tab layout and quick stats
+- Bubble styles for language/editor/session/streak
+- Calendar and charts in dashboard
+
+## users.css
+- User landing page, user selection, avatars
 
 ---

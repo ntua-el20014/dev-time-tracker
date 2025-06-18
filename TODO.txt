@@ -11,4 +11,3 @@ TODO / Ideas for Improvements
 - [ ] Admin profile to monitor all users and statistics.
 
 - Fix charts clipping
-- Choose tag color (dropdown)
