@@ -179,3 +179,7 @@ export function getAllDailyGoals(userId: number) {
     ORDER BY date DESC
   `).all(userId);
 }
+
+export function getAllUsageData() {
+ return db.prepare('SELECT * FROM usage').all();
+}

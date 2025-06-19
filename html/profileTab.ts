@@ -5,6 +5,7 @@ import { renderPercentBar, renderPieChartJS, showColorGridPicker } from './compo
 import { loadHotkey, setUserTheme } from './theme';
 import { getCurrentUserId, prettyDate} from './utils';
 import type { Tag } from '../src/backend/types';
+import { renderAdminPanel } from './admin';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function escapeHtml(text: string) {
@@ -360,6 +361,7 @@ export async function refreshProfile() {
         <li><button class="profile-chapter-btn" data-chapter="goals">Daily Goals</button></li>
         <li><button class="profile-chapter-btn" data-chapter="settings">Settings</button></li>
         <li><button class="profile-chapter-btn" data-chapter="hotkeys">Hotkeys</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="admin">Admin</button></li>
       </ul>
       <button id="logoutBtn" class="logout-btn">Log Out</button>
     </nav>
@@ -381,6 +383,9 @@ export async function refreshProfile() {
       await renderHotkeys(contentDiv);
     } else if (chapter === 'goals') {
       await renderDailyGoalHistory(contentDiv);
+    }
+    else if (chapter === 'admin') {
+      await renderAdminPanel(contentDiv);
     }
     // Highlight active
     buttons.forEach(btn => {

@@ -149,3 +149,7 @@ export function deleteTag(userId: number, name: string) {
     console.error(err);
   }
 }
+
+export function getAllSessionsData() {
+  return db.prepare('SELECT * FROM sessions').all();
+}

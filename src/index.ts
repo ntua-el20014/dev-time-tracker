@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
+import { app, BrowserWindow, ipcMain, powerMonitor, dialog } from 'electron';
 import * as config from './config';
 import { getEditorByExecutable } from './utils/editors';
 import { getLanguageDataFromTitle } from './utils/extractData';
@@ -11,6 +11,8 @@ import * as users from './backend/users';
 import './ipc/usageHandlers';
 import './ipc/sessionHandlers';
 import './ipc/userHandlers';
+import fs from 'fs';
+import { parse as json2csv } from 'json2csv';
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -241,5 +243,59 @@ ipcMain.on('auto-resume', (_event, userId) => {
     lastActiveTimestamp = new Date();
     trackingInterval = setInterval(() => trackActiveWindow(userId), intervalSeconds * 1000);
     isPaused = false;
+  }
+});
+
+const DB_PATH = 'usage.db';
+
+ipcMain.handle('export-database', async () => {
+  const { filePath, canceled } = await dialog.showSaveDialog({
+    title: 'Export Database',
+    defaultPath: 'dev-time-tracker-backup.db',
+    filters: [{ name: 'SQLite Database', extensions: ['db'] }]
+  });
+  if (canceled || !filePath) return false;
+  fs.copyFileSync(DB_PATH, filePath);
+  return true;
+});
+
+ipcMain.handle('export-database-json', async () => {
+  try {
+    const sessionsData = sessions.getAllSessionsData();
+    const usageData = usage.getAllUsageData();
+    const data = { sessionsData, usageData };
+
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      title: 'Export Database as JSON',
+      defaultPath: 'dev-time-tracker-export.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    });
+    if (canceled || !filePath) return { status: 'cancelled' };
+
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    return { status: 'success' };
+  } catch (err) {
+    return { status: 'error', message: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('export-database-csv', async () => {
+  try {
+    const sessionsData = sessions.getAllSessionsData();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const usageData = usage.getAllUsageData();
+
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      title: 'Export Database as CSV',
+      defaultPath: 'dev-time-tracker-export.csv',
+      filters: [{ name: 'CSV', extensions: ['csv'] }]
+    });
+    if (canceled || !filePath) return { status: 'cancelled' };
+
+    const csv = json2csv(sessionsData, { fields: Object.keys(sessionsData[0] || {}) });
+    fs.writeFileSync(filePath, csv, 'utf-8');
+    return { status: 'success' };
+  } catch (err) {
+    return { status: 'error', message: err instanceof Error ? err.message : String(err) };
   }
 });
