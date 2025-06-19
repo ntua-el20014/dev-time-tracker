@@ -3,7 +3,8 @@ import * as Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const db = new (Database as any)('usage.db');
+const DB_PATH = path.resolve('C:\\Users\\Nikos\\AppData\\Roaming\\dev-time-tracker', 'usage.db');
+const db = new (Database as any)(DB_PATH);
 
 // --- Utility functions ---
 function randomInt(min: number, max: number) {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import db from './db';
 import { notifyRenderer } from '../utils/ipcHelp';
 import { getLocalDateString } from '../utils/timeFormat';
@@ -150,6 +151,42 @@ export function deleteTag(userId: number, name: string) {
   }
 }
 
+// Database migration functions
+
 export function getAllSessionsData() {
   return db.prepare('SELECT * FROM sessions').all();
+}
+export function getAllTagsData() {
+  return db.prepare('SELECT * FROM tags').all();
+}
+export function getAllSessionTagsData() {
+  return db.prepare('SELECT * FROM session_tags').all();
+}
+
+export function clearSessions() {
+  db.prepare('DELETE FROM sessions').run();
+}
+export function importSessions(sessionsArr: any[]) {
+  const stmt = db.prepare('INSERT INTO sessions (id, timestamp, start_time, duration, title, description, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  for (const row of sessionsArr) {
+    stmt.run(row.id, row.timestamp, row.start_time, row.duration, row.title, row.description, row.user_id);
+  }
+}
+export function clearTags() {
+  db.prepare('DELETE FROM tags').run();
+}
+export function importTags(tagsArr: any[]) {
+  const stmt = db.prepare('INSERT INTO tags (id, name, user_id, color) VALUES (?, ?, ?, ?)');
+  for (const row of tagsArr) {
+    stmt.run(row.id, row.name, row.user_id, row.color);
+  }
+}
+export function clearSessionTags() {
+  db.prepare('DELETE FROM session_tags').run();
+}
+export function importSessionTags(sessionTagsArr: any[]) {
+  const stmt = db.prepare('INSERT INTO session_tags (session_id, tag_id) VALUES (?, ?)');
+  for (const row of sessionTagsArr) {
+    stmt.run(row.session_id, row.tag_id);
+  }
 }

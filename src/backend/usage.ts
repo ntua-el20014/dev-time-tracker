@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import db from './db';
 import { notifyRenderer } from '../utils/ipcHelp';
 import { getLocalDateString } from '../utils/timeFormat';
@@ -180,6 +181,42 @@ export function getAllDailyGoals(userId: number) {
   `).all(userId);
 }
 
+// Database migration functions
+
 export function getAllUsageData() {
  return db.prepare('SELECT * FROM usage').all();
+}
+export function getAllUsageSummaryData() {
+  return db.prepare('SELECT * FROM usage_summary').all();
+}
+export function getAllDailyGoalsData() {
+  return db.prepare('SELECT * FROM daily_goals').all();
+}
+
+export function clearUsage() {
+  db.prepare('DELETE FROM usage').run();
+}
+export function importUsage(usageArr: any[]) {
+  const stmt = db.prepare('INSERT INTO usage (id, app, title, language, timestamp, user_id) VALUES (?, ?, ?, ?, ?, ?)');
+  for (const row of usageArr) {
+    stmt.run(row.id, row.app, row.title, row.language, row.timestamp, row.user_id);
+  }
+}
+export function clearUsageSummary() {
+  db.prepare('DELETE FROM usage_summary').run();
+}
+export function importUsageSummary(usageSummaryArr: any[]) {
+  const stmt = db.prepare('INSERT INTO usage_summary (id, app, language, lang_ext, date, icon, time_spent, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  for (const row of usageSummaryArr) {
+    stmt.run(row.id, row.app, row.language, row.lang_ext, row.date, row.icon, row.time_spent, row.user_id);
+  }
+}
+export function clearDailyGoals() {
+  db.prepare('DELETE FROM daily_goals').run();
+}
+export function importDailyGoals(dailyGoalsArr: any[]) {
+  const stmt = db.prepare('INSERT INTO daily_goals (id, user_id, date, time, description, isCompleted) VALUES (?, ?, ?, ?, ?, ?)');
+  for (const row of dailyGoalsArr) {
+    stmt.run(row.id, row.user_id, row.date, row.time, row.description, row.isCompleted);
+  }
 }

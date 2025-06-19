@@ -6,6 +6,5 @@ TODO / Ideas for Improvements
 - [ ] Weekly/monthly reports: Generate and display reports for longer periods.
 - [ ] Integration with calendar/task apps: Link sessions to calendar events or tasks.
 - [ ] Cloud sync: Sync data across devices (optional, with user opt-in).
-- [ ] Backup/restore: Export and import the database for backup or migration.
 - [ ] Add onboarding/help screen for new users.
 - [ ] Admin profile to monitor all users and statistics.

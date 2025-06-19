@@ -162,8 +162,6 @@ export function showInAppNotification(message: string, durationMs = 3500) {
 
   document.body.appendChild(notif);
 
-  // Removed all sound and system notification related code
-
   setTimeout(() => {
     notif!.style.opacity = '0';
     setTimeout(() => notif?.remove(), 350);

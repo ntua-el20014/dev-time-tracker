@@ -4,7 +4,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var Database = require("better-sqlite3");
 var fs = require("fs");
 var path = require("path");
-var db = new Database('usage.db');
+var DB_PATH = path.resolve('C:\\Users\\Nikos\\AppData\\Roaming\\dev-time-tracker', 'usage.db');
+var db = new Database(DB_PATH);
 // --- Utility functions ---
 function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;

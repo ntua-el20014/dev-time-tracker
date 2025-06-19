@@ -33,3 +33,15 @@ export function deleteUser(userId: number) {
     console.error(err);
   }
 }
+
+// Database migration functions
+
+export function clearUsers() {
+  db.prepare('DELETE FROM users').run();
+}
+export function importUsers(usersArr: { id: number, username: string, avatar: string }[]) {
+  const stmt = db.prepare('INSERT INTO users (id, username, avatar) VALUES (?, ?, ?)');
+  for (const row of usersArr) {
+    stmt.run(row.id, row.username, row.avatar);
+  }
+}

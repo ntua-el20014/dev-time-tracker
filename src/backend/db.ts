@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
-const db = new Database('usage.db');
+import { DB_PATH } from '../ipc/dbHandler';
+const db = new Database(DB_PATH);
 
 // --- Table creation ---
 db.prepare(`
