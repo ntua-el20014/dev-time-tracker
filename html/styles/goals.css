@@ -34,7 +34,7 @@
 
 .goal-btn {
   background: var(--accent, #0078d4);
-  color: var(--fg);
+  color: #222;
   border: none;
   border-radius: 6px;
   padding: 6px 16px;

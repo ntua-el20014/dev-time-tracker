@@ -1,10 +1,10 @@
 import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
-import * as config from './config';
-import { getEditorByExecutable } from './utils/editors';
-import { getLanguageDataFromTitle } from './utils/extractData';
-import './utils/langMap';
 import { activeWindow } from '@miniben90/x-win';
 import os from 'os';
+import './utils/langMap';
+import { getEditorByExecutable } from './utils/editors';
+import { getLanguageDataFromTitle } from './utils/extractData';
+import { getIdleTimeoutSeconds } from './utils/ipcHelp';
 import * as usage from './backend/usage';
 import * as sessions from './backend/sessions';
 import * as users from './backend/users';
@@ -12,6 +12,7 @@ import './ipc/usageHandlers';
 import './ipc/sessionHandlers';
 import './ipc/userHandlers';
 import './ipc/dbHandler';
+import './ipc/appHandlers';
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -22,17 +23,7 @@ let sessionEnd: Date | null = null;
 let sessionActiveDuration = 0; // in seconds
 let lastActiveTimestamp: Date | null = null;
 let isPaused = false;
-
-let idleTimeoutSeconds = 60;
-try {
-  const cfg = config.loadConfig();
-  if (cfg && typeof cfg.idleTimeoutSeconds === 'number') {
-    idleTimeoutSeconds = cfg.idleTimeoutSeconds;
-  }
-} catch {
-  // Fallback to default if config loading fails
-  idleTimeoutSeconds = 60;
-}
+const idleTimeoutSeconds = getIdleTimeoutSeconds();
 
 app.whenReady().then(() => {
   createWindow();
@@ -113,46 +104,6 @@ function createWindow() {
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 }
 
-ipcMain.handle('get-editor-colors', (_event, userId: number) => {
-  return config.loadEditorColors(userId);
-});
-
-ipcMain.handle('set-editor-color', (event, appName: string, color: string, userId: number) => {
-  const editorColors = config.loadEditorColors(userId);
-  editorColors[appName] = color;
-  config.saveEditorColors(editorColors, userId);
-});
-
-ipcMain.handle('get-accent-color', (_event, theme: 'dark' | 'light', userId: number) => {
-  return config.getAccentColor(theme, userId);
-});
-
-ipcMain.handle('set-accent-color', (_event, color: string, theme: 'dark' | 'light', userId: number) => {
-  config.setAccentColor(color, theme, userId);
-  return true;
-});
-
-ipcMain.handle('get-user-theme', (_event, userId: number) => {
-  return config.getUserTheme(userId);
-});
-
-ipcMain.handle('set-user-theme', (_event, theme: 'light' | 'dark', userId: number) => {
-  config.setUserTheme(theme, userId);
-  return true;
-});
-
-ipcMain.handle('get-idle-timeout', () => {
-  return idleTimeoutSeconds;
-});
-
-ipcMain.handle('set-idle-timeout', (_event, seconds: number) => {
-  idleTimeoutSeconds = seconds;
-  const cfg = config.loadConfig();
-  cfg.idleTimeoutSeconds = seconds;
-  config.saveConfig(cfg);
-  return true;
-});
-
 ipcMain.handle('start-tracking', (_event, userId:number) => {
   if (!trackingInterval) {
     trackingInterval = setInterval(() => trackActiveWindow(userId), intervalSeconds * 1000);
@@ -221,10 +172,6 @@ ipcMain.handle('stop-tracking', async (_event, userId: number) => {
   isPaused = false;
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
-
 ipcMain.on('auto-pause', () => {
   if (!isPaused && lastActiveTimestamp) {
     const now = new Date();
@@ -243,4 +190,8 @@ ipcMain.on('auto-resume', (_event, userId) => {
     trackingInterval = setInterval(() => trackActiveWindow(userId), intervalSeconds * 1000);
     isPaused = false;
   }
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
 });

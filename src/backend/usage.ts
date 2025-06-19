@@ -2,6 +2,7 @@
 import db from './db';
 import { notifyRenderer } from '../utils/ipcHelp';
 import { getLocalDateString } from '../utils/timeFormat';
+import type { DailySummaryFilters } from './types';
 
 // --- Usage logging and queries (all user-specific, user_id as input) ---
 export function logWindow(
@@ -106,19 +107,45 @@ export function getLanguageUsage(userId: number) {
   }
 }
 
-export function getDailySummary(userId: number) {
+export function getDailySummary(
+  userId: number,
+  filters?: DailySummaryFilters
+) {
   try {
-    return db.prepare(`
+    let query = `
       SELECT 
         date, 
         app, 
         icon, 
+        language,
         SUM(time_spent) as total_time
       FROM usage_summary
       WHERE user_id = ?
+    `;
+    const params: any[] = [userId];
+
+    if (filters?.language) {
+      query += ' AND language = ?';
+      params.push(filters.language);
+    }
+    if (filters?.app) {
+      query += ' AND app = ?';
+      params.push(filters.app);
+    }
+    if (filters?.startDate) {
+      query += ' AND date >= ?';
+      params.push(filters.startDate);
+    }
+    if (filters?.endDate) {
+      query += ' AND date <= ?';
+      params.push(filters.endDate);
+    }
+
+    query += `
       GROUP BY date, app
       ORDER BY date DESC, total_time DESC
-    `).all(userId);
+    `;
+    return db.prepare(query).all(...params);
   } catch (err) {
     notifyRenderer('Failed to load daily summary.', 5000);
     console.error(err);

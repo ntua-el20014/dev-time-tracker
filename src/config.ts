@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/main/config.ts
+// src/config.ts
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

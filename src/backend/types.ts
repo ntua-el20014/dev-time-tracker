@@ -36,3 +36,10 @@ export interface SessionTag {
   session_id: number;
   tag_id: number;
 }
+
+export type DailySummaryFilters = {
+  language?: string;
+  app?: string;
+  startDate?: string;
+  endDate?: string;
+};

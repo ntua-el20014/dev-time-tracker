@@ -4,14 +4,38 @@ import { notifyRenderer } from '../utils/ipcHelp';
 import { getLocalDateString } from '../utils/timeFormat';
 import { Tag, SessionRow } from './types';
 
-export function getSessions(userId: number) {
+export function getSessions(userId: number, filters?: { tag?: string; startDate?: string; endDate?: string }) {
   try {
-    const sessions = db.prepare(`
-      SELECT id, timestamp, start_time, duration, title, description
-      FROM sessions
-      WHERE user_id = ?
-      ORDER BY timestamp DESC
-    `).all(userId) as SessionRow[];
+    let query = `
+      SELECT s.id, s.timestamp, s.start_time, s.duration, s.title, s.description
+      FROM sessions s
+      WHERE s.user_id = ?
+    `;
+    const params: any[] = [userId];
+
+    if (filters?.startDate) {
+      query += ' AND date(s.timestamp) >= date(?)';
+      params.push(filters.startDate);
+    }
+    if (filters?.endDate) {
+      query += ' AND date(s.timestamp) <= date(?)';
+      params.push(filters.endDate);
+    }
+    if (filters?.tag) {
+      query += `
+        AND s.id IN (
+          SELECT st.session_id
+          FROM session_tags st
+          JOIN tags t ON t.id = st.tag_id
+          WHERE t.name = ? AND t.user_id = ?
+        )
+      `;
+      params.push(filters.tag, userId);
+    }
+
+    query += ' ORDER BY s.timestamp DESC';
+
+    const sessions = db.prepare(query).all(...params) as SessionRow[];
     for (const s of sessions) {
       s.tags = getSessionTags(s.id);
       s.date = getLocalDateString(new Date(s.timestamp));

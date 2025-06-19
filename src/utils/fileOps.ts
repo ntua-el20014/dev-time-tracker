@@ -106,3 +106,11 @@ export function getLatestBackupFile(dbPath: string): string | null {
 
   return files.length > 0 ? files[0].file : null;
 }
+
+export function exportDataToCsv(data: any[], filePath: string) {
+  if (!data || data.length === 0) {
+    throw new Error('No data to export.');
+  }
+  const csv = json2csv(data, { fields: Object.keys(data[0]) });
+  fs.writeFileSync(filePath, csv, 'utf-8');
+}

@@ -2,9 +2,9 @@ import { ipcMain } from 'electron';
 import * as sessions from '../backend/sessions';
 
 
-ipcMain.handle('get-sessions', async (_event, userId: number) => {
+ipcMain.handle('get-sessions', async (_event, userId: number, filters?: { tag?: string; startDate?: string; endDate?: string }) => {
   try {
-    return sessions.getSessions(userId);
+    return sessions.getSessions(userId, filters);
   } catch (err) {
     console.error('[Get Sessions Error]', err);
     return [];

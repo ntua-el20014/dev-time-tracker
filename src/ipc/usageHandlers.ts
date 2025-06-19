@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import * as usage from '../backend/usage';
+import type { DailySummaryFilters } from '../backend/types';
 
 ipcMain.handle('get-logs', async (_event, userId: number, date?: string) => {
   try {
@@ -28,9 +29,9 @@ ipcMain.handle('get-editor-usage', async (_event, userId: number) => {
   }
 });
 
-ipcMain.handle('get-daily-summary', async (_event, userId: number) => {
+ipcMain.handle('get-daily-summary', async (_event, userId: number, filters?: DailySummaryFilters) => {
   try {
-    return usage.getDailySummary(userId);
+    return usage.getDailySummary(userId, filters);
   } catch (err) {
     console.error('[Get Daily Summary Error]', err);
     return [];

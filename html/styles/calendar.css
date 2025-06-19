@@ -16,6 +16,14 @@
   color: var(--accent);
   letter-spacing: 1px;
 }
+
+.calendar-header button {
+  transition: transform 0.18s cubic-bezier(.4, .4, .2, 1);
+}
+.calendar-header button:hover:enabled {
+  transform: scale(1.18);
+}
+
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);

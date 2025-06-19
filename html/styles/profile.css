@@ -140,6 +140,10 @@
   color: #222;
   cursor: pointer;
 }
+.open-lang-json-btn:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000 15%);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
 
 /* --- Settings --- */
 .settings-row {
@@ -167,6 +171,11 @@
   color: #222;
   cursor: pointer;
 }
+.theme-toggle-btn:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000 15%);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+
 .settings-tags-title {
   margin-top: 32px;
 }
@@ -206,6 +215,10 @@
   padding: 2px 10px;
   cursor: pointer;
 }
+.delete-tag-btn:hover {
+  background: #b71c1c;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
 
 /* --- Accent Color --- */
 .accent-color-header {
@@ -222,7 +235,7 @@
   padding: 5px 12px;
   border: none;
   border-radius: 5px;
-  background: #eee;
+  background: #e0e0e0;
   color: #222;
   cursor: pointer;
   margin-left: 8px;
@@ -230,7 +243,7 @@
   margin-top: 0;
 }
 .reset-accent-btn:hover, #resetAccentColorsBtn:hover {
-  background: var(--accent);
+  background: color-mix(in srgb, #e0e0e0 85%, #000 15%);
   color: #222;
   box-shadow: 0 4px 16px rgba(0,0,0,0.08);
 }
@@ -267,6 +280,10 @@
   background: var(--accent);
   color: #222;
   cursor: pointer;
+}
+.save-accent-btn:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000 15%);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
 }
 
 /* --- Info Note --- */

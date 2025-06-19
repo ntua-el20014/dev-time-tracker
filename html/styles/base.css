@@ -67,6 +67,11 @@ h1 {
   display: block;
 }
 
+#recordBtn:hover {
+  background: color-mix(in srgb, var(--accent), #000 12%) !important;
+  transition: background 0.18s, color 0.18s !important;
+}
+
 #pauseBtn {
   position: fixed;
   top: 112px;
@@ -94,6 +99,11 @@ h1 {
 #pauseBtn.paused {
   background: var(--accent);
   color: #222;
+}
+
+#pauseBtn:hover {
+  background: color-mix(in srgb, var(--row-hover), #fff 10%) !important;
+  transition: background 0.18s, color 0.18s !important;
 }
 
 .custom-notification {

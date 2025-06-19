@@ -438,7 +438,6 @@ export async function refreshProfile() {
   };
 }
 
-
 function renderHotkeys(container: HTMLElement) {
 
   function keyImg(key: string) {
