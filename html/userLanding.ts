@@ -20,17 +20,17 @@ export async function renderUserLanding(
 
   // Simple avatar fallback (initials)
   function getAvatar(user: User) {
-    if (user.avatar && user.avatar.trim()) {
-      return `<img src="${user.avatar}" alt="avatar">`;
-    }
-    const initials = user.username
-      .split(' ')
-      .map(w => w[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-    return `<div class="user-avatar-fallback">${initials}</div>`;
+  if (user.avatar && user.avatar.trim()) {
+    return `<img src="${user.avatar}" alt="avatar" class="user-avatar-img">`;
   }
+  const initials = user.username
+    .split(' ')
+    .map(w => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+  return `<div class="user-avatar-fallback">${initials}</div>`;
+}
 
   container.innerHTML = `
     <div>

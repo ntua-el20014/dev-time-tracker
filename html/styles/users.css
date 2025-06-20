@@ -104,18 +104,65 @@
   justify-content: center;
 }
 
-.user-avatar-fallback {
-  width: 64px;
-  height: 64px;
+.user-avatar-img {
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  background: var(--accent, #ffe066);
-  color: #222;
+  object-fit: cover;
+  display: block;
+  margin: 0 auto 6px auto;
+}
+.user-avatar-fallback {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--row-hover, #44445a);
+  color: var(--accent, #f0db4f);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2em;
+  font-size: 1.7em;
   font-weight: bold;
-  margin: 0 auto;
+  margin: 0 auto 6px auto;
+}
+.avatar-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #ccc;
+  display: inline-block;
+}
+.avatar-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.avatar-preview {
+  min-width: 48px;
+  min-height: 48px;
+}
+.choose-avatar-btn, .remove-avatar-btn {
+  padding: 5px 14px;
+  border-radius: 5px;
+  border: none;
+  background: var(--accent, #f0db4f);
+  color: #222;
+  font-weight: 600;
+  font-size: 0.97em;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+.remove-avatar-btn {
+  background: #eee;
+  color: #222;
+  font-weight: 500;
+}
+.choose-avatar-btn:hover {
+  background: color-mix(in srgb, var(--accent, #f0db4f), #000 12%);
+}
+.remove-avatar-btn:hover {
+  background: color-mix(in srgb, #eee, #000 12%);
 }
 
 #userLanding #deleteUserRect {

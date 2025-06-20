@@ -34,6 +34,14 @@ export function deleteUser(userId: number) {
   }
 }
 
+export function getUserInfo(userId: number): { id: number, username: string, avatar: string } | undefined {
+  return db.prepare(`SELECT id, username, avatar FROM users WHERE id = ?`).get(userId) as { id: number, username: string, avatar: string } | undefined;
+}
+
+export function setUserAvatar(userId: number, avatar: string) {
+  db.prepare(`UPDATE users SET avatar = ? WHERE id = ?`).run(avatar, userId);
+}
+
 // Database migration functions
 
 export function clearUsers() {

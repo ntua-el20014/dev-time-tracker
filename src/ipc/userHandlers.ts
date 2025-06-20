@@ -16,3 +16,8 @@ ipcMain.handle('delete-user', (_event, userId: number) => {
   users.deleteUser(userId);
   return true;
 });
+ipcMain.handle('set-user-avatar', (_event, userId: number, avatar: string) => {
+  users.setUserAvatar(userId, avatar);
+  return true;
+});
+ipcMain.handle('get-user-info', (_event, userId: number) => users.getUserInfo(userId));

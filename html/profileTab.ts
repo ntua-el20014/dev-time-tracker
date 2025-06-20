@@ -148,6 +148,24 @@ async function renderSettings(container: HTMLElement) {
     </div>
   `;
 
+  // Get current user info
+  const userId = getCurrentUserId();
+  const user = await ipcRenderer.invoke('get-user-info', userId);
+  const avatar = user?.avatar || '';
+
+  // Add avatar upload UI
+  container.innerHTML += `
+    <div class="avatar-settings-row" style="margin-top:16px;">
+      <label class="settings-label">Avatar:</label>
+      <div class="avatar-preview">
+        ${avatar ? `<img src="${avatar}" alt="Avatar" id="avatarImg" style="width:48px;height:48px;border-radius:50%;">` : '<div id="avatarImg" class="avatar-placeholder"></div>'}
+      </div>
+      <input type="file" id="avatarInput" accept="image/*" style="display:none;">
+      <button id="chooseAvatarBtn" class="choose-avatar-btn">Choose Image</button>
+      <button id="removeAvatarBtn" class="remove-avatar-btn" ${avatar ? '' : 'style="display:none;"'}>Remove</button>
+    </div>
+  `;
+
   // --- Tag management ---
   const tags: Tag[] = await ipcRenderer.invoke('get-all-tags', getCurrentUserId());
   container.innerHTML += `
@@ -188,6 +206,7 @@ async function renderSettings(container: HTMLElement) {
       Change the accent color for the current theme and <b>Save</b>.<br>
     </div>
   `;
+  
   const range = container.querySelector('#idleTimeoutRange') as HTMLInputElement;
   const valueSpan = container.querySelector('#idleTimeoutValue') as HTMLSpanElement;
 
@@ -294,6 +313,33 @@ async function renderSettings(container: HTMLElement) {
       e.stopPropagation();
     });
   });
+
+  // Avatar upload logic
+  const chooseAvatarBtn = container.querySelector('#chooseAvatarBtn') as HTMLButtonElement;
+  const removeAvatarBtn = container.querySelector('#removeAvatarBtn') as HTMLButtonElement;
+  const avatarInput = container.querySelector('#avatarInput') as HTMLInputElement;
+
+  chooseAvatarBtn.onclick = () => avatarInput.click();
+
+  avatarInput.onchange = async () => {
+    if (avatarInput.files && avatarInput.files[0]) {
+      const file = avatarInput.files[0];
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const dataUrl = e.target?.result as string;
+        await ipcRenderer.invoke('set-user-avatar', userId, dataUrl);
+        renderSettings(container); // Refresh UI
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  if (removeAvatarBtn) {
+    removeAvatarBtn.onclick = async () => {
+      await ipcRenderer.invoke('set-user-avatar', userId, '');
+      renderSettings(container); // Refresh UI
+    };
+  }
 }
 
 async function renderDailyGoalHistory(container: HTMLElement) {
