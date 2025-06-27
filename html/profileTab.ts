@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from 'electron';
 import { applyAccentColor } from './renderer';
-import { renderPercentBar, renderPieChartJS, showColorGridPicker } from './components';
+import { renderPercentBar, renderPieChartJS, showColorGridPicker, showAvatarPicker } from './components';
 import { loadHotkey, setUserTheme } from './theme';
-import { getCurrentUserId, prettyDate} from './utils';
+import { getCurrentUserId, prettyDate, getCustomAvatars, addCustomAvatar, removeCustomAvatar } from './utils';
+import { getLangIconUrl } from '../src/utils/extractData';
 import type { Tag } from '../src/backend/types';
 import { renderAdminPanel } from './admin';
 
@@ -153,16 +154,29 @@ async function renderSettings(container: HTMLElement) {
   const user = await ipcRenderer.invoke('get-user-info', userId);
   const avatar = user?.avatar || '';
 
-  // Add avatar upload UI
+  // --- Avatar Picker Logic ---
+  const editors: { app: string, icon: string }[] = await ipcRenderer.invoke('get-user-editors', userId);
+  const langs: { lang_ext: string|null }[] = await ipcRenderer.invoke('get-user-lang-exts', userId);
+  const langIcons: string[] = [];
+  for (const l of langs) {
+    if (l.lang_ext) {
+      const icon = getLangIconUrl(l.lang_ext);
+      if (icon) langIcons.push(icon);
+    }
+  }
+  // Remove duplicates
+  const editorIcons = Array.from(new Set(editors.map(e => e.icon)));
+  const customAvatars = getCustomAvatars(userId);
+
+  // Avatar picker UI
   container.innerHTML += `
     <div class="avatar-settings-row" style="margin-top:16px;">
       <label class="settings-label">Avatar:</label>
-      <div class="avatar-preview">
+      <div class="avatar-preview" id="avatarPreview">
         ${avatar ? `<img src="${avatar}" alt="Avatar" id="avatarImg" style="width:48px;height:48px;border-radius:50%;">` : '<div id="avatarImg" class="avatar-placeholder"></div>'}
       </div>
+      <button id="openAvatarPickerBtn" class="choose-avatar-btn">Choose</button>
       <input type="file" id="avatarInput" accept="image/*" style="display:none;">
-      <button id="chooseAvatarBtn" class="choose-avatar-btn">Choose Image</button>
-      <button id="removeAvatarBtn" class="remove-avatar-btn" ${avatar ? '' : 'style="display:none;"'}>Remove</button>
     </div>
   `;
 
@@ -234,9 +248,7 @@ async function renderSettings(container: HTMLElement) {
     });
   } else {
     console.error('Idle timeout slider or value span not found!');
-  }
-
-  
+  }  
 
   container.querySelectorAll('.delete-tag-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -260,7 +272,7 @@ async function renderSettings(container: HTMLElement) {
 
     await ipcRenderer.invoke('set-accent-color', colorToSave, currentTheme, getCurrentUserId());
     await applyAccentColor();
-    window.dispatchEvent(new Event('theme-changed')); // Force UI refresh
+    window.dispatchEvent(new Event('theme-changed'));
     accentInput.value = colorToSave;
   });
 
@@ -314,30 +326,49 @@ async function renderSettings(container: HTMLElement) {
     });
   });
 
-  // Avatar upload logic
-  const chooseAvatarBtn = container.querySelector('#chooseAvatarBtn') as HTMLButtonElement;
-  const removeAvatarBtn = container.querySelector('#removeAvatarBtn') as HTMLButtonElement;
+  // --- Avatar Picker Logic ---
+  const openPickerBtn = container.querySelector('#openAvatarPickerBtn') as HTMLButtonElement;
   const avatarInput = container.querySelector('#avatarInput') as HTMLInputElement;
 
-  chooseAvatarBtn.onclick = () => avatarInput.click();
+  openPickerBtn.onclick = () => {
+    showAvatarPicker({
+      anchorEl: openPickerBtn,
+      icons: Array.from(new Set([...editorIcons, ...langIcons])),
+      customAvatars: customAvatars,
+      onSelect: async (icon) => {
+        await ipcRenderer.invoke('set-user-avatar', userId, icon);
+        renderSettings(container);
+      },
+      onUpload: () => avatarInput.click(),
+      onDeleteCustom: async (icon) => {
+        removeCustomAvatar(userId, icon);
+        renderSettings(container);
+      }
+    });
+  };
 
+  // Avatar upload logic
   avatarInput.onchange = async () => {
     if (avatarInput.files && avatarInput.files[0]) {
       const file = avatarInput.files[0];
       const reader = new FileReader();
       reader.onload = async (e) => {
         const dataUrl = e.target?.result as string;
+        // Add to custom avatars collection
+        addCustomAvatar(userId, dataUrl);
+        // Set as current user avatar
         await ipcRenderer.invoke('set-user-avatar', userId, dataUrl);
-        renderSettings(container); // Refresh UI
+        renderSettings(container);
       };
       reader.readAsDataURL(file);
     }
   };
 
+  const removeAvatarBtn = container.querySelector('#removeAvatarBtn') as HTMLButtonElement;
   if (removeAvatarBtn) {
     removeAvatarBtn.onclick = async () => {
       await ipcRenderer.invoke('set-user-avatar', userId, '');
-      renderSettings(container); // Refresh UI
+      renderSettings(container);
     };
   }
 }

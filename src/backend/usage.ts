@@ -4,7 +4,6 @@ import { notifyRenderer } from '../utils/ipcHelp';
 import { getLocalDateString } from '../utils/timeFormat';
 import type { DailySummaryFilters } from './types';
 
-// --- Usage logging and queries (all user-specific, user_id as input) ---
 export function logWindow(
   userId: number,
   app: string,
@@ -206,6 +205,14 @@ export function getAllDailyGoals(userId: number) {
     WHERE user_id = ?
     ORDER BY date DESC
   `).all(userId);
+}
+
+export function getUserEditors(userId: number) {
+  return db.prepare("SELECT DISTINCT app, icon FROM usage_summary WHERE user_id = ? AND icon IS NOT NULL AND icon != ''").all(userId);
+}
+
+export function getUserLangExts(userId: number) {
+  return db.prepare("SELECT DISTINCT lang_ext FROM usage_summary WHERE user_id = ? AND lang_ext IS NOT NULL AND lang_ext != ''").all(userId);
 }
 
 // Database migration functions

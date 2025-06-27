@@ -107,11 +107,6 @@ export function showModal(options: ModalOptions) {
   }
 }
 
-/**
- * Shows a custom notification popup with sound.
- * @param message The message to display.
- * @param durationMs How long to show (default 3500ms).
- */
 export function showNotification(message: string, durationMs = 3500) {
   // Remove any existing notification
   let notif = document.getElementById('custom-notification') as HTMLDivElement | null;
@@ -168,13 +163,6 @@ export function showInAppNotification(message: string, durationMs = 3500) {
   }, durationMs);
 }
 
-/**
- * Renders a horizontal percentage bar.
- * @param items Array of { label: string, percent: number, color: string }
- * @param height Height in px (default 32)
- * @param borderRadius Border radius in px (default 8)
- * @returns HTML string for the bar
- */
 export function renderPercentBar(
   items: { label: string; percent: number; color: string }[],
   height = 32,
@@ -446,6 +434,118 @@ export function showColorGridPicker(options: {
   setTimeout(() => {
     const remove = (e: MouseEvent) => {
       if (!picker.contains(e.target as Node)) picker.remove();
+      document.removeEventListener('mousedown', remove);
+    };
+    document.addEventListener('mousedown', remove);
+  }, 10);
+}
+
+export function showAvatarPicker(options: {
+  anchorEl: HTMLElement,
+  icons: string[],
+  customAvatars?: string[],
+  onSelect: (icon: string) => void,
+  onUpload: () => void,
+  onDeleteCustom?: (icon: string) => void
+}) {
+  // Remove any existing picker
+  document.querySelectorAll('.avatar-picker-menu').forEach(e => e.remove());
+
+  const pickerMenu = document.createElement('div');
+  pickerMenu.className = 'avatar-picker-menu';
+
+  const customAvatars = options.customAvatars || [];
+  const regularIcons = options.icons || [];
+
+  pickerMenu.innerHTML = `
+    <div class="avatar-picker-container">
+      <div class="avatar-thumb avatar-thumb-plus" title="Upload custom">+</div>
+      ${customAvatars.map(icon => `
+        <div class="avatar-thumb custom-avatar" data-icon="${icon}" title="Custom avatar - Right click to delete">
+          <img src="${icon}">
+          <div class="delete-overlay">×</div>
+        </div>
+      `).join('')}
+      ${regularIcons.map(icon => `
+        <div class="avatar-thumb regular-avatar" data-icon="${icon}">
+          <img src="${icon}">
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  // Position menu below anchorEl
+  const rect = options.anchorEl.getBoundingClientRect();
+  pickerMenu.style.left = `${rect.left + window.scrollX}px`;
+  pickerMenu.style.top = `${rect.bottom + window.scrollY + 4}px`;
+
+  document.body.appendChild(pickerMenu);
+
+  // "+" (upload) click
+  pickerMenu.querySelector('.avatar-thumb-plus')?.addEventListener('click', () => {
+    pickerMenu.remove();
+    options.onUpload();
+  });
+
+  // Custom avatar interactions
+  pickerMenu.querySelectorAll('.custom-avatar').forEach((thumb) => {
+    const icon = (thumb as HTMLElement).dataset.icon!;
+    
+    // Left click to select
+    thumb.addEventListener('click', (e) => {
+      e.preventDefault();
+      pickerMenu.remove();
+      options.onSelect(icon);
+    });
+
+    // Right click to delete (if callback provided)
+    if (options.onDeleteCustom) {
+      thumb.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        pickerMenu.remove();
+        if (confirm('Delete this custom avatar?')) {
+          options.onDeleteCustom!(icon);
+        }
+      });
+    }
+
+    // Show delete overlay on hover
+    thumb.addEventListener('mouseenter', () => {
+      const overlay = thumb.querySelector('.delete-overlay') as HTMLElement;
+      if (overlay) overlay.style.display = 'flex';
+    });
+
+    thumb.addEventListener('mouseleave', () => {
+      const overlay = thumb.querySelector('.delete-overlay') as HTMLElement;
+      if (overlay) overlay.style.display = 'none';
+    });
+
+    // Delete overlay click
+    const deleteOverlay = thumb.querySelector('.delete-overlay');
+    if (deleteOverlay && options.onDeleteCustom) {
+      deleteOverlay.addEventListener('click', (e) => {
+        e.stopPropagation();
+        pickerMenu.remove();
+        if (confirm('Delete this custom avatar?')) {
+          options.onDeleteCustom!(icon);
+        }
+      });
+    }
+  });
+
+  // Regular icon selection
+  pickerMenu.querySelectorAll('.regular-avatar').forEach((thumb) => {
+    const icon = (thumb as HTMLElement).dataset.icon!;
+    thumb.addEventListener('click', () => {
+      pickerMenu.remove();
+      options.onSelect(icon);
+    });
+  });
+
+  // Hide on click outside
+  setTimeout(() => {
+    const remove = (ev: MouseEvent) => {
+      if (!pickerMenu.contains(ev.target as Node) && ev.target !== options.anchorEl) pickerMenu.remove();
       document.removeEventListener('mousedown', remove);
     };
     document.addEventListener('mousedown', remove);

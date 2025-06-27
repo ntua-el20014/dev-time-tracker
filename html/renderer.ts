@@ -146,16 +146,23 @@ function setupRecordAndPauseBtns() {
   pauseBtn.style.display = 'none';
 }
 
+let hotkeyListenerAdded = false;
+
 function setupHotkeys() {
-  document.addEventListener('keydown', (e) => {
+  // Prevent duplicate listeners
+  if (hotkeyListenerAdded) return;
+  
+  const hotkeyHandler = (e: KeyboardEvent) => {
     // Ignore if typing in an input or textarea
     if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
 
     // Ctrl+R: Start/Stop recording
     if (e.ctrlKey && e.key.toLowerCase() === 'r') {
       e.preventDefault();
+      e.stopPropagation();
       const recordBtn = document.getElementById('recordBtn') as HTMLButtonElement;
       if (recordBtn) recordBtn.click();
+      return false;
     }
 
     // Ctrl+1: Dashboard tab
@@ -184,7 +191,10 @@ function setupHotkeys() {
       const pauseBtn = document.getElementById('pauseBtn') as HTMLButtonElement;
       if (pauseBtn && pauseBtn.style.display !== 'none') pauseBtn.click();
     }
-  });
+  };
+
+  document.addEventListener('keydown', hotkeyHandler);
+  hotkeyListenerAdded = true;
 }
 
 ipcRenderer.on('get-session-info', () => {

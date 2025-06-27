@@ -81,3 +81,10 @@ ipcMain.handle('complete-daily-goal', (_event, userId: number, date: string) => 
 ipcMain.handle('get-all-daily-goals', (_event, userId: number) => {
   return usage.getAllDailyGoals(userId);
 });
+
+ipcMain.handle('get-user-editors', async (event, userId) => {
+  return usage.getUserEditors(userId);
+});
+ipcMain.handle('get-user-lang-exts', async (event, userId) => {
+  return usage.getUserLangExts(userId);
+});

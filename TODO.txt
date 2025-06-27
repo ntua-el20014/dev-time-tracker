@@ -1,6 +1,7 @@
 TODO / Ideas for Improvements
 
 - [ ] Add sorting asc/desc options in summary tab
+- [ ] Schedule sessions in advance (show them in the calendar, and get notified one day before the session and the same day, each time you login until you actually record)
 - [ ] Present customizable charts with filtering options (language, editor, time per day on specified date range)
 - [ ] Session export: Export sessions or summaries to CSV for reporting.
 - [ ] Weekly/monthly reports: Generate and display reports for longer periods.
