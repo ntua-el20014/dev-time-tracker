@@ -11,6 +11,7 @@ import { getCurrentUserId } from './utils';
 import { loadUserLangMap } from '../src/utils/extractData';
 import './styles/base.css';
 import './styles/calendar.css';
+import './styles/charts.css';
 import './styles/dashboard.css';
 import './styles/goals.css';
 import './styles/layout.css';

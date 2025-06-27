@@ -3,8 +3,9 @@ import { ipcRenderer } from 'electron';
 import { formatTimeSpent } from '../src/utils/timeFormat';
 import edit from '../data/edit.png';
 import { escapeHtml, getLocalDateString, getWeekDates, getMonday, filterDailyDataForWeek, getCurrentUserId, prettyDate } from './utils';
-import { showModal } from './components';
+import { showModal, showChartConfigModal, renderCustomChart } from './components';
 import type { DailySummaryRow, SessionRow, Tag } from '../src/backend/types';
+import type { ChartConfig } from './components';
 
 // Store the current week start date (Monday)
 let currentWeekMonday = getMonday(new Date());
@@ -14,6 +15,66 @@ let allDailyData: DailySummaryRow[] = [];
 // Store filtered data for each view
 let filteredByDateData: DailySummaryRow[] = [];
 let filteredSessions: SessionRow[] = [];
+
+// Sorting state for both views
+let byDateSortState: { column: string | null; direction: 'asc' | 'desc' } = { column: null, direction: 'asc' };
+let bySessionSortState: { column: string | null; direction: 'asc' | 'desc' } = { column: null, direction: 'asc' };
+
+// Store created charts
+const customCharts: Array<{ id: string; config: ChartConfig; data: (DailySummaryRow | SessionRow)[] }> = [];
+
+// Helper functions for chart display
+function getAxisLabel(groupBy: string): string {
+  switch (groupBy) {
+    case 'date': return 'Date';
+    case 'language': return 'Programming Language';
+    case 'editor': return 'Editor/IDE';
+    case 'tag': return 'Tag';
+    case 'day-of-week': return 'Day of Week';
+    case 'hour-of-day': return 'Hour of Day';
+    default: return 'Category';
+  }
+}
+
+function getDatasetLabel(config: ChartConfig): string {
+  switch (config.aggregation) {
+    case 'total-time': return 'Total Time';
+    case 'session-count': return 'Number of Sessions';
+    case 'average-duration': return 'Average Duration';
+    default: return 'Value';
+  }
+}
+
+// Utility function to create sortable header
+function createSortableHeader(text: string, columnKey: string, currentSort: { column: string | null; direction: 'asc' | 'desc' }): string {
+  const isCurrentColumn = currentSort.column === columnKey;
+  const arrow = isCurrentColumn 
+    ? (currentSort.direction === 'asc' ? ' ▲' : ' ▼')
+    : '';
+  
+  return `<th class="sortable-header" data-column="${columnKey}">${text}${arrow}</th>`;
+}
+
+// Utility function to sort data
+function sortData<T>(data: T[], column: string, direction: 'asc' | 'desc', getValue: (item: T, column: string) => string | number): T[] {
+  return [...data].sort((a, b) => {
+    const aVal = getValue(a, column);
+    const bVal = getValue(b, column);
+    
+    // Handle different data types
+    let comparison = 0;
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      comparison = aVal.localeCompare(bVal);
+    } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+      comparison = aVal - bVal;
+    } else {
+      // Convert to string for comparison
+      comparison = String(aVal).localeCompare(String(bVal));
+    }
+    
+    return direction === 'asc' ? comparison : -comparison;
+  });
+}
 
 // render timeline
 function renderTimelineChart(dailyData: DailySummaryRow[], weekMonday: Date) {
@@ -41,9 +102,9 @@ function renderTimelineChart(dailyData: DailySummaryRow[], weekMonday: Date) {
 
   // Create chart HTML
   timelineContainer.innerHTML = `
-    <div class="timeline-header" style="display: flex; align-items: center; justify-content: space-between;">
-      <button id="week-prev-btn" style="font-size:1.5em; background:none; border:none; cursor:pointer;">&#8592;</button>
-      <h3 style="flex:1; text-align:center; margin:0;">
+    <div class="timeline-header">
+      <button id="week-prev-btn">&#8592;</button>
+      <h3>
         ${prettyDate(weekDays[0])} - 
         ${prettyDate(weekDays[6])}
       </h3>
@@ -52,9 +113,9 @@ function renderTimelineChart(dailyData: DailySummaryRow[], weekMonday: Date) {
         (() => {
           const todayMonday = getMonday(new Date());
           if (weekMonday >= todayMonday) {
-            return `<span style="display:inline-block;width:2.5em;"></span>`;
+            return `<span class="week-nav-spacer"></span>`;
           }
-          return `<button id="week-next-btn" style="font-size:1.5em; background:none; border:none; cursor:pointer;">&#8594;</button>`;
+          return `<button id="week-next-btn">&#8594;</button>`;
         })()
       }
     </div>
@@ -73,7 +134,7 @@ function renderTimelineChart(dailyData: DailySummaryRow[], weekMonday: Date) {
                 <div class="timeline-bar" style="height: ${height}px"></div>
                 <div class="timeline-hours">${timeText}</div>
               ` : `
-                <div class="timeline-bar" style="height: 0; visibility: hidden;"></div>
+                <div class="timeline-bar timeline-bar-hidden"></div>
                 <div class="timeline-hours"></div>
               `}
             </div>
@@ -106,8 +167,10 @@ function createFilterBar(options: {
     }
     return '';
   }).join(' ') + `
-    <button id="filter-apply" class="filter-btn apply">Apply</button>
-    <button id="filter-clear" class="filter-btn clear" type="button">Clear</button>
+    <div class="filter-btn-container">
+      <button id="filter-apply" class="filter-btn apply">Apply</button>
+      <button id="filter-clear" class="filter-btn clear" type="button">Clear</button>
+    </div>
   `;
 
   // Attach handlers
@@ -138,6 +201,124 @@ function createFilterBar(options: {
   return filterBar;
 }
 
+// Function to add a custom chart
+function addCustomChart(config: ChartConfig, data: (DailySummaryRow | SessionRow)[]) {
+  const chartId = `chart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const chartData = { id: chartId, config, data };
+  customCharts.push(chartData);
+  renderCustomChartsSection();
+  
+  // Scroll to the newly created chart after a short delay
+  setTimeout(() => {
+    const newChart = document.getElementById(chartId);
+    if (newChart) {
+      newChart.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 500);
+}
+
+// Function to render the custom charts section
+function renderCustomChartsSection() {
+  const summaryDiv = document.getElementById('summaryContent');
+  if (!summaryDiv) return;
+  
+  // Find or create the custom charts section
+  let chartsSection = summaryDiv.querySelector('.custom-charts-section') as HTMLElement;
+  if (!chartsSection) {
+    chartsSection = document.createElement('div');
+    chartsSection.className = 'custom-charts-section';
+    summaryDiv.appendChild(chartsSection);
+  }
+  
+  chartsSection.innerHTML = `
+    <h2>
+      Custom Charts (${customCharts.length})
+      ${customCharts.length > 0 ? '<button class="chart-action-btn" id="clearAllCharts">Clear All</button>' : ''}
+    </h2>
+  `;
+  
+  if (customCharts.length === 0) {
+    chartsSection.innerHTML += '<p style="color: var(--fg-secondary); font-style: italic;">No custom charts created yet. Use the "📊 Create Chart" buttons above to analyze your data with visual charts.</p>';
+    return;
+  }
+  
+  customCharts.forEach((chartData, index) => {
+    const chartContainer = document.createElement('div');
+    chartContainer.className = 'custom-chart-item';
+    chartContainer.innerHTML = `
+      <div class="custom-chart-header">
+        <div>
+          <div class="custom-chart-title">${chartData.config.title}</div>
+          <div class="custom-chart-config">
+            ${chartData.config.chartType} chart • ${getAxisLabel(chartData.config.groupBy)} vs ${getDatasetLabel(chartData.config)} • ${chartData.data.length} data points
+          </div>
+        </div>
+        <div class="chart-actions">
+          <button class="chart-action-btn" data-action="refresh" data-index="${index}">Refresh</button>
+          <button class="chart-action-btn" data-action="duplicate" data-index="${index}">Duplicate</button>
+          <button class="chart-action-btn" data-action="delete" data-index="${index}">Delete</button>
+        </div>
+      </div>
+      <div class="chart-container" id="${chartData.id}"></div>
+    `;
+    
+    chartsSection.appendChild(chartContainer);
+  });
+  
+  // Render all charts after DOM is ready
+  setTimeout(() => {
+    customCharts.forEach((chartData) => {
+      renderCustomChart(chartData.id, chartData.config, chartData.data, 500, 300);
+    });
+  }, 100);
+  
+  // Add event listeners for chart actions
+  chartsSection.querySelectorAll('.chart-action-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const action = (btn as HTMLElement).getAttribute('data-action');
+      const indexStr = (btn as HTMLElement).getAttribute('data-index');
+      
+      if (action === 'clear' || (btn as HTMLElement).id === 'clearAllCharts') {
+        if (confirm('Delete all custom charts?')) {
+          customCharts.length = 0;
+          renderCustomChartsSection();
+        }
+        return;
+      }
+      
+      if (indexStr === null) return;
+      const index = parseInt(indexStr);
+      const chartData = customCharts[index];
+      if (!chartData) return;
+      
+      switch (action) {
+        case 'refresh': {
+          // Get fresh data and re-render
+          const currentData = chartData.config.dataSource === 'sessions' ? filteredSessions : filteredByDateData;
+          chartData.data = [...currentData];
+          setTimeout(() => {
+            renderCustomChart(chartData.id, chartData.config, chartData.data, 500, 300);
+          }, 100);
+          break;
+        }
+        case 'duplicate': {
+          const newConfig = { ...chartData.config, title: chartData.config.title + ' (Copy)' };
+          addCustomChart(newConfig, [...chartData.data]);
+          break;
+        }
+        case 'delete': {
+          if (confirm(`Delete chart "${chartData.config.title}"?`)) {
+            customCharts.splice(index, 1);
+            renderCustomChartsSection();
+          }
+          break;
+        }
+      }
+    });
+  });
+}
+
 export async function renderSummary() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((window as any).__resetSummaryTabState) {
@@ -145,6 +326,9 @@ export async function renderSummary() {
     allDailyData = [];
     filteredByDateData = [];
     filteredSessions = [];
+    // Reset sorting state
+    byDateSortState = { column: null, direction: 'asc' };
+    bySessionSortState = { column: null, direction: 'asc' };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__resetSummaryTabState;
   }
@@ -199,10 +383,7 @@ export async function renderSummary() {
 
   // --- Filter toggle ---
   const filterContainer = document.createElement('div');
-  filterContainer.style.margin = '24px 0 8px 0';
-  filterContainer.style.display = 'flex';
-  filterContainer.style.gap = '16px';
-  filterContainer.style.alignItems = 'center';
+  filterContainer.className = 'summary-filter-container';
 
   const byDateBtn = document.createElement('button');
   byDateBtn.textContent = 'Summary by Date';
@@ -255,6 +436,23 @@ export async function renderSummary() {
 
     const detailsTitle = document.createElement('h1');
     detailsTitle.textContent = 'Summary';
+    detailsTitle.className = 'section-title-with-button';
+    
+    // Add create chart button next to title
+    const createChartBtn = document.createElement('button');
+    createChartBtn.textContent = '📊 Create Chart';
+    createChartBtn.className = 'create-chart-button';
+    createChartBtn.onclick = () => {
+      showChartConfigModal({
+        data: filteredByDateData,
+        dataSource: 'daily-summary',
+        onCreateChart: (config, data) => {
+          addCustomChart(config, data);
+        }
+      });
+    };
+    
+    detailsTitle.appendChild(createChartBtn);
     byDateContainer.appendChild(detailsTitle);
 
     // Initial data load
@@ -270,42 +468,103 @@ export async function renderSummary() {
     const oldTable = byDateContainer.querySelector('.details-container');
     if (oldTable) oldTable.remove();
 
+    // Sort data by date first (descending by default - most recent first)
+    const sortedData = byDateSortState.column === 'date' 
+      ? sortData(data, 'date', byDateSortState.direction, (item, column) => {
+          if (column === 'date') return new Date(item.date).getTime();
+          return String(item[column as keyof DailySummaryRow] || '');
+        })
+      : sortData(data, 'date', 'desc', (item) => new Date(item.date).getTime());
     
     // Group filtered data by date for detailed view
     const grouped: { [date: string]: DailySummaryRow[] } = {};
-    data.forEach((row: DailySummaryRow) => {
+    sortedData.forEach((row: DailySummaryRow) => {
       if (!grouped[row.date]) grouped[row.date] = [];
       grouped[row.date].push(row);
     });
 
+    // Sort rows within each date group if needed
+    Object.keys(grouped).forEach(date => {
+      if (byDateSortState.column && byDateSortState.column !== 'date') {
+        grouped[date] = sortData(grouped[date], byDateSortState.column, byDateSortState.direction, (item, column) => {
+          if (column === 'app') return item.app;
+          if (column === 'time') return item.total_time;
+          return String(item[column as keyof DailySummaryRow] || '');
+        });
+      }
+    });
+
     const detailsContainer = document.createElement('div');
     detailsContainer.className = 'details-container';
-    detailsContainer.innerHTML = Object.entries(grouped).map(([date, rows]) => `
-      <div class="summary-date-header">
-        <h3>${prettyDate(date)}</h3>
-      </div>
-      <table class="summary-table">
-        <thead>
+    
+    // Create single table with header
+    const table = document.createElement('table');
+    table.className = 'summary-table';
+    
+    // Create table header
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th></th>
+          ${createSortableHeader('Editor', 'app', byDateSortState)}
+          ${createSortableHeader('Time Spent', 'time', byDateSortState)}
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+    
+    // Generate table content with date separators
+    const tbody = table.querySelector('tbody')!;
+    let tableContent = '';
+    
+    Object.entries(grouped).forEach(([date, rows]) => {
+      // Add date separator row
+      tableContent += `
+        <tr class="date-separator-row">
+          <td colspan="3" class="date-separator">
+            <div class="sortable-header date-header" data-column="date">
+              ${prettyDate(date)}${byDateSortState.column === 'date' ? (byDateSortState.direction === 'asc' ? ' ▲' : ' ▼') : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+      
+      // Add data rows for this date
+      rows.forEach((row: DailySummaryRow) => {
+        tableContent += `
           <tr>
-            <th></th>
-            <th>Editor</th>
-            <th>Time Spent</th>
+            <td><img src="${row.icon}" alt="${escapeHtml(row.app)} icon" class="icon" /></td>
+            <td>${escapeHtml(row.app)}</td>
+            <td>${escapeHtml(formatTimeSpent(row.total_time))}</td>
           </tr>
-        </thead>
-        <tbody>
-          ${rows.map((row: DailySummaryRow) => {
-            return `
-              <tr>
-                <td><img src="${row.icon}" alt="${escapeHtml(row.app)} icon" class="icon" /></td>
-                <td>${escapeHtml(row.app)}</td>
-                <td>${escapeHtml(formatTimeSpent(row.total_time))}</td>
-              </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-    `).join('');
+        `;
+      });
+    });
+    
+    tbody.innerHTML = tableContent;
+    detailsContainer.appendChild(table);
     byDateContainer.appendChild(detailsContainer);
+
+    // Attach click handlers to sortable headers
+    table.querySelectorAll('.sortable-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const column = (header as HTMLElement).getAttribute('data-column');
+        if (column) {
+          handleByDateSort(column);
+        }
+      });
+    });
+  }
+
+  // Handle sorting for by-date view
+  function handleByDateSort(column: string) {
+    if (byDateSortState.column === column) {
+      byDateSortState.direction = byDateSortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      byDateSortState.column = column;
+      byDateSortState.direction = 'asc';
+    }
+    renderByDateTable(filteredByDateData);
   }
 
   // --- By Session ---
@@ -350,6 +609,23 @@ export async function renderSummary() {
 
     const sessionTitle = document.createElement('h1');
     sessionTitle.textContent = 'Sessions';
+    sessionTitle.className = 'section-title-with-button';
+
+    // Add create chart button next to title
+    const createSessionChartBtn = document.createElement('button');
+    createSessionChartBtn.textContent = '📊 Create Chart';
+    createSessionChartBtn.className = 'create-chart-button';
+    createSessionChartBtn.onclick = () => {
+      showChartConfigModal({
+        data: filteredSessions,
+        dataSource: 'sessions',
+        onCreateChart: (config, data) => {
+          addCustomChart(config, data);
+        }
+      });
+    };
+    
+    sessionTitle.appendChild(createSessionChartBtn);
     bySessionContainer.appendChild(sessionTitle);
 
     const sessionTable = document.createElement('table');
@@ -357,9 +633,9 @@ export async function renderSummary() {
     sessionTable.innerHTML = `
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Date</th>
-          <th>Duration</th>
+          ${createSortableHeader('Name', 'name', bySessionSortState)}
+          ${createSortableHeader('Date', 'date', bySessionSortState)}
+          ${createSortableHeader('Duration', 'duration', bySessionSortState)}
           <th></th>
         </tr>
       </thead>
@@ -367,10 +643,66 @@ export async function renderSummary() {
     `;
     bySessionContainer.appendChild(sessionTable);
 
+    // Attach click handlers to sortable headers
+    sessionTable.querySelectorAll('.sortable-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const column = (header as HTMLElement).getAttribute('data-column');
+        if (column) {
+          handleSessionSort(column);
+        }
+      });
+    });
+
+    // Handle sorting for session view
+    function handleSessionSort(column: string) {
+      if (bySessionSortState.column === column) {
+        bySessionSortState.direction = bySessionSortState.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        bySessionSortState.column = column;
+        bySessionSortState.direction = 'asc';
+      }
+      
+      // Re-sort and render the current sessions
+      const sortedSessions = sortData(filteredSessions, column, bySessionSortState.direction, (item, col) => {
+        if (col === 'name') return item.title;
+        if (col === 'date') return new Date(item.date).getTime();
+        if (col === 'duration') return item.duration || 0;
+        return String(item[col as keyof SessionRow] || '');
+      });
+      renderSessionRows(sortedSessions);
+      
+      // Update header arrows
+      updateSessionTableHeaders();
+    }
+
+    function updateSessionTableHeaders() {
+      const headers = sessionTable.querySelectorAll('.sortable-header');
+      headers.forEach(header => {
+        const column = (header as HTMLElement).getAttribute('data-column');
+        const text = header.textContent?.replace(/ [▲▼]/, '') || '';
+        const arrow = bySessionSortState.column === column 
+          ? (bySessionSortState.direction === 'asc' ? ' ▲' : ' ▼')
+          : '';
+        header.textContent = text + arrow;
+      });
+    }
+
     // Render filtered sessions
     function renderSessionRows(sessionsToRender: SessionRow[]) {
       const sessionTableBody = sessionTable.querySelector('tbody')!;
-      sessionTableBody.innerHTML = sessionsToRender.map((session: SessionRow) => {
+      
+      // Apply current sorting if any
+      let sortedSessions = sessionsToRender;
+      if (bySessionSortState.column) {
+        sortedSessions = sortData(sessionsToRender, bySessionSortState.column, bySessionSortState.direction, (item, column) => {
+          if (column === 'name') return item.title;
+          if (column === 'date') return new Date(item.date).getTime();
+          if (column === 'duration') return item.duration || 0;
+          return String(item[column as keyof SessionRow] || '');
+        });
+      }
+      
+      sessionTableBody.innerHTML = sortedSessions.map((session: SessionRow) => {
         const durationSec = session.duration || 0;
         const h = Math.floor(durationSec / 3600);
         const m = Math.floor((durationSec % 3600) / 60);
@@ -383,11 +715,11 @@ export async function renderSummary() {
           <tr data-session-id="${session.id}">
             <td>
               ${escapeHtml(session.title)}
-              ${session.tags && session.tags.length ? `<div style="margin-top:2px;font-size:0.9em;">
+              ${session.tags && session.tags.length ? `<div class="session-tags">
                 ${session.tags.map((t: string) => {
                   const tagObj = allTags.find(tag => tag.name === t);
                   const color = tagObj?.color || getComputedStyle(document.body).getPropertyValue('--accent') || '#f0db4f';
-                  return `<span style="background:${color};color:#222;padding:2px 8px;border-radius:8px;margin-right:4px;">${escapeHtml(t)}</span>`;
+                  return `<span class="session-tag" style="background:${color}">${escapeHtml(t)}</span>`;
                 }).join('')}
               </div>` : ''}
             </td>
@@ -395,7 +727,7 @@ export async function renderSummary() {
             <td>${durationStr.trim()}</td>
             <td>
               <button class="session-edit-btn" title="Edit session">
-                <img src="${edit}" alt="Edit" style="width:16px; height:16px;">
+                <img src="${edit}" alt="Edit">
               </button>
             </td>
           </tr>
@@ -408,7 +740,7 @@ export async function renderSummary() {
           e.stopPropagation();
           const tr = (btn as HTMLElement).closest('tr');
           const sessionId = tr?.getAttribute('data-session-id');
-          const session = sessions.find((s: SessionRow) => String(s.id) === String(sessionId));
+          const session = filteredSessions.find((s: SessionRow) => String(s.id) === String(sessionId));
           if (session) showEditSessionModal(session, async () => {
             const updatedSessions = await ipcRenderer.invoke('get-sessions', getCurrentUserId());
             filteredSessions = updatedSessions;
@@ -468,19 +800,21 @@ export async function renderSummary() {
         const form = document.getElementById('customModalForm');
         if (!form) return;
         const tagDiv = document.createElement('div');
-        tagDiv.style.margin = '12px 0';
+        tagDiv.className = 'modal-tag-section';
 
         tagDiv.innerHTML = `
-        <label style="font-weight:bold;">Tags:</label>
-        <div id="tag-list" style="margin:6px 0 8px 0; display:flex; flex-wrap:wrap; gap:6px;"></div>
-        <input id="tag-input" type="text" placeholder="Add tag and press Enter">
-        <select id="tag-select">
-          <option value="">-- no tag selected --</option>
-          ${allTags
-            .filter((t: Tag) => !selectedTags.includes(t.name))
-            .map((t: Tag) => `<option value="${t.name}">${t.name}</option>`)
-            .join('')}
-        </select>
+        <div class="modal-tag-section">
+          <label>Tags:</label>
+          <div id="tag-list" class="modal-tag-list"></div>
+          <input id="tag-input" type="text" placeholder="Add tag and press Enter">
+          <select id="tag-select">
+            <option value="">-- no tag selected --</option>
+            ${allTags
+              .filter((t: Tag) => !selectedTags.includes(t.name))
+              .map((t: Tag) => `<option value="${t.name}">${t.name}</option>`)
+              .join('')}
+          </select>
+        </div>
       `;
         form.appendChild(tagDiv);
 
@@ -490,9 +824,9 @@ export async function renderSummary() {
 
         function renderTags() {
           tagList.innerHTML = selectedTags.map(tag =>
-            `<span style="background:var(--accent);color:#222;padding:2px 10px;border-radius:12px;display:inline-flex;align-items:center;gap:4px;">
+            `<span class="modal-tag-item">
             ${tag}
-            <button type="button" data-tag="${tag}" style="background:none;border:none;color:#222;cursor:pointer;font-size:1em;">&times;</button>
+            <button type="button" class="modal-tag-remove" data-tag="${tag}">&times;</button>
           </span>`
           ).join('');
           tagList.querySelectorAll('button[data-tag]').forEach(btn => {
@@ -548,6 +882,9 @@ export async function renderSummary() {
   await renderByDateView();
   summaryDiv.appendChild(byDateContainer);
   summaryDiv.appendChild(bySessionContainer);
+  
+  // Initialize custom charts section
+  renderCustomChartsSection();
 
   // --- Toggle logic ---
   byDateBtn.onclick = async () => {
@@ -556,6 +893,8 @@ export async function renderSummary() {
     byDateContainer.style.display = '';
     bySessionContainer.style.display = 'none';
     filteredByDateData = [];
+    // Reset sorting state for by-date view
+    byDateSortState = { column: null, direction: 'asc' };
     await renderByDateView();
   };
   bySessionBtn.onclick = async () => {
@@ -564,6 +903,8 @@ export async function renderSummary() {
     byDateContainer.style.display = 'none';
     bySessionContainer.style.display = '';
     filteredSessions = [];
+    // Reset sorting state for session view
+    bySessionSortState = { column: null, direction: 'asc' };
     await renderBySessionView();
   };
 }

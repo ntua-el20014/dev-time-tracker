@@ -78,3 +78,11 @@
   box-sizing: border-box;
   display: block;
 }
+
+/* Summary filter container styles */
+.summary-filter-container {
+  margin: 24px 0 8px 0;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}

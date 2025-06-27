@@ -45,6 +45,7 @@
   box-shadow: 0 1px 2px 0 rgba(0,0,0,0.04);
 }
 .goal-btn:hover, .goal-btn:focus {
-  background: #005fa3;
+  background: var(--accent, #0078d4);
+  filter: brightness(0.85);
   outline: none;
 }

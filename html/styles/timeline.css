@@ -8,17 +8,37 @@
   box-sizing: border-box;
 }
 
+.timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .timeline-header h3 {
+  flex: 1;
+  text-align: center;
   margin: 0;
   font-size: 1.2rem;
   color: var(--accent);
 }
 
-.timeline-header button {
+#week-prev-btn,
+#week-next-btn {
+  font-size: 1.5em;
+  background: none;
+  border: none;
+  cursor: pointer;
   transition: transform 0.18s cubic-bezier(.4, .4, .2, 1);
 }
-.timeline-header button:hover:enabled {
+
+#week-prev-btn:hover:enabled,
+#week-next-btn:hover:enabled {
   transform: scale(1.18);
+}
+
+.week-nav-spacer {
+  display: inline-block;
+  width: 2.5em;
 }
 
 .timeline-chart {
@@ -58,6 +78,11 @@
   background: var(--accent);
   border-radius: 4px 4px 0 0;
   transition: height 0.3s ease;
+}
+
+.timeline-bar-hidden {
+  height: 0;
+  visibility: hidden;
 }
 
 .timeline-hours {
