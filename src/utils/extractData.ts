@@ -1,19 +1,22 @@
-import linguistLanguages from 'linguist-languages';
-import { getIconForFile } from 'vscode-icons-js';
-import { ipcRenderer } from 'electron';
-import { getCurrentUserId } from '../../html/utils';
+import * as linguistLanguages from "linguist-languages";
+import { getIconForFile } from "vscode-icons-js";
+import { ipcRenderer } from "electron";
+import { getCurrentUserId } from "../../renderer/utils";
 
 const preferredExtensionMap: Record<string, string> = {
-  '.md': 'Markdown',
-  '.sql': 'SQL',
-  '.html': 'HTML',
-  '.txt': 'Text',
+  ".md": "Markdown",
+  ".sql": "SQL",
+  ".html": "HTML",
+  ".txt": "Text",
 };
 
 let userLangMap: Record<string, string> = {};
 
 export async function loadUserLangMap() {
-  userLangMap = await ipcRenderer.invoke('get-user-lang-map', getCurrentUserId());
+  userLangMap = await ipcRenderer.invoke(
+    "get-user-lang-map",
+    getCurrentUserId()
+  );
 }
 
 export function getLanguageDataFromTitle(title: string) {
@@ -21,15 +24,15 @@ export function getLanguageDataFromTitle(title: string) {
   const allExts = new Set<string>();
   for (const lang of Object.values(linguistLanguages)) {
     if (Array.isArray(lang.extensions)) {
-      lang.extensions.forEach(ext => allExts.add(ext));
+      lang.extensions.forEach((ext) => allExts.add(ext));
     }
   }
 
   // Find the first extension match in the title
   let foundExt: string | null = null;
   for (const ext of allExts) {
-    const escapedExt = ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`${escapedExt}(\\W|$)`, 'i');
+    const escapedExt = ext.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`${escapedExt}(\\W|$)`, "i");
     if (regex.test(title)) {
       foundExt = ext;
       break;
@@ -48,11 +51,11 @@ export function getLanguageDataFromTitle(title: string) {
   let lang;
   if (preferredExtensionMap[foundExt]) {
     lang = Object.values(linguistLanguages).find(
-      l => l.name === preferredExtensionMap[foundExt]
+      (l) => l.name === preferredExtensionMap[foundExt]
     );
   } else {
     lang = Object.values(linguistLanguages).find(
-      l => Array.isArray(l.extensions) && l.extensions.includes(foundExt)
+      (l) => Array.isArray(l.extensions) && l.extensions.includes(foundExt)
     );
   }
 
@@ -68,7 +71,6 @@ export function getLanguageDataFromTitle(title: string) {
     language: lang.name,
     extension: foundExt,
   };
-
 }
 
 export function getLangIconUrl(ext?: string): string | null {
@@ -77,7 +79,7 @@ export function getLangIconUrl(ext?: string): string | null {
   if (!icon) return null;
 
   // development
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === "development") {
     return `/icons/${icon}`;
   }
   // production

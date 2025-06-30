@@ -99,7 +99,7 @@ npm run make
 ## 🗂️ Project Structure
 
 ```
-html/
+renderer/
   renderer.ts         # Main renderer process entry
   summaryTab.ts       # Summary tab logic (summary, sessions, custom charts)
   logsTab.ts          # Logs tab logic (today's activity, daily goals)
@@ -145,7 +145,7 @@ populateDummyData.ts  # Script to populate the database with dummy data
 
 ### 🎨 Styles
 
-View the [CSS organization](./html/styles/styles.md) for details on how styles are structured and used.
+View the [CSS organization](./renderer/styles/styles.md) for details on how styles are structured and used.
 
 ---
 

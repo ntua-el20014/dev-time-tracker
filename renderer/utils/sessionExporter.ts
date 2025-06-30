@@ -1,9 +1,9 @@
-import { ipcRenderer } from 'electron';
-import type { SessionRow, DailySummaryRow } from '../../src/backend/types';
-import { showNotification } from '../components';
+import { ipcRenderer } from "electron";
+import type { SessionRow, DailySummaryRow } from "@shared/types";
+import { showNotification } from "../components";
 
 export interface ExportOptions {
-  format: 'csv' | 'json';
+  format: "csv" | "json";
   dateRange?: {
     start: string;
     end: string;
@@ -24,50 +24,57 @@ export class SessionExporter {
   async exportData(userId: number, options: ExportOptions): Promise<void> {
     try {
       const data = await this.collectData(userId, options);
-      
-      if (options.format === 'csv') {
+
+      if (options.format === "csv") {
         await this.exportAsCSV(data);
       } else {
         await this.exportAsJSON(data);
       }
-      
+
       // Show success notification
-      showNotification('Data exported successfully!');
+      showNotification("Data exported successfully!");
     } catch (error) {
-      console.error('Export failed:', error);
-      showNotification('Export failed. Please try again.');
+      console.error("Export failed:", error);
+      showNotification("Export failed. Please try again.");
     }
   }
-  
+
   private async collectData(userId: number, options: ExportOptions) {
     const data: Record<string, unknown[]> = {};
-    
+
     if (options.includeFields.sessions) {
       const filters: Record<string, unknown> = {};
-      
+
       if (options.dateRange) {
         filters.startDate = options.dateRange.start;
         filters.endDate = options.dateRange.end;
       }
-      
-      let sessions: SessionRow[] = await ipcRenderer.invoke('get-sessions', userId, filters);
-      
+
+      let sessions: SessionRow[] = await ipcRenderer.invoke(
+        "get-sessions",
+        userId,
+        filters
+      );
+
       // Apply additional filters
       if (options.filters) {
         if (options.filters.tags && options.filters.tags.length > 0) {
-          sessions = sessions.filter(session => 
-            session.tags?.some((tag: string) => options.filters?.tags?.includes(tag))
+          sessions = sessions.filter((session) =>
+            session.tags?.some((tag: string) =>
+              options.filters?.tags?.includes(tag)
+            )
           );
         }
-        
+
         if (options.filters.minDuration) {
-          sessions = sessions.filter(session => 
-            (session.duration || 0) >= (options.filters?.minDuration || 0)
+          sessions = sessions.filter(
+            (session) =>
+              (session.duration || 0) >= (options.filters?.minDuration || 0)
           );
         }
       }
-      
-      data.sessions = sessions.map(session => ({
+
+      data.sessions = sessions.map((session) => ({
         id: session.id,
         title: session.title,
         description: session.description,
@@ -75,66 +82,74 @@ export class SessionExporter {
         startTime: session.start_time,
         duration: session.duration,
         durationFormatted: this.formatDuration(session.duration || 0),
-        tags: session.tags?.join(', ') || '',
-        timestamp: session.timestamp
+        tags: session.tags?.join(", ") || "",
+        timestamp: session.timestamp,
       }));
     }
-    
+
     if (options.includeFields.dailySummary) {
-      const dailyData: DailySummaryRow[] = await ipcRenderer.invoke('get-daily-summary', userId, {
-        startDate: options.dateRange?.start,
-        endDate: options.dateRange?.end
-      });
-      
-      data.dailySummary = dailyData.map(day => ({
+      const dailyData: DailySummaryRow[] = await ipcRenderer.invoke(
+        "get-daily-summary",
+        userId,
+        {
+          startDate: options.dateRange?.start,
+          endDate: options.dateRange?.end,
+        }
+      );
+
+      data.dailySummary = dailyData.map((day) => ({
         date: day.date,
         application: day.app,
-        language: day.language || 'Unknown',
+        language: day.language || "Unknown",
         timeSpent: day.total_time,
-        timeSpentFormatted: this.formatDuration(day.total_time)
+        timeSpentFormatted: this.formatDuration(day.total_time),
       }));
     }
-    
+
     if (options.includeFields.tags) {
-      data.tags = await ipcRenderer.invoke('get-all-tags', userId);
+      data.tags = await ipcRenderer.invoke("get-all-tags", userId);
     }
-    
+
     if (options.includeFields.goals) {
-      data.goals = await ipcRenderer.invoke('get-all-daily-goals', userId);
+      data.goals = await ipcRenderer.invoke("get-all-daily-goals", userId);
     }
-    
+
     return data;
   }
-  
+
   private async exportAsCSV(data: Record<string, unknown[]>): Promise<void> {
-    const { filePath } = await ipcRenderer.invoke('show-save-dialog', {
-      title: 'Export as CSV',
-      defaultPath: `dev-tracker-export-${new Date().toISOString().split('T')[0]}.zip`,
-      filters: [{ name: 'ZIP Archive', extensions: ['zip'] }]
+    const { filePath } = await ipcRenderer.invoke("show-save-dialog", {
+      title: "Export as CSV",
+      defaultPath: `dev-tracker-export-${
+        new Date().toISOString().split("T")[0]
+      }.zip`,
+      filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
     });
-    
+
     if (!filePath) return;
-    
-    await ipcRenderer.invoke('export-custom-csv', data, filePath);
+
+    await ipcRenderer.invoke("export-custom-csv", data, filePath);
   }
-  
+
   private async exportAsJSON(data: Record<string, unknown[]>): Promise<void> {
-    const { filePath } = await ipcRenderer.invoke('show-save-dialog', {
-      title: 'Export as JSON',
-      defaultPath: `dev-tracker-export-${new Date().toISOString().split('T')[0]}.json`,
-      filters: [{ name: 'JSON File', extensions: ['json'] }]
+    const { filePath } = await ipcRenderer.invoke("show-save-dialog", {
+      title: "Export as JSON",
+      defaultPath: `dev-tracker-export-${
+        new Date().toISOString().split("T")[0]
+      }.json`,
+      filters: [{ name: "JSON File", extensions: ["json"] }],
     });
-    
+
     if (!filePath) return;
-    
-    await ipcRenderer.invoke('export-custom-json', data, filePath);
+
+    await ipcRenderer.invoke("export-custom-json", data, filePath);
   }
-  
+
   private formatDuration(seconds: number): string {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
-    
+
     if (h > 0) return `${h}h ${m}m ${s}s`;
     if (m > 0) return `${m}m ${s}s`;
     return `${s}s`;
@@ -143,9 +158,9 @@ export class SessionExporter {
 
 export function createExportModal(userId: number): void {
   const exporter = new SessionExporter();
-  
-  const modal = document.createElement('div');
-  modal.className = 'chart-modal-overlay';
+
+  const modal = document.createElement("div");
+  modal.className = "chart-modal-overlay";
   modal.innerHTML = `
     <div class="chart-modal-content export-modal">
       <div class="chart-modal-header">
@@ -212,74 +227,80 @@ export function createExportModal(userId: number): void {
       </div>
     </div>
   `;
-  
+
   document.body.appendChild(modal);
-  
-  const form = modal.querySelector('#exportForm') as HTMLFormElement;
-  const submitBtn = modal.querySelector('.chart-modal-submit') as HTMLButtonElement;
-  const cancelBtn = modal.querySelector('.chart-modal-cancel') as HTMLButtonElement;
-  const closeBtn = modal.querySelector('.chart-modal-close') as HTMLButtonElement;
-  
+
+  const form = modal.querySelector("#exportForm") as HTMLFormElement;
+  const submitBtn = modal.querySelector(
+    ".chart-modal-submit"
+  ) as HTMLButtonElement;
+  const cancelBtn = modal.querySelector(
+    ".chart-modal-cancel"
+  ) as HTMLButtonElement;
+  const closeBtn = modal.querySelector(
+    ".chart-modal-close"
+  ) as HTMLButtonElement;
+
   // Handle form submission
-  submitBtn.addEventListener('click', async (e) => {
+  submitBtn.addEventListener("click", async (e) => {
     e.preventDefault();
-    
+
     const formData = new FormData(form);
     const options: ExportOptions = {
-      format: formData.get('format') as 'csv' | 'json',
+      format: formData.get("format") as "csv" | "json",
       includeFields: {
-        sessions: formData.has('sessions'),
-        dailySummary: formData.has('dailySummary'),
-        tags: formData.has('tags'),
-        goals: formData.has('goals')
-      }
+        sessions: formData.has("sessions"),
+        dailySummary: formData.has("dailySummary"),
+        tags: formData.has("tags"),
+        goals: formData.has("goals"),
+      },
     };
-    
+
     // Add date range if specified
-    const startDate = formData.get('startDate') as string;
-    const endDate = formData.get('endDate') as string;
+    const startDate = formData.get("startDate") as string;
+    const endDate = formData.get("endDate") as string;
     if (startDate && endDate) {
       options.dateRange = { start: startDate, end: endDate };
     }
-    
+
     // Add filters if specified
-    const minDuration = formData.get('minDuration') as string;
+    const minDuration = formData.get("minDuration") as string;
     if (minDuration) {
       options.filters = {
-        minDuration: parseInt(minDuration)
+        minDuration: parseInt(minDuration),
       };
     }
-    
+
     // Disable button and show loading state
-    submitBtn.textContent = 'Exporting...';
+    submitBtn.textContent = "Exporting...";
     submitBtn.disabled = true;
-    
+
     try {
       await exporter.exportData(userId, options);
       modal.remove();
     } catch (error) {
-      console.error('Export failed:', error);
-      submitBtn.textContent = 'Export Data';
+      console.error("Export failed:", error);
+      submitBtn.textContent = "Export Data";
       submitBtn.disabled = false;
     }
   });
-  
+
   // Handle cancel/close
   const closeModal = () => modal.remove();
-  cancelBtn.addEventListener('click', closeModal);
-  closeBtn.addEventListener('click', closeModal);
-  
+  cancelBtn.addEventListener("click", closeModal);
+  closeBtn.addEventListener("click", closeModal);
+
   // Close on overlay click
-  modal.addEventListener('click', (e) => {
+  modal.addEventListener("click", (e) => {
     if (e.target === modal) closeModal();
   });
-  
+
   // Close on Escape key
   const handleEscape = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       closeModal();
-      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener("keydown", handleEscape);
     }
   };
-  document.addEventListener('keydown', handleEscape);
+  document.addEventListener("keydown", handleEscape);
 }

@@ -1,25 +1,30 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/config.ts
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import fs from "fs";
+import path from "path";
+import os from "os";
+import {
+  CONFIG_DIR,
+  CONFIG_FILE,
+  DEFAULT_ACCENT_COLORS,
+} from "@shared/constants";
 
-const CONFIG_DIR = path.join(os.homedir(), '.dev-time-tracker');
-const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
+const configDir = path.join(os.homedir(), CONFIG_DIR);
+const configPath = path.join(configDir, CONFIG_FILE);
 
 export type EditorColorConfig = { [app: string]: string };
 
 function ensureConfigDirExists() {
-  if (!fs.existsSync(CONFIG_DIR)) {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true });
   }
 }
 
 export function loadConfig(): any {
   ensureConfigDirExists();
   try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    if (fs.existsSync(configPath)) {
+      return JSON.parse(fs.readFileSync(configPath, "utf-8"));
     }
   } catch {
     //nothing to do here, just return empty object
@@ -29,18 +34,21 @@ export function loadConfig(): any {
 
 export function saveConfig(cfg: any) {
   ensureConfigDirExists();
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf-8');
+  fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf-8");
 }
 
 export function loadEditorColors(userId?: number): EditorColorConfig {
   const cfg = loadConfig();
   if (userId !== undefined) {
-    return (cfg.userSettings?.[userId]?.editorColors) || {};
+    return cfg.userSettings?.[userId]?.editorColors || {};
   }
   return cfg.editorColors || {};
 }
 
-export function saveEditorColors(editorColors: EditorColorConfig, userId?: number) {
+export function saveEditorColors(
+  editorColors: EditorColorConfig,
+  userId?: number
+) {
   const cfg = loadConfig();
   if (userId !== undefined) {
     cfg.userSettings = cfg.userSettings || {};
@@ -52,37 +60,46 @@ export function saveEditorColors(editorColors: EditorColorConfig, userId?: numbe
   saveConfig(cfg);
 }
 
-export function getAccentColor(theme: 'dark' | 'light' = 'dark', userId?: number): string {
+export function getAccentColor(
+  theme: "dark" | "light" = "dark",
+  userId?: number
+): string {
   const cfg = loadConfig();
   if (userId !== undefined) {
     const userCfg = cfg.userSettings?.[userId] || {};
-    if (theme === 'light') return userCfg.accentColorLight || '#007acc'; // Default light blue for light mode
-    return userCfg.accentColorDark || '#f0db4f'; // Default yellow for dark mode
+    if (theme === "light")
+      return userCfg.accentColorLight || DEFAULT_ACCENT_COLORS.light;
+    return userCfg.accentColorDark || DEFAULT_ACCENT_COLORS.dark;
   }
-  if (theme === 'light') return cfg.accentColorLight || '#007acc';
-  return cfg.accentColorDark || '#f0db4f';
+  if (theme === "light")
+    return cfg.accentColorLight || DEFAULT_ACCENT_COLORS.light;
+  return cfg.accentColorDark || DEFAULT_ACCENT_COLORS.dark;
 }
 
-export function setAccentColor(color: string, theme: 'dark' | 'light' = 'dark', userId?: number) {
+export function setAccentColor(
+  color: string,
+  theme: "dark" | "light" = "dark",
+  userId?: number
+) {
   const cfg = loadConfig();
   if (userId !== undefined) {
     cfg.userSettings = cfg.userSettings || {};
     cfg.userSettings[userId] = cfg.userSettings[userId] || {};
-    if (theme === 'light') cfg.userSettings[userId].accentColorLight = color;
+    if (theme === "light") cfg.userSettings[userId].accentColorLight = color;
     else cfg.userSettings[userId].accentColorDark = color;
   } else {
-    if (theme === 'light') cfg.accentColorLight = color;
+    if (theme === "light") cfg.accentColorLight = color;
     else cfg.accentColorDark = color;
   }
   saveConfig(cfg);
 }
 
-export function getUserTheme(userId: number): 'light' | 'dark' {
+export function getUserTheme(userId: number): "light" | "dark" {
   const cfg = loadConfig();
-  return (cfg.userSettings?.[userId]?.theme) || 'dark';
+  return cfg.userSettings?.[userId]?.theme || "dark";
 }
 
-export function setUserTheme(theme: 'light' | 'dark', userId: number) {
+export function setUserTheme(theme: "light" | "dark", userId: number) {
   const cfg = loadConfig();
   cfg.userSettings = cfg.userSettings || {};
   cfg.userSettings[userId] = cfg.userSettings[userId] || {};

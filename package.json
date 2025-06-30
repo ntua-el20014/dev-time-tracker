@@ -6,12 +6,20 @@
   "main": ".webpack/main",
   "scripts": {
     "start": "electron-forge start",
+    "dev": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
+    "lint:fix": "eslint --ext .ts,.tsx . --fix",
+    "type-check": "tsc --noEmit",
+    "type-check:main": "tsc --noEmit -p tsconfig.main.json",
+    "type-check:renderer": "tsc --noEmit -p tsconfig.renderer.json",
     "rebuild": "electron-rebuild",
-    "populate": "electron --no-sandbox -r ts-node/register ./dist/populateDummyData.js"
+    "clean": "rimraf dist .webpack out",
+    "populate": "electron --no-sandbox -r ts-node/register ./scripts/populateDummyData.ts",
+    "backup-db": "node -e \"console.log('Run backup from within the app')\"",
+    "build": "npm run type-check && electron-forge make"
   },
   "keywords": [],
   "author": {
@@ -46,6 +54,7 @@
     "fork-ts-checker-webpack-plugin": "^7.3.0",
     "html-webpack-plugin": "^5.6.3",
     "node-loader": "^2.1.0",
+    "rimraf": "^6.0.1",
     "style-loader": "^3.3.4",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
@@ -62,7 +71,7 @@
     "extract-file-icon": "^0.3.2",
     "json2csv": "^6.0.0-alpha.2",
     "language-icons": "^0.3.0",
-    "linguist-languages": "^7.30.0",
+    "linguist-languages": "^8.0.0",
     "vscode-icons-js": "^11.6.1"
   }
 }

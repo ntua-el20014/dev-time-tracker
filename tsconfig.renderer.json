@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "./dist/renderer",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"]
+  },
+  "include": ["renderer/**/*", "shared/types/**/*"],
+  "exclude": ["src/**/*", "dist/**/*", "node_modules/**/*"]
+}

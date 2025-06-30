@@ -1,11 +1,17 @@
-import { ipcRenderer } from 'electron';
-import { renderPercentBar } from './components';
-import { getMonday, getWeekDates, getLocalDateString, filterDailyDataForWeek, getCurrentUserId } from './utils';
-import { getLangIconUrl } from '../src/utils/extractData';
-import type { DailySummaryRow, SessionRow } from '../src/backend/types';
+import { ipcRenderer } from "electron";
+import { renderPercentBar } from "./components";
+import {
+  getMonday,
+  getWeekDates,
+  getLocalDateString,
+  filterDailyDataForWeek,
+  getCurrentUserId,
+} from "./utils";
+import { getLangIconUrl } from "../src/utils/extractData";
+import type { DailySummaryRow, SessionRow } from "@shared/types";
 
 export async function renderDashboard() {
-  const container = document.getElementById('dashboardContent');
+  const container = document.getElementById("dashboardContent");
   if (!container) return;
   container.innerHTML = `
     <div id="dashboard-inner">
@@ -17,31 +23,44 @@ export async function renderDashboard() {
     </div>
   `;
 
-  
   // --- Daily Goal Progress Bar ---
   const userId = getCurrentUserId();
-  const today = new Date().toLocaleDateString('en-CA');
-  const dailyGoal = await ipcRenderer.invoke('get-daily-goal', userId, today);
-  const totalMins = await ipcRenderer.invoke('get-total-time-for-day', userId, today);
+  const today = new Date().toLocaleDateString("en-CA");
+  const dailyGoal = await ipcRenderer.invoke("get-daily-goal", userId, today);
+  const totalMins = await ipcRenderer.invoke(
+    "get-total-time-for-day",
+    userId,
+    today
+  );
 
-  const goalDiv = document.getElementById('dashboard-goal-progress');
+  const goalDiv = document.getElementById("dashboard-goal-progress");
   if (goalDiv && dailyGoal) {
     const percent = Math.min(100, (totalMins / dailyGoal.time) * 100);
     goalDiv.innerHTML = `
       <div style="margin-bottom:8px;">
-        <b>Daily Goal:</b> ${totalMins.toFixed(0)} / ${dailyGoal.time} mins (${percent.toFixed(0)}%)
+        <b>Daily Goal:</b> ${totalMins.toFixed(0)} / ${
+      dailyGoal.time
+    } mins (${percent.toFixed(0)}%)
       </div>
-      ${renderPercentBar([
-        { label: 'Progress', percent, color: percent >= 100 ? '#4caf50' : 'var(--accent)' },
-        { label: '', percent: 100 - percent, color: '#eee' }
-      ], 18, 8)}
+      ${renderPercentBar(
+        [
+          {
+            label: "Progress",
+            percent,
+            color: percent >= 100 ? "#4caf50" : "var(--accent)",
+          },
+          { label: "", percent: 100 - percent, color: "#eee" },
+        ],
+        18,
+        8
+      )}
     `;
   } else if (goalDiv) {
-    goalDiv.innerHTML = '';
+    goalDiv.innerHTML = "";
   }
 
   // --- Calendar Widget ---
-  const calendarDiv = document.getElementById('dashboard-calendar');
+  const calendarDiv = document.getElementById("dashboard-calendar");
   if (calendarDiv) {
     const calendar = await renderCalendarWidget();
     calendarDiv.appendChild(calendar);
@@ -49,7 +68,7 @@ export async function renderDashboard() {
 
   // --- Recent Activity Stats ---
   await renderRecentActivity();
-/*
+  /*
   // Recent activity chart (example: last 7 days total usage)
   const chartsDiv = document.getElementById('dashboard-charts');
   const daily = await ipcRenderer.invoke('get-daily-summary', getCurrentUserId());
@@ -98,33 +117,48 @@ async function renderCalendarWidget(): Promise<HTMLDivElement> {
   const daysInMonth = new Date(year, month, 0).getDate();
 
   // Pass userId as first argument
-  const loggedDaysRaw = await ipcRenderer.invoke('get-logged-days-of-month', getCurrentUserId(), year, month) as LoggedDay[];
+  const loggedDaysRaw = (await ipcRenderer.invoke(
+    "get-logged-days-of-month",
+    getCurrentUserId(),
+    year,
+    month
+  )) as LoggedDay[];
   const loggedDaysSet = new Set(
-    loggedDaysRaw.map((row) => Number(row.date.split('-')[2]))
+    loggedDaysRaw.map((row) => Number(row.date.split("-")[2]))
   );
 
   // Build calendar grid
   const firstDay = new Date(year, month - 1, 1).getDay(); // 0=Sunday
-  const calendar = document.createElement('div');
-  calendar.className = 'calendar-widget';
+  const calendar = document.createElement("div");
+  calendar.className = "calendar-widget";
 
   let html = `
     <div class="calendar-header" style="display:flex;align-items:center;justify-content:space-between;">
       <button id="cal-prev-btn" style="font-size:1.2em;background:none;border:none;cursor:pointer;">&#8592;</button>
       <span style="flex:1;text-align:center;">
-        ${new Date(year, month - 1).toLocaleString(undefined, { month: 'long', year: 'numeric' })}
+        ${new Date(year, month - 1).toLocaleString(undefined, {
+          month: "long",
+          year: "numeric",
+        })}
       </span>
       <button id="cal-next-btn" style="font-size:1.2em;background:none;border:none;cursor:pointer;">&#8594;</button>
     </div>
     <div class="calendar-grid">
-      ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<div class="calendar-day-label">${d}</div>`).join('')}
+      ${["S", "M", "T", "W", "T", "F", "S"]
+        .map((d) => `<div class="calendar-day-label">${d}</div>`)
+        .join("")}
   `;
   let day = 1;
-  for (let i = 0; i < 42; i++) { // 6 weeks max
+  for (let i = 0; i < 42; i++) {
+    // 6 weeks max
     if (i < firstDay || day > daysInMonth) {
       html += `<div class="calendar-cell"></div>`;
     } else {
-      html += `<div class="calendar-cell${loggedDaysSet.has(day) ? ' logged' : ''}">${loggedDaysSet.has(day) ? '✗' : ''}<span class="calendar-date">${day}</span></div>`;
+      html += `<div class="calendar-cell${
+        loggedDaysSet.has(day) ? " logged" : ""
+      }">${
+        loggedDaysSet.has(day) ? "✗" : ""
+      }<span class="calendar-date">${day}</span></div>`;
       day++;
     }
   }
@@ -133,8 +167,12 @@ async function renderCalendarWidget(): Promise<HTMLDivElement> {
 
   // Add navigation handlers
   setTimeout(() => {
-    const prevBtn = calendar.querySelector('#cal-prev-btn') as HTMLButtonElement;
-    const nextBtn = calendar.querySelector('#cal-next-btn') as HTMLButtonElement;
+    const prevBtn = calendar.querySelector(
+      "#cal-prev-btn"
+    ) as HTMLButtonElement;
+    const nextBtn = calendar.querySelector(
+      "#cal-next-btn"
+    ) as HTMLButtonElement;
     if (prevBtn) {
       prevBtn.onclick = async () => {
         calendarMonth--;
@@ -153,12 +191,12 @@ async function renderCalendarWidget(): Promise<HTMLDivElement> {
       const currentYear = now.getFullYear();
       if (calendarYear >= currentYear && calendarMonth >= currentMonth) {
         nextBtn.disabled = true;
-        nextBtn.style.opacity = '0.5';
-        nextBtn.style.cursor = '';
+        nextBtn.style.opacity = "0.5";
+        nextBtn.style.cursor = "";
       } else {
         nextBtn.disabled = false;
-        nextBtn.style.opacity = '';
-        nextBtn.style.cursor = 'pointer';
+        nextBtn.style.opacity = "";
+        nextBtn.style.cursor = "pointer";
         nextBtn.onclick = async () => {
           calendarMonth++;
           if (calendarMonth > 12) {
@@ -177,16 +215,22 @@ async function renderCalendarWidget(): Promise<HTMLDivElement> {
 
 // --- Recent Activity Stats ---
 async function renderRecentActivity() {
-  const statsDiv = document.getElementById('dashboard-quickstats');
+  const statsDiv = document.getElementById("dashboard-quickstats");
   if (!statsDiv) return;
 
   // Pass userId as first argument
-  const dailySummary: DailySummaryRow[] = await ipcRenderer.invoke('get-daily-summary', getCurrentUserId());
-  const sessions: SessionRow[] = await ipcRenderer.invoke('get-sessions', getCurrentUserId());
+  const dailySummary: DailySummaryRow[] = await ipcRenderer.invoke(
+    "get-daily-summary",
+    getCurrentUserId()
+  );
+  const sessions: SessionRow[] = await ipcRenderer.invoke(
+    "get-sessions",
+    getCurrentUserId()
+  );
 
   // Get current week dates
   const monday = getMonday(new Date());
-  const weekDate = getWeekDates(monday)
+  const weekDate = getWeekDates(monday);
   const weekDates = weekDate.map(getLocalDateString);
 
   // Filter daily summary for this week
@@ -195,12 +239,17 @@ async function renderRecentActivity() {
   // Top language of the week
   const startDate = getLocalDateString(weekDate[0]);
   const endDate = getLocalDateString(weekDate[6]);
-  const weeklyLangSummary = await ipcRenderer.invoke('get-language-summary-by-date-range', getCurrentUserId(), startDate, endDate);
+  const weeklyLangSummary = await ipcRenderer.invoke(
+    "get-language-summary-by-date-range",
+    getCurrentUserId(),
+    startDate,
+    endDate
+  );
   // weeklyLangSummary: Array<{ language: string, total_time: number }>
   const topLang = weeklyLangSummary[0];
 
   // Get icon for topLang
-  let topLangIconHtml = '';
+  let topLangIconHtml = "";
   if (topLang && topLang.language) {
     const langExt = topLang.lang_ext;
     const langIconUrl = getLangIconUrl(langExt);
@@ -212,20 +261,27 @@ async function renderRecentActivity() {
   // Top editor of the week
   const editorTotals: Record<string, number> = {};
   weekSummary.forEach((row: DailySummaryRow) => {
-    if (row.app) editorTotals[row.app] = (editorTotals[row.app] || 0) + row.total_time;
+    if (row.app)
+      editorTotals[row.app] = (editorTotals[row.app] || 0) + row.total_time;
   });
   const topEditor = Object.entries(editorTotals).sort((a, b) => b[1] - a[1])[0];
   const topEditorName = topEditor ? topEditor[0] : null;
-  const topEditorRow = weekSummary.find(row => row.app === topEditorName);
+  const topEditorRow = weekSummary.find((row) => row.app === topEditorName);
   const topEditorIcon = topEditorRow?.icon;
 
   // 3 largest sessions of the week
-  const weekSessions = sessions.filter((s: SessionRow) => weekDates.includes(getLocalDateString(new Date(s.timestamp))));
-  const topSessions = weekSessions.sort((a: SessionRow, b: SessionRow) => b.duration - a.duration).slice(0, 3);
+  const weekSessions = sessions.filter((s: SessionRow) =>
+    weekDates.includes(getLocalDateString(new Date(s.timestamp)))
+  );
+  const topSessions = weekSessions
+    .sort((a: SessionRow, b: SessionRow) => b.duration - a.duration)
+    .slice(0, 3);
 
   // Longest streak (consecutive days with activity)
   const allDates = dailySummary.map((row: DailySummaryRow) => row.date).sort();
-  let maxStreak = 0, curStreak = 0, prevDate: string | null = null;
+  let maxStreak = 0,
+    curStreak = 0,
+    prevDate: string | null = null;
   for (const date of allDates) {
     if (!prevDate) {
       curStreak = 1;
@@ -249,8 +305,10 @@ async function renderRecentActivity() {
             topLang
               ? `<span class="bubble-main">${topLang.language}</span>
                  ${topLangIconHtml}
-                 <br><span class="bubble-sub">${Math.round(topLang.total_time/60)} min</span>`
-              : '—'
+                 <br><span class="bubble-sub">${Math.round(
+                   topLang.total_time / 60
+                 )} min</span>`
+              : "—"
           }
         </div>
       </div>
@@ -260,27 +318,40 @@ async function renderRecentActivity() {
           ${
             topEditor && topEditorIcon
               ? `<img src="${topEditorIcon}" alt="${topEditorName}" class="editor-icon" title="${topEditorName}" style="width:36px;height:36px;vertical-align:middle;border-radius:8px;margin-bottom:6px;"><br>
-                <span class="bubble-sub">${Math.round(topEditor[1]/60)} min</span>`
-              : '—'
+                <span class="bubble-sub">${Math.round(
+                  topEditor[1] / 60
+                )} min</span>`
+              : "—"
           }
           </div>
         </div>
       <div class="dashboard-bubble bubble-session">
         <div class="bubble-label">Largest Sessions</div>
         <div class="bubble-value">
-          ${topSessions.length ? topSessions.map((s: SessionRow) =>
-            `<div class="bubble-session-row">
+          ${
+            topSessions.length
+              ? topSessions
+                  .map(
+                    (s: SessionRow) =>
+                      `<div class="bubble-session-row">
               <span class="bubble-main">
                 ${s.title}
-                <span class="bubble-duration">${Math.floor(s.duration/60)}m ${s.duration%60}s</span>
+                <span class="bubble-duration">${Math.floor(s.duration / 60)}m ${
+                        s.duration % 60
+                      }s</span>
               </span>
             </div>`
-          ).join('') : '—'}
+                  )
+                  .join("")
+              : "—"
+          }
         </div>
       </div>
       <div class="dashboard-bubble bubble-streak">
         <div class="bubble-label">Longest Streak</div>
-        <div class="bubble-value"><span class="bubble-main">${maxStreak}</span><br><span class="bubble-sub">day${maxStreak === 1 ? '' : 's'}</span></div>
+        <div class="bubble-value"><span class="bubble-main">${maxStreak}</span><br><span class="bubble-sub">day${
+    maxStreak === 1 ? "" : "s"
+  }</span></div>
       </div>
     </div>
   `;

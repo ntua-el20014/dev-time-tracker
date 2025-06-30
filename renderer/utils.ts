@@ -1,21 +1,25 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { DailySummaryRow } from '../src/backend/types';
+import type { DailySummaryRow } from "@shared/types";
 
 // Escapes HTML special characters
 export function escapeHtml(text: string) {
-  const div = document.createElement('div');
+  const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
 }
 
 export function prettyDate(dateStr: string | Date): string {
-  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const d = typeof dateStr === "string" ? new Date(dateStr) : dateStr;
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 // Returns YYYY-MM-DD format for a Date
 export function getLocalDateString(date: Date): string {
-  return date.toLocaleDateString('en-CA');
+  return date.toLocaleDateString("en-CA");
 }
 
 // Returns array of Dates for the week (Monday to Sunday) containing startDate
@@ -45,13 +49,16 @@ export function getMonday(date: Date): Date {
 }
 
 // Helper to filter daily data for a specific week
-export function filterDailyDataForWeek(dailyData: DailySummaryRow[], weekMonday: Date): DailySummaryRow[] {
-  const weekDates = getWeekDates(weekMonday).map(d => getLocalDateString(d));
-  return dailyData.filter(row => weekDates.includes(row.date));
+export function filterDailyDataForWeek(
+  dailyData: DailySummaryRow[],
+  weekMonday: Date
+): DailySummaryRow[] {
+  const weekDates = getWeekDates(weekMonday).map((d) => getLocalDateString(d));
+  return dailyData.filter((row) => weekDates.includes(row.date));
 }
 
 export function getCurrentUserId(): number {
-  const stored = localStorage.getItem('currentUserId');
+  const stored = localStorage.getItem("currentUserId");
   return stored ? Number(stored) : 1; // fallback to 1 if not set
 }
 
@@ -74,7 +81,7 @@ export function addCustomAvatar(userId: number, dataUrl: string): void {
 
 export function removeCustomAvatar(userId: number, dataUrl: string): void {
   const customAvatars = getCustomAvatars(userId);
-  const filtered = customAvatars.filter(avatar => avatar !== dataUrl);
+  const filtered = customAvatars.filter((avatar) => avatar !== dataUrl);
   const key = `customAvatars_${userId}`;
   localStorage.setItem(key, JSON.stringify(filtered));
 }

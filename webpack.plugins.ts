@@ -8,7 +8,7 @@ const ForkTsCheckerWebpackPlugin: typeof IForkTsCheckerWebpackPlugin = require('
 
 export const plugins = [
   new HtmlWebpackPlugin({
-    template: './html/index.html', 
+    template: './public/index.html', 
     filename: 'index.html',
   }),
   new ForkTsCheckerWebpackPlugin({

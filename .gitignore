@@ -1,6 +1,12 @@
 # Svg files
 /public/icons
 
+# VS Code personal files (keep .vscode/settings.json and other shared configs)
+.vscode/launch.json
+.vscode/tasks.json
+.vscode/*.code-workspace
+.vscode/settings.json.backup
+
 # Logs
 logs
 *.log
@@ -63,6 +69,9 @@ typings/
 # dotenv environment variables file
 .env
 .env.test
+.env.local
+.env.development
+.env.production
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -92,4 +101,41 @@ typings/
 .vite/
 
 # Electron-Forge
+out/
+
+# Database backups
+*.backup.db
+backup_*.db
+
+# Temporary and backup files
+*_backup.*
+*.tmp
+*.temp
+
+# IDE and editor files
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Application data
+usage.db
+config.json
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Build artifacts
+dist/
+build/
 out/

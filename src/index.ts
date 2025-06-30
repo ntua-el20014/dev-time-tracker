@@ -1,22 +1,23 @@
-import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
-import { activeWindow } from '@miniben90/x-win';
-import os from 'os';
-import './utils/langMap';
-import { getEditorByExecutable } from './utils/editors';
-import { getLanguageDataFromTitle } from './utils/extractData';
-import { getIdleTimeoutSeconds } from './utils/ipcHelp';
-import * as usage from './backend/usage';
-import * as sessions from './backend/sessions';
-import * as users from './backend/users';
-import './ipc/usageHandlers';
-import './ipc/sessionHandlers';
-import './ipc/userHandlers';
-import './ipc/dbHandler';
-import './ipc/appHandlers';
+import { app, BrowserWindow, ipcMain, powerMonitor } from "electron";
+import { activeWindow } from "@miniben90/x-win";
+import os from "os";
+import "./utils/langMap";
+import { getEditorByExecutable } from "./utils/editors";
+import { getLanguageDataFromTitle } from "./utils/extractData";
+import { getIdleTimeoutSeconds } from "./utils/ipcHelp";
+import * as usage from "./backend/usage";
+import * as sessions from "./backend/sessions";
+import * as users from "./backend/users";
+import "./ipc/usageHandlers";
+import "./ipc/sessionHandlers";
+import "./ipc/userHandlers";
+import "./ipc/dbHandler";
+import "./ipc/appHandlers";
+import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
-const intervalSeconds = 10;
+const intervalSeconds = DEFAULT_TRACKING_INTERVAL_SECONDS;
 let trackingInterval: NodeJS.Timeout | null = null;
 let sessionStart: Date | null = null;
 let sessionEnd: Date | null = null;
@@ -29,10 +30,10 @@ app.whenReady().then(() => {
   createWindow();
 
   // Listen for system idle (lock/unlock)
-  powerMonitor.on('lock-screen', () => {
+  powerMonitor.on("lock-screen", () => {
     if (!isPaused && trackingInterval) {
-      ipcMain.emit('auto-pause');
-      mainWindow?.webContents.send('auto-paused');
+      ipcMain.emit("auto-pause");
+      mainWindow?.webContents.send("auto-paused");
     }
   });
 
@@ -41,18 +42,20 @@ app.whenReady().then(() => {
     const idleSeconds = powerMonitor.getSystemIdleTime();
     if (idleSeconds >= idleTimeoutSeconds) {
       if (!isPaused && trackingInterval) {
-        ipcMain.emit('auto-pause');
-        mainWindow?.webContents.send('auto-paused');
-        mainWindow?.webContents.send('notify', {
-          message: `Tracking paused due to inactivity (${(idleTimeoutSeconds / 60).toFixed(1)} minutes idle).`
+        ipcMain.emit("auto-pause");
+        mainWindow?.webContents.send("auto-paused");
+        mainWindow?.webContents.send("notify", {
+          message: `Tracking paused due to inactivity (${(
+            idleTimeoutSeconds / 60
+          ).toFixed(1)} minutes idle).`,
         });
       }
     }
   }, 2000);
 
   if (users.getAllUsers().length === 0) {
-    console.log('No users found, creating default user');
-    users.createUser('Default');
+    console.log("No users found, creating default user");
+    users.createUser("Default");
   }
 });
 
@@ -61,23 +64,31 @@ function trackActiveWindow(userId: number) {
     const window = activeWindow(); // Synchronous
     const icon = window.getIcon().data;
     const execName = window?.info?.execName?.toLowerCase();
-    const title = window?.title || '';
+    const title = window?.title || "";
     const editor = getEditorByExecutable(execName);
 
     if (!editor) return;
 
-    console.log('Tracking:', title);
+    console.log("Tracking:", title);
 
     const langData = getLanguageDataFromTitle(title);
-    const language = langData?.language || 'Unknown';
+    const language = langData?.language || "Unknown";
     const langExt = langData?.extension || null;
 
     // Pass langExt to logWindow
-    usage.logWindow(userId, editor.name || 'Unknown', title, language, icon, intervalSeconds, langExt);
+    usage.logWindow(
+      userId,
+      editor.name || "Unknown",
+      title,
+      language,
+      icon,
+      intervalSeconds,
+      langExt
+    );
 
-    mainWindow?.webContents.send('window-tracked');
+    mainWindow?.webContents.send("window-tracked");
   } catch (err) {
-    console.error('[Tracker Error]', err);
+    console.error("[Tracker Error]", err);
   }
 }
 
@@ -89,25 +100,26 @@ function createWindow() {
       contextIsolation: false,
       nodeIntegration: true,
     },
-  })
-  
-  
+  });
+
   // Open DevTools in development mode
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === "development") {
     mainWindow.webContents.openDevTools();
   }
-  
-  mainWindow.webContents.on('did-finish-load', () => {
-  mainWindow.webContents.send('os-info', { os: os.platform() });
-});
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    mainWindow.webContents.send("os-info", { os: os.platform() });
+  });
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 }
 
-ipcMain.handle('start-tracking', (_event, userId:number) => {
+ipcMain.handle("start-tracking", (_event, userId: number) => {
   if (!trackingInterval) {
-    trackingInterval = setInterval(() => trackActiveWindow(userId), intervalSeconds * 1000);
-
+    trackingInterval = setInterval(
+      () => trackActiveWindow(userId),
+      intervalSeconds * 1000
+    );
   }
   sessionStart = new Date();
   sessionActiveDuration = 0;
@@ -115,10 +127,12 @@ ipcMain.handle('start-tracking', (_event, userId:number) => {
   isPaused = false;
 });
 
-ipcMain.handle('pause-tracking', () => {
+ipcMain.handle("pause-tracking", () => {
   if (!isPaused && lastActiveTimestamp) {
     const now = new Date();
-    sessionActiveDuration += Math.round((now.getTime() - lastActiveTimestamp.getTime()) / 1000);
+    sessionActiveDuration += Math.round(
+      (now.getTime() - lastActiveTimestamp.getTime()) / 1000
+    );
     isPaused = true;
     if (trackingInterval) {
       clearInterval(trackingInterval);
@@ -127,15 +141,18 @@ ipcMain.handle('pause-tracking', () => {
   }
 });
 
-ipcMain.handle('resume-tracking', (_event, userId: number) => {
+ipcMain.handle("resume-tracking", (_event, userId: number) => {
   if (isPaused) {
     lastActiveTimestamp = new Date();
-    trackingInterval = setInterval(() => trackActiveWindow(userId), intervalSeconds * 1000);
+    trackingInterval = setInterval(
+      () => trackActiveWindow(userId),
+      intervalSeconds * 1000
+    );
     isPaused = false;
   }
 });
 
-ipcMain.handle('stop-tracking', async (_event, userId: number) => {
+ipcMain.handle("stop-tracking", async (_event, userId: number) => {
   if (trackingInterval) {
     clearInterval(trackingInterval);
     trackingInterval = null;
@@ -143,25 +160,35 @@ ipcMain.handle('stop-tracking', async (_event, userId: number) => {
   let duration = sessionActiveDuration;
   if (!isPaused && lastActiveTimestamp) {
     const now = new Date();
-    duration += Math.round((now.getTime() - lastActiveTimestamp.getTime()) / 1000);
+    duration += Math.round(
+      (now.getTime() - lastActiveTimestamp.getTime()) / 1000
+    );
   }
   sessionEnd = new Date();
   if (sessionStart && sessionEnd) {
-    if (duration >= 10) { // Only record if >= 10 seconds
+    if (duration >= 10) {
+      // Only record if >= 10 seconds
       // Ask renderer for session title/description
       const getSessionInfo = () =>
         new Promise<{ title: string; description: string }>((resolve) => {
-          ipcMain.once('session-info-reply', (event, data) => {
+          ipcMain.once("session-info-reply", (_event, data) => {
             resolve(data);
           });
-          mainWindow?.webContents.send('get-session-info');
+          mainWindow?.webContents.send("get-session-info");
         });
 
       const { title, description } = await getSessionInfo();
-      if (title && title.trim() !== '') {
-        const date = sessionStart.toLocaleDateString('en-CA');
+      if (title && title.trim() !== "") {
+        const date = sessionStart.toLocaleDateString("en-CA");
         const start_time = sessionStart.toISOString();
-        sessions.addSession(userId, date, start_time, duration, title, description);
+        sessions.addSession(
+          userId,
+          date,
+          start_time,
+          duration,
+          title,
+          description
+        );
       }
     }
   }
@@ -172,10 +199,12 @@ ipcMain.handle('stop-tracking', async (_event, userId: number) => {
   isPaused = false;
 });
 
-ipcMain.on('auto-pause', () => {
+ipcMain.on("auto-pause", () => {
   if (!isPaused && lastActiveTimestamp) {
     const now = new Date();
-    sessionActiveDuration += Math.round((now.getTime() - lastActiveTimestamp.getTime()) / 1000);
+    sessionActiveDuration += Math.round(
+      (now.getTime() - lastActiveTimestamp.getTime()) / 1000
+    );
     isPaused = true;
     if (trackingInterval) {
       clearInterval(trackingInterval);
@@ -184,14 +213,17 @@ ipcMain.on('auto-pause', () => {
   }
 });
 
-ipcMain.on('auto-resume', (_event, userId) => {
+ipcMain.on("auto-resume", (_event, userId) => {
   if (isPaused) {
     lastActiveTimestamp = new Date();
-    trackingInterval = setInterval(() => trackActiveWindow(userId), intervalSeconds * 1000);
+    trackingInterval = setInterval(
+      () => trackActiveWindow(userId),
+      intervalSeconds * 1000
+    );
     isPaused = false;
   }
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
 });
