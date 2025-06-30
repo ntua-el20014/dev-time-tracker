@@ -4,6 +4,8 @@ import { formatTimeSpent } from '../src/utils/timeFormat';
 import edit from '../data/edit.png';
 import { escapeHtml, getLocalDateString, getWeekDates, getMonday, filterDailyDataForWeek, getCurrentUserId, prettyDate } from './utils';
 import { showModal, showChartConfigModal, renderCustomChart } from './components';
+import { PaginationManager, PageInfo } from './utils/performance';
+import { createExportModal } from './utils/sessionExporter';
 import type { DailySummaryRow, SessionRow, Tag } from '../src/backend/types';
 import type { ChartConfig } from './components';
 
@@ -19,6 +21,10 @@ let filteredSessions: SessionRow[] = [];
 // Sorting state for both views
 let byDateSortState: { column: string | null; direction: 'asc' | 'desc' } = { column: null, direction: 'asc' };
 let bySessionSortState: { column: string | null; direction: 'asc' | 'desc' } = { column: null, direction: 'asc' };
+
+// Pagination for sessions
+let sessionPagination: PaginationManager<SessionRow> | null = null;
+const SESSIONS_PER_PAGE = 25;
 
 // Store created charts
 const customCharts: Array<{ id: string; config: ChartConfig; data: (DailySummaryRow | SessionRow)[] }> = [];
@@ -625,7 +631,16 @@ export async function renderSummary() {
       });
     };
     
+    // Add export button next to title
+    const exportSessionBtn = document.createElement('button');
+    exportSessionBtn.textContent = '📥 Export Data';
+    exportSessionBtn.className = 'create-chart-button';
+    exportSessionBtn.onclick = () => {
+      createExportModal(getCurrentUserId());
+    };
+    
     sessionTitle.appendChild(createSessionChartBtn);
+    sessionTitle.appendChild(exportSessionBtn);
     bySessionContainer.appendChild(sessionTitle);
 
     const sessionTable = document.createElement('table');
@@ -642,6 +657,12 @@ export async function renderSummary() {
       <tbody id="sessionTableBody"></tbody>
     `;
     bySessionContainer.appendChild(sessionTable);
+
+    // Create pagination controls container
+    const paginationContainer = document.createElement('div');
+    paginationContainer.id = 'sessionPaginationContainer';
+    paginationContainer.className = 'pagination-container';
+    bySessionContainer.appendChild(paginationContainer);
 
     // Attach click handlers to sortable headers
     sessionTable.querySelectorAll('.sortable-header').forEach(header => {
@@ -662,14 +683,8 @@ export async function renderSummary() {
         bySessionSortState.direction = 'asc';
       }
       
-      // Re-sort and render the current sessions
-      const sortedSessions = sortData(filteredSessions, column, bySessionSortState.direction, (item, col) => {
-        if (col === 'name') return item.title;
-        if (col === 'date') return new Date(item.date).getTime();
-        if (col === 'duration') return item.duration || 0;
-        return String(item[col as keyof SessionRow] || '');
-      });
-      renderSessionRows(sortedSessions);
+      // Re-sort and render the current sessions with pagination
+      renderSessionRows(filteredSessions);
       
       // Update header arrows
       updateSessionTableHeaders();
@@ -687,10 +702,8 @@ export async function renderSummary() {
       });
     }
 
-    // Render filtered sessions
+    // Render filtered sessions with pagination
     function renderSessionRows(sessionsToRender: SessionRow[]) {
-      const sessionTableBody = sessionTable.querySelector('tbody')!;
-      
       // Apply current sorting if any
       let sortedSessions = sessionsToRender;
       if (bySessionSortState.column) {
@@ -701,8 +714,27 @@ export async function renderSummary() {
           return String(item[column as keyof SessionRow] || '');
         });
       }
+
+      // Initialize or update pagination
+      if (!sessionPagination) {
+        sessionPagination = new PaginationManager<SessionRow>(
+          SESSIONS_PER_PAGE,
+          (pageData, pageInfo) => {
+            renderSessionPage(pageData);
+            updatePaginationControls(pageInfo);
+          }
+        );
+      }
+
+      // Set data and render first page
+      sessionPagination.setData(sortedSessions);
+    }
+
+    // Render a single page of sessions
+    function renderSessionPage(sessionsToRender: SessionRow[]) {
+      const sessionTableBody = sessionTable.querySelector('tbody')!;
       
-      sessionTableBody.innerHTML = sortedSessions.map((session: SessionRow) => {
+      sessionTableBody.innerHTML = sessionsToRender.map((session: SessionRow) => {
         const durationSec = session.duration || 0;
         const h = Math.floor(durationSec / 3600);
         const m = Math.floor((durationSec % 3600) / 60);
@@ -755,6 +787,30 @@ export async function renderSummary() {
           });
         });
       });
+    }
+
+    // Update pagination controls
+    function updatePaginationControls(pageInfo: PageInfo) {
+      const paginationContainer = document.getElementById('sessionPaginationContainer')!;
+      
+      // Clear existing controls
+      paginationContainer.innerHTML = '';
+      
+      if (pageInfo.totalPages <= 1) {
+        return; // No pagination needed
+      }
+      
+      // Add pagination info
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'pagination-info';
+      infoDiv.textContent = `Showing ${pageInfo.startIndex + 1}-${pageInfo.endIndex} of ${pageInfo.totalItems} sessions`;
+      paginationContainer.appendChild(infoDiv);
+      
+      // Add pagination controls
+      if (sessionPagination) {
+        const controls = sessionPagination.createPaginationControls();
+        paginationContainer.appendChild(controls);
+      }
     }
 
     async function showEditSessionModal(session: SessionRow, onChange: () => void) {
@@ -903,8 +959,9 @@ export async function renderSummary() {
     byDateContainer.style.display = 'none';
     bySessionContainer.style.display = '';
     filteredSessions = [];
-    // Reset sorting state for session view
+    // Reset sorting state and pagination for session view
     bySessionSortState = { column: null, direction: 'asc' };
+    sessionPagination = null;
     await renderBySessionView();
   };
 }

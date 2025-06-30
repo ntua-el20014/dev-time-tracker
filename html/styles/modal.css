@@ -300,3 +300,186 @@ select#tag-select option {
   font-size: 14px;
   box-sizing: border-box;
 }
+
+/* Export Modal Specific Styles */
+.export-modal .date-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.export-modal .date-range-inputs input[type="date"] {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+}
+
+.export-modal .date-separator {
+  color: var(--fg-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.export-modal .checkbox-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.export-modal .checkbox-item {
+  display: flex !important;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.export-modal .checkbox-item:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover, var(--bg-secondary));
+}
+
+.export-modal .checkbox-item input[type="checkbox"] {
+  margin: 0;
+  align-self: flex-start;
+}
+
+.export-modal .checkbox-label {
+  font-weight: 500;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -20px;
+  margin-left: 20px;
+}
+
+.export-modal .checkbox-description {
+  font-size: 12px;
+  color: var(--fg-secondary);
+  margin-left: 20px;
+  line-height: 1.4;
+}
+
+.export-modal .filter-inputs {
+  margin-top: 8px;
+}
+
+.export-modal .filter-inputs input[type="number"] {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.export-modal .field-hint {
+  color: var(--fg-secondary);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* Loading state for export button */
+.chart-modal-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--fg-secondary) !important;
+}
+
+/* Form group spacing for export modal */
+.export-modal .form-group {
+  margin-bottom: 20px;
+}
+
+.export-modal .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.export-modal select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 768px) {
+  .export-modal .date-range-inputs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .export-modal .date-separator {
+    text-align: center;
+    padding: 4px 0;
+  }
+  
+  .export-modal .checkbox-item {
+    padding: 10px;
+  }
+  
+  .chart-modal-content {
+    width: 95%;
+    margin: 10px;
+  }
+}
+
+/* Session Pagination Styles */
+#session-pagination-container {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.pagination-info {
+  text-align: center;
+  margin-bottom: 12px;
+  color: var(--fg-secondary);
+  font-size: 14px;
+}
+
+#session-pagination-controls {
+  display: flex;
+  justify-content: center;
+}
+
+/* Override pagination controls for session specific styling */
+#session-pagination-controls .pagination-controls {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+#session-pagination-controls .pagination-controls button {
+  margin: 0 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+#session-pagination-controls .pagination-controls span {
+  font-size: 14px;
+  color: var(--fg);
+  margin: 0 8px;
+  line-height: 32px;
+}

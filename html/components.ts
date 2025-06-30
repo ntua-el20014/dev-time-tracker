@@ -1,4 +1,4 @@
-import { Chart, ChartConfiguration, TooltipItem } from 'chart.js/auto';
+import { Chart } from 'chart.js/auto';
 import type { DailySummaryRow, SessionRow } from '../src/backend/types';
 
 /* eslint-disable @typescript-eslint/no-non-null-assertion */

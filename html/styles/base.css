@@ -7,6 +7,10 @@
   --row-even: #34344a;
   --row-odd: #2c2c3c;
   --row-hover: #44445a;
+  --bg-secondary: #2b2b3c;
+  --bg-primary: #1e1e2f;
+  --text-primary: #ffffff;
+  --border: #444;
 }
 
 body.light {
@@ -17,6 +21,10 @@ body.light {
   --row-even: #ffffff;
   --row-odd: #f0f0f0;
   --row-hover: #d9d9d9;
+  --bg-secondary: #eaeaea;
+  --bg-primary: #ffffff;
+  --text-primary: #222;
+  --border: #ddd;
 }
 
 body {
@@ -121,4 +129,81 @@ h1 {
   opacity: 0.97;
   transition: opacity 0.3s;
   pointer-events: none;
+}
+
+/* Export functionality styles */
+.export-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 12px;
+  transition: all 0.3s ease;
+}
+
+.export-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* Performance optimization styles */
+.pagination-container {
+  margin: 16px 0;
+}
+
+.pagination-info {
+  text-align: center;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.pagination-controls button {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pagination-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-controls button:not(:disabled):hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* Error toast styles */
+.error-toast {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  border-left: 4px solid #ff3742;
+}
+
+/* Virtual scroll container */
+.virtual-scroll-container {
+  overflow-y: auto;
+  height: 400px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }

@@ -7,8 +7,12 @@ import { Tag, SessionRow } from './types';
 export function getSessions(userId: number, filters?: { tag?: string; startDate?: string; endDate?: string }) {
   try {
     let query = `
-      SELECT s.id, s.timestamp, s.start_time, s.duration, s.title, s.description
+      SELECT 
+        s.id, s.timestamp, s.start_time, s.duration, s.title, s.description,
+        GROUP_CONCAT(t.name, ',') as tag_names
       FROM sessions s
+      LEFT JOIN session_tags st ON s.id = st.session_id
+      LEFT JOIN tags t ON st.tag_id = t.id
       WHERE s.user_id = ?
     `;
     const params: any[] = [userId];
@@ -24,23 +28,28 @@ export function getSessions(userId: number, filters?: { tag?: string; startDate?
     if (filters?.tag) {
       query += `
         AND s.id IN (
-          SELECT st.session_id
-          FROM session_tags st
-          JOIN tags t ON t.id = st.tag_id
-          WHERE t.name = ? AND t.user_id = ?
+          SELECT st2.session_id
+          FROM session_tags st2
+          JOIN tags t2 ON t2.id = st2.tag_id
+          WHERE t2.name = ? AND t2.user_id = ?
         )
       `;
       params.push(filters.tag, userId);
     }
 
-    query += ' ORDER BY s.timestamp DESC';
-
-    const sessions = db.prepare(query).all(...params) as SessionRow[];
-    for (const s of sessions) {
-      s.tags = getSessionTags(s.id);
-      s.date = getLocalDateString(new Date(s.timestamp));
-    }
-    return sessions;
+    query += ' GROUP BY s.id ORDER BY s.timestamp DESC';
+    
+    const sessions = db.prepare(query).all(...params) as (SessionRow & { tag_names: string })[];
+    
+    // Process tags and add date
+    return sessions.map(session => {
+      const { tag_names, ...sessionData } = session;
+      return {
+        ...sessionData,
+        tags: tag_names ? tag_names.split(',').filter(Boolean) : [],
+        date: getLocalDateString(new Date(session.timestamp))
+      };
+    });
   } catch (err) {
     notifyRenderer('Failed to load sessions.', 5000);
     console.error(err);
