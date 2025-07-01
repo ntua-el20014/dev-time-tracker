@@ -52,12 +52,6 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 
 ---
 
-## 📸 Screenshots
-
-<!-- Add screenshots here if available -->
-
----
-
 ## 🛠️ Getting Started
 
 ### Prerequisites
@@ -124,18 +118,6 @@ renderer/
     sessionExporter.ts  # Data export functionality
     performance.ts      # Performance monitoring utilities
   styles/             # Modular CSS files
-    base.css            # Base styling and variables
-    charts.css          # Chart and visualization styling
-    dashboard.css       # Dashboard-specific styles
-    goals.css           # Daily goals styling
-    layout.css          # Main layout and navigation
-    modal.css           # Modal and popup styling
-    profile.css         # Profile tab styling
-    table.css           # Data table styling
-    theme.css           # Theme switching components
-    timeline.css        # Timeline chart styling
-    users.css           # User management styling
-    calendar.css        # Calendar widget styling
 src/
   backend/
     db.ts               # Database connection and table creation
@@ -187,7 +169,7 @@ View the [CSS organization](./renderer/styles/styles.md) for details on how styl
 
 ## 📝 TODO / Ideas
 
-See [`TODO.txt`](./TODO.txt) for planned features and ideas, including
+See [`TODO.txt`](./TODO.txt) for planned features and ideas.
 
 ---
 
