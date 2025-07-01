@@ -3,7 +3,7 @@ import {
   getLocalDateString,
   getWeekDates,
   filterDailyDataForWeek,
-} from "../utils";
+} from "./index";
 import type { DailySummaryRow, SessionRow } from "@shared/types";
 import type { ChartConfig } from "../components";
 
@@ -158,7 +158,7 @@ function renderSingleChart(chart: CustomChart): string {
 export function setupCustomChartsEvents(
   _charts: CustomChart[],
   onAddChart: () => void,
-  onRemoveChart: (chartId: string) => void,
+  onRemoveChart: (_chartId: string) => void,
   onClearAllCharts: () => void
 ): void {
   const addChartBtn = document.getElementById("add-chart-btn");

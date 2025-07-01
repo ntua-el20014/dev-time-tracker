@@ -12,9 +12,14 @@
     "ecmaVersion": 2020,
     "sourceType": "module"
   },
+  "plugins": ["@typescript-eslint"],
+  "globals": {
+    "NodeJS": "readonly"
+  },
   "rules": {
     "semi": ["error", "always"],
-    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
     "no-console": "warn",
     "no-debugger": "error",
     "prefer-const": "error",

@@ -1,6 +1,7 @@
 import { ipcRenderer } from "electron";
 import type { SessionRow, DailySummaryRow } from "@shared/types";
 import { showNotification } from "../components";
+import { formatTimeSpent } from "../../src/utils/timeFormat";
 
 export interface ExportOptions {
   format: "csv" | "json";
@@ -34,7 +35,6 @@ export class SessionExporter {
       // Show success notification
       showNotification("Data exported successfully!");
     } catch (error) {
-      console.error("Export failed:", error);
       showNotification("Export failed. Please try again.");
     }
   }
@@ -81,7 +81,7 @@ export class SessionExporter {
         date: session.date,
         startTime: session.start_time,
         duration: session.duration,
-        durationFormatted: this.formatDuration(session.duration || 0),
+        durationFormatted: formatTimeSpent(session.duration || 0),
         tags: session.tags?.join(", ") || "",
         timestamp: session.timestamp,
       }));
@@ -102,7 +102,7 @@ export class SessionExporter {
         application: day.app,
         language: day.language || "Unknown",
         timeSpent: day.total_time,
-        timeSpentFormatted: this.formatDuration(day.total_time),
+        timeSpentFormatted: formatTimeSpent(day.total_time),
       }));
     }
 
@@ -143,16 +143,6 @@ export class SessionExporter {
     if (!filePath) return;
 
     await ipcRenderer.invoke("export-custom-json", data, filePath);
-  }
-
-  private formatDuration(seconds: number): string {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-
-    if (h > 0) return `${h}h ${m}m ${s}s`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
   }
 }
 
@@ -279,7 +269,7 @@ export function createExportModal(userId: number): void {
       await exporter.exportData(userId, options);
       modal.remove();
     } catch (error) {
-      console.error("Export failed:", error);
+      showNotification("Export failed. Please try again.");
       submitBtn.textContent = "Export Data";
       submitBtn.disabled = false;
     }

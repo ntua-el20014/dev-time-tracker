@@ -1,13 +1,13 @@
-import { formatTimeSpent } from "../../src/utils/timeFormat";
+import { formatTimeSpent } from "../../../src/utils/timeFormat";
 import {
   getLocalDateString,
   getWeekDates,
   getMonday,
   prettyDate,
-} from "../utils";
-import { renderCustomChart } from "../components";
+} from "../../utils";
+import { renderCustomChart } from "../../components";
 import type { DailySummaryRow, SessionRow } from "@shared/types";
-import type { ChartConfig } from "../components";
+import type { ChartConfig } from "../../components";
 
 // Store created charts
 export const customCharts: Array<{

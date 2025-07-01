@@ -8,6 +8,7 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 ## 🚀 Features
 
 ### **Core Tracking**
+
 - **Automatic Tracking:**  
   Monitors time spent in code editors (like VSCode) and logs active window data every 10 seconds.
 - **Session Management:**  
@@ -16,6 +17,7 @@ Tracks your coding sessions, editor and language usage, and helps you understand
   Create multiple user profiles to track different coding activities separately.
 
 ### **Analytics & Visualization**
+
 - **📊 Customizable Charts:**  
   Create interactive charts from your data with multiple chart types (bar, line, pie, doughnut). Group by date, language, editor, tags, day of week, or hour of day. Show total time, session count, or average duration.
 - **Detailed Summaries:**  
@@ -26,12 +28,14 @@ Tracks your coding sessions, editor and language usage, and helps you understand
   See which editors and programming languages you use most through charts and statistics. Editor and language icons are shown where available.
 
 ### **Productivity & Goals**
+
 - **Daily Goals:**  
   Set daily coding time goals with progress tracking and completion status.
 - **Goal History:**  
   View your goal completion history and track your consistency over time.
 
 ### **User Experience**
+
 - **Global Hotkeys:**  
   Control tracking (start, pause, stop) from anywhere and switch between tabs using keyboard shortcuts.
 - **Customizable Themes:**  
@@ -40,6 +44,7 @@ Tracks your coding sessions, editor and language usage, and helps you understand
   Export/import database, backup and restore functionality.
 
 ### **Privacy & Data**
+
 - **Local-First:**  
   All data is stored locally—your privacy is respected.
 - **Database Population Script:**  
@@ -84,6 +89,7 @@ npm start
 ```bash
 npm run populate
 ```
+
 This will fill your database with sample users, sessions, tags (with colors), and usage data.
 
 ### Building for Production
@@ -106,10 +112,17 @@ renderer/
   profileTab.ts       # Profile tab logic (settings, hotkeys, editors, languages, admin)
   dashboardTab.ts     # Dashboard tab logic (calendar, recent activity, quick stats)
   components.ts       # Reusable UI components (modal, charts, color picker, etc.)
-  utils.ts            # Utility functions for renderer
   admin.ts            # Admin panel functionality (export/import/backup)
   theme.ts            # Theme management and switching
   userLanding.ts      # User selection and management
+  utils/              # Organized utility modules
+    index.ts            # Barrel export for all utilities
+    dateUtils.ts        # Date and time utility functions
+    domUtils.ts         # DOM manipulation utilities
+    userUtils.ts        # User management utilities
+    chartHelpers.ts     # Chart and visualization utilities
+    sessionExporter.ts  # Data export functionality
+    performance.ts      # Performance monitoring utilities
   styles/             # Modular CSS files
     base.css            # Base styling and variables
     charts.css          # Chart and visualization styling
@@ -134,13 +147,24 @@ src/
     usageHandlers.ts      # IPC handlers for usage/statistics
     sessionHandlers.ts    # IPC handlers for sessions and tags
     userHandlers.ts       # IPC handlers for user management
-    adminHandlers.ts      # IPC handlers for admin functions
+    appHandlers.ts        # IPC handlers for app configuration
+    dbHandler.ts          # IPC handlers for database operations
   index.ts            # Electron main process (window, app events, misc IPC)
   config.ts           # User and theme configuration
-  utils/              # Utility modules (editors, extractData, langMap, etc.)
-    timeFormat.ts       # Time formatting utilities
+  utils/              # Shared utility modules
+    timeFormat.ts       # Time formatting and date utilities
     extractData.ts      # Data extraction and processing
-populateDummyData.ts  # Script to populate the database with dummy data
+    langMap.ts          # Language mapping utilities
+    editors.ts          # Editor detection utilities
+    fileOps.ts          # File operation utilities
+    ipcHelp.ts          # IPC helper functions
+scripts/
+  populateDummyData.ts  # Script to populate the database with dummy data
+shared/
+  constants.ts        # Application-wide constants
+  types/              # Shared TypeScript types/interfaces
+    index.ts            # Main type definitions
+    assets.d.ts         # Asset type declarations
 ```
 
 ### 🎨 Styles

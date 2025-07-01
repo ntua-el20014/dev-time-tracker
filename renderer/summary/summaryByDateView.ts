@@ -7,8 +7,8 @@ import {
   createSortableHeader,
   sortData,
   createFilterBar,
-} from "./summaryTableUtils";
-import { addCustomChart } from "./summaryChartUtils";
+} from "./utils/tableUtils";
+import { addCustomChart } from "./utils/chartUtils";
 import type { DailySummaryRow } from "@shared/types";
 
 // State for by-date view

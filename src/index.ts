@@ -18,7 +18,7 @@ import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 const intervalSeconds = DEFAULT_TRACKING_INTERVAL_SECONDS;
-let trackingInterval: NodeJS.Timeout | null = null;
+let trackingInterval: ReturnType<typeof setInterval> | null = null;
 let sessionStart: Date | null = null;
 let sessionEnd: Date | null = null;
 let sessionActiveDuration = 0; // in seconds
@@ -54,7 +54,7 @@ app.whenReady().then(() => {
   }, 2000);
 
   if (users.getAllUsers().length === 0) {
-    console.log("No users found, creating default user");
+    // Create default user if none exists
     users.createUser("Default");
   }
 });
@@ -69,8 +69,7 @@ function trackActiveWindow(userId: number) {
 
     if (!editor) return;
 
-    console.log("Tracking:", title);
-
+    // Track current window activity
     const langData = getLanguageDataFromTitle(title);
     const language = langData?.language || "Unknown";
     const langExt = langData?.extension || null;
@@ -88,7 +87,8 @@ function trackActiveWindow(userId: number) {
 
     mainWindow?.webContents.send("window-tracked");
   } catch (err) {
-    console.error("[Tracker Error]", err);
+    // Handle tracking errors silently or log to a file if needed
+    // Error details: ${err}
   }
 }
 
