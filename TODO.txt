@@ -1,9 +1,7 @@
 TODO / Ideas for Improvements
 
 - [ ] Schedule sessions in advance (show them in the calendar, and get notified one day before the session and the same day, each time you login until you actually record)
-- [ ] Session export: Export sessions or summaries to CSV for reporting.
 - [ ] Weekly/monthly reports: Generate and display reports for longer periods.
 - [ ] Integration with calendar/task apps: Link sessions to calendar events or tasks.
 - [ ] Cloud sync: Sync data across devices (optional, with user opt-in).
-- [ ] Add onboarding/help screen for new users.
 - [ ] Admin profile to monitor all users and statistics.

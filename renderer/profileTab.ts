@@ -18,6 +18,7 @@ import {
 import { getLangIconUrl } from "../src/utils/extractData";
 import type { Tag } from "@shared/types";
 import { renderAdminPanel } from "./admin";
+import { showOnboarding } from "./onboarding";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function escapeHtml(text: string) {
@@ -174,23 +175,6 @@ async function renderSettings(container: HTMLElement) {
     ? "light"
     : "dark";
 
-  container.innerHTML = `
-    <h2>Settings</h2>
-    <div class="settings-row">
-      <label for="idleTimeoutRange" class="settings-label">Idle Timeout:</label>
-      <input type="range" id="idleTimeoutRange" min="60" max="300" step="30" value="${idleTimeout}" class="settings-range">
-      <span id="idleTimeoutValue" class="settings-range-value">${(
-        idleTimeout / 60
-      ).toFixed(1)} min</span>
-    </div>
-    <div class="settings-row">
-      <label class="settings-label">Theme:</label>
-      <button id="themeToggleBtn" class="theme-toggle-btn">
-        Switch to ${currentTheme === "dark" ? "Light" : "Dark"} Mode
-      </button>
-    </div>
-  `;
-
   // Get current user info
   const userId = getCurrentUserId();
   const user = await ipcRenderer.invoke("get-user-info", userId);
@@ -216,8 +200,39 @@ async function renderSettings(container: HTMLElement) {
   const editorIcons = Array.from(new Set(editors.map((e) => e.icon)));
   const customAvatars = getCustomAvatars(userId);
 
-  // Avatar picker UI
-  container.innerHTML += `
+  // --- Tag management ---
+  const tags: Tag[] = await ipcRenderer.invoke(
+    "get-all-tags",
+    getCurrentUserId()
+  );
+
+  // --- Accent color management ---
+  const theme: "dark" | "light" = document.body.classList.contains("light")
+    ? "light"
+    : "dark";
+  const accentColor: string = await ipcRenderer.invoke(
+    "get-accent-color",
+    theme,
+    getCurrentUserId()
+  );
+
+  // Build the complete HTML first, then set it all at once
+  container.innerHTML = `
+    <h2>Settings</h2>
+    <div class="settings-row">
+      <label for="idleTimeoutRange" class="settings-label">Idle Timeout:</label>
+      <input type="range" id="idleTimeoutRange" min="60" max="300" step="30" value="${idleTimeout}" class="settings-range">
+      <span id="idleTimeoutValue" class="settings-range-value">${(
+        idleTimeout / 60
+      ).toFixed(1)} min</span>
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">Theme:</label>
+      <button id="themeToggleBtn" class="theme-toggle-btn">
+        Switch to ${currentTheme === "dark" ? "Light" : "Dark"} Mode
+      </button>
+    </div>
+    
     <div class="avatar-settings-row" style="margin-top:16px;">
       <label class="settings-label">Avatar:</label>
       <div class="avatar-preview" id="avatarPreview">
@@ -230,14 +245,7 @@ async function renderSettings(container: HTMLElement) {
       <button id="openAvatarPickerBtn" class="choose-avatar-btn">Choose</button>
       <input type="file" id="avatarInput" accept="image/*" style="display:none;">
     </div>
-  `;
 
-  // --- Tag management ---
-  const tags: Tag[] = await ipcRenderer.invoke(
-    "get-all-tags",
-    getCurrentUserId()
-  );
-  container.innerHTML += `
     <h2 class="settings-tags-title">Manage Tags</h2>
     ${
       tags.length === 0
@@ -262,19 +270,7 @@ async function renderSettings(container: HTMLElement) {
               .join("")}
           </ul>`
     }
-  `;
 
-  // --- Accent color management ---
-  const theme: "dark" | "light" = document.body.classList.contains("light")
-    ? "light"
-    : "dark";
-  const accentColor: string = await ipcRenderer.invoke(
-    "get-accent-color",
-    theme,
-    getCurrentUserId()
-  );
-
-  container.innerHTML += `
     <div class="accent-color-header">
       <h2 class="accent-color-title">Accent Color</h2>
       <button id="resetAccentColorsBtn" class="reset-accent-btn">Reset</button>
@@ -287,6 +283,11 @@ async function renderSettings(container: HTMLElement) {
     </div>
     <div class="info-note">
       Change the accent color for the current theme and <b>Save</b>.<br>
+    </div>
+
+    <div class="help-section">
+      <h2>Need Help?</h2>
+      <button id="showOnboardingBtn" class="help-button">🎯 Show Welcome Tour</button>
     </div>
   `;
 
@@ -332,7 +333,7 @@ async function renderSettings(container: HTMLElement) {
       await ipcRenderer.invoke("set-idle-timeout", seconds);
     });
   } else {
-    console.error("Idle timeout slider or value span not found!");
+    // Idle timeout elements not found - skip event listener setup
   }
 
   container.querySelectorAll(".delete-tag-btn").forEach((btn) => {
@@ -456,8 +457,7 @@ async function renderSettings(container: HTMLElement) {
     chip.addEventListener("click", (e) => {
       const tagName = (chip as HTMLElement).dataset.tag;
       if (!tagName) {
-        console.error("Tag name not found on chip element.");
-        return;
+        return; // Skip if tag name not found
       }
       showColorGridPicker({
         colors: tagColors,
@@ -526,6 +526,17 @@ async function renderSettings(container: HTMLElement) {
     removeAvatarBtn.onclick = async () => {
       await ipcRenderer.invoke("set-user-avatar", userId, "");
       renderSettings(container);
+    };
+  }
+
+  // --- Help Section Event Handlers ---
+  const showOnboardingBtn = container.querySelector(
+    "#showOnboardingBtn"
+  ) as HTMLButtonElement;
+
+  if (showOnboardingBtn) {
+    showOnboardingBtn.onclick = () => {
+      showOnboarding();
     };
   }
 }

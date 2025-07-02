@@ -9,6 +9,7 @@ import { displayOSInfo, showModal, showNotification } from "./components";
 import { renderUserLanding } from "./userLanding";
 import { getCurrentUserId } from "./utils";
 import { loadUserLangMap } from "../src/utils/extractData";
+import { showOnboarding, shouldShowOnboarding } from "./onboarding";
 import "./styles/base.css";
 import "./styles/calendar.css";
 import "./styles/charts.css";
@@ -16,6 +17,7 @@ import "./styles/dashboard.css";
 import "./styles/goals.css";
 import "./styles/layout.css";
 import "./styles/modal.css";
+import "./styles/onboarding.css";
 import "./styles/profile.css";
 import "./styles/table.css";
 import "./styles/theme.css";
@@ -326,15 +328,20 @@ document.addEventListener("DOMContentLoaded", () => {
     loadUserLangMap();
     applyUserTheme();
 
+    // Show onboarding for new users
+    if (shouldShowOnboarding()) {
+      setTimeout(() => showOnboarding(), 500);
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).showMainUIForUser = showMainUIForUser;
   }
 
   if (storedUserId) {
-    console.log("Stored user ID found:", storedUserId);
+    // Stored user ID found, show main UI
     showMainUIForUser(Number(storedUserId));
   } else if (landing) {
-    console.log("No stored user ID, rendering user landing");
+    // No stored user ID, rendering user landing
     renderUserLanding(landing, (userId) => {
       showMainUIForUser(userId);
     });
