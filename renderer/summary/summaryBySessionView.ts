@@ -376,8 +376,8 @@ export async function showEditSessionModal(
       },
     ],
     submitText: "Save Changes",
-    cancelText: "Delete",
-    cancelClass: "delete",
+    cancelText: "Cancel",
+    cancelClass: "",
     onSubmit: async (values) => {
       await ipcRenderer.invoke("edit-session", {
         userId: getCurrentUserId(),
@@ -394,11 +394,9 @@ export async function showEditSessionModal(
       );
       onChange();
     },
-    onCancel: async () => {
-      if (confirm("Delete this session? This cannot be undone.")) {
-        await ipcRenderer.invoke("delete-session", session.id);
-        onChange();
-      }
+    onCancel: () => {
+      // Just cancel - no action needed, modal will close automatically
+      return;
     },
   });
 
@@ -406,14 +404,50 @@ export async function showEditSessionModal(
   setTimeout(() => {
     const form = document.getElementById("customModalForm");
     if (!form) return;
+
+    // Add delete button to the modal actions
+    const actionsDiv = form.querySelector(".session-modal-actions");
+    if (actionsDiv) {
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "delete-session-btn";
+      deleteBtn.textContent = "Delete Session";
+      deleteBtn.style.cssText = `
+        background: #d32f2f !important;
+        color: white !important;
+        border: none;
+        padding: 6px 18px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+        margin-left: auto;
+      `;
+
+      deleteBtn.addEventListener("click", async () => {
+        if (confirm("Delete this session? This cannot be undone.")) {
+          await ipcRenderer.invoke("delete-session", session.id);
+          // Close the modal manually
+          const modal = document.getElementById("customModal");
+          const closeBtn = modal?.querySelector(
+            ".modal-close-btn"
+          ) as HTMLButtonElement;
+          closeBtn?.click();
+          onChange();
+        }
+      });
+
+      // Insert delete button before the cancel button
+      const cancelBtn = actionsDiv.querySelector("#customModalCancelBtn");
+      if (cancelBtn) {
+        actionsDiv.insertBefore(deleteBtn, cancelBtn);
+      }
+    }
+
     const tagDiv = document.createElement("div");
     tagDiv.className = "modal-tag-section";
 
     tagDiv.innerHTML = `
       <div class="modal-tag-section">
-        <label>Tags:</label>
-        <div id="tag-list" class="modal-tag-list"></div>
-        <input id="tag-input" type="text" placeholder="Add tag and press Enter">
         <select id="tag-select">
           <option value="">Add existing tag</option>
           ${allTags
@@ -421,6 +455,9 @@ export async function showEditSessionModal(
             .map((t: Tag) => `<option value="${t.name}">${t.name}</option>`)
             .join("")}
         </select>
+        <label>Tags:</label>
+        <div id="tag-list" class="modal-tag-list"></div>
+        <input id="tag-input" type="text" placeholder="Add tag and press Enter">
       </div>
     `;
     form.appendChild(tagDiv);
@@ -485,5 +522,11 @@ export async function showEditSessionModal(
       }
       tagSelect.value = "";
     });
+
+    // Move the modal buttons below the tags section after all event listeners are attached
+    const actionsContainer = form.querySelector(".session-modal-actions");
+    if (actionsContainer) {
+      form.appendChild(actionsContainer);
+    }
   }, 100);
 }

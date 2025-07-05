@@ -1,13 +1,12 @@
 import { ipcRenderer } from "electron";
 import { ScheduledSession } from "@shared/types";
 import { getCurrentUserId } from "./utils";
-import { showInAppNotification } from "./components";
+import { showInAppNotification, showConfirmationModal } from "./components";
 
 // eslint-disable-next-line prefer-const
 let currentDate = new Date(); // Needs to be mutable for month navigation
 let scheduledSessions: ScheduledSession[] = [];
-// eslint-disable-next-line prefer-const
-let calendarEventListenersSetup = false;
+let calendarListenerAttached = false;
 
 export async function renderCalendar() {
   const calendarContainer = document.getElementById("calendarContent");
@@ -47,10 +46,10 @@ export async function renderCalendar() {
     </div>
   `;
 
-  // Only setup event listeners once for the calendar container
-  if (!calendarEventListenersSetup) {
+  // Only setup event listeners once to prevent duplicates
+  if (!calendarListenerAttached) {
     setupCalendarEventListeners();
-    calendarEventListenersSetup = true;
+    calendarListenerAttached = true;
   }
 }
 
@@ -350,6 +349,7 @@ function showScheduleSessionModal(selectedDate?: Date) {
   const modalHTML = `
     <div id="calendarModal" class="active">
       <div class="session-modal-content">
+        <button class="modal-close-btn calendar-close-btn">&times;</button>
         <h3>Schedule New Session</h3>
         <form id="calendarModalForm">
           <div style="margin-bottom: 15px;">
@@ -409,21 +409,19 @@ function showScheduleSessionModal(selectedDate?: Date) {
 
   document.body.insertAdjacentHTML("beforeend", modalHTML);
 
-  // Use requestAnimationFrame to ensure DOM is fully rendered before setting up event listeners
-  requestAnimationFrame(() => {
-    setupScheduleModalEventListeners();
+  // Setup event listeners immediately - no need for requestAnimationFrame
+  setupScheduleModalEventListeners();
 
-    // Focus the title input after a short delay to ensure it's ready
-    setTimeout(() => {
-      const titleInput = document.getElementById(
-        "session-title"
-      ) as HTMLInputElement;
-      if (titleInput) {
-        titleInput.blur();
-        setTimeout(() => titleInput.focus(), 0);
-      }
-    }, 10);
-  });
+  // Focus the title input after a short delay to ensure it's ready
+  setTimeout(() => {
+    const titleInput = document.getElementById(
+      "session-title"
+    ) as HTMLInputElement;
+    if (titleInput) {
+      titleInput.blur();
+      setTimeout(() => titleInput.focus(), 0);
+    }
+  }, 10);
 }
 
 function setupScheduleModalEventListeners() {
@@ -449,6 +447,13 @@ function setupScheduleModalEventListeners() {
     cancelBtn.addEventListener("click", closeModal);
   }
 
+  // Handle close button
+  const closeBtn = document.querySelector(".calendar-close-btn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeModal);
+  }
+
+  // Handle modal backdrop click
   const modal = document.getElementById("calendarModal");
   if (modal) {
     modal.addEventListener("click", (e: Event) => {
@@ -568,6 +573,7 @@ async function showSessionDetailsModal(sessionId: number) {
   const modalHTML = `
     <div id="calendarDetailsModal" class="active">
       <div class="session-modal-content">
+        <button class="modal-close-btn calendar-details-close-btn">&times;</button>
         <h3>Session Details</h3>
         <div>
           <p><strong>Title:</strong> ${session.title}</p>
@@ -604,8 +610,8 @@ async function showSessionDetailsModal(sessionId: number) {
           <button type="button" id="calendarDetailsModalCancelBtn" style="padding: 8px 16px; border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); border-radius: 4px; cursor: pointer; transition: all 0.2s ease;">Close</button>
           ${
             session.status === "pending" || session.status === "notified"
-              ? `<button type="button" id="start-session" class="export-button">Start Now</button>
-                 <button type="button" id="delete-session" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.3s ease;">Delete</button>`
+              ? `<button type="button" id="start-session-details" class="export-button">Start Now</button>
+                 <button type="button" id="delete-session-details" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.3s ease;">Delete</button>`
               : ""
           }
         </div>
@@ -615,10 +621,10 @@ async function showSessionDetailsModal(sessionId: number) {
 
   document.body.insertAdjacentHTML("beforeend", modalHTML);
 
-  // Use requestAnimationFrame to ensure DOM is fully rendered before setting up event listeners
-  requestAnimationFrame(() => {
+  // Wait a moment for the DOM to be ready, then setup event listeners
+  setTimeout(() => {
     setupSessionDetailsModalEventListeners(sessionId);
-  });
+  }, 50);
 }
 
 function setupSessionDetailsModalEventListeners(sessionId: number) {
@@ -628,18 +634,24 @@ function setupSessionDetailsModalEventListeners(sessionId: number) {
     cancelBtn.addEventListener("click", closeModal);
   }
 
-  const startBtn = document.getElementById("start-session");
+  const startBtn = document.getElementById("start-session-details");
   if (startBtn) {
-    startBtn.addEventListener("click", () =>
-      startScheduledSessionHandler(sessionId)
-    );
+    startBtn.addEventListener("click", () => {
+      startScheduledSessionHandler(sessionId);
+    });
   }
 
-  const deleteBtn = document.getElementById("delete-session");
+  const deleteBtn = document.getElementById("delete-session-details");
   if (deleteBtn) {
-    deleteBtn.addEventListener("click", () =>
-      deleteScheduledSessionHandler(sessionId)
-    );
+    deleteBtn.addEventListener("click", () => {
+      deleteScheduledSessionHandler(sessionId);
+    });
+  }
+
+  // Handle close button
+  const closeBtn = document.querySelector(".calendar-details-close-btn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeModal);
   }
 
   const detailsModal = document.getElementById("calendarDetailsModal");
@@ -664,39 +676,75 @@ async function startScheduledSessionHandler(sessionId: number) {
     return;
   }
 
-  // Ask for confirmation before starting the session
-  if (!confirm(`Are you sure you want to start "${session.title}" now?`)) {
-    return;
+  // Close any existing modals first
+  const detailsModal = document.getElementById("calendarDetailsModal");
+  if (detailsModal) {
+    detailsModal.remove();
   }
 
-  // Close modal first to avoid any interference
+  // Wait a moment for the modal to be removed, then show confirmation
+  setTimeout(() => {
+    showConfirmationModal({
+      title: "Start Session",
+      message: `Are you sure you want to start "${session.title}" now?`,
+      confirmText: "Yes, Start",
+      onConfirm: async () => {
+        // User confirmed - proceed with starting the session
+        await startSession(userId, sessionId, session);
+      },
+    });
+  }, 100);
+}
+
+async function startSession(
+  userId: number,
+  sessionId: number,
+  session: ScheduledSession
+) {
+  // Close modal and refresh calendar to ensure clean state
   closeModal();
 
-  setTimeout(() => {
-    const recordBtn = document.getElementById("recordBtn") as HTMLButtonElement;
-    if (recordBtn) {
-      recordBtn.dispatchEvent(new Event("click"));
-      showInAppNotification(`Started session: ${session.title}`);
+  // Re-render calendar to reset any potential state issues
+  await renderCalendar();
 
-      // Optionally mark the scheduled session as completed
-      (async () => {
-        try {
-          await ipcRenderer.invoke(
-            "update-scheduled-session",
-            userId,
-            sessionId,
-            {
-              status: "completed",
-            }
-          );
-        } catch (err) {
-          // Silent fail - the session start is more important than updating status
-        }
-      })();
-    } else {
-      showInAppNotification("Could not find record button");
+  // Wait for calendar re-render and modal cleanup to complete
+  setTimeout(() => {
+    // Re-setup record and pause buttons to ensure fresh event listeners
+    if ((window as any).setupRecordAndPauseBtns) {
+      (window as any).setupRecordAndPauseBtns();
     }
-  }, 250);
+
+    // Wait for button setup, then trigger the record button
+    setTimeout(() => {
+      const recordBtn = document.getElementById(
+        "recordBtn"
+      ) as HTMLButtonElement;
+      if (recordBtn) {
+        recordBtn.click();
+        showInAppNotification(`Started session: ${session.title}`);
+
+        // Optionally mark the scheduled session as completed
+        (async () => {
+          try {
+            await ipcRenderer.invoke(
+              "update-scheduled-session",
+              userId,
+              sessionId,
+              {
+                status: "completed",
+              }
+            );
+            // Re-render calendar after status update to show changes
+            await renderCalendar();
+          } catch (err) {
+            // Silent fail - the session start is more important than updating status
+          }
+        })();
+      } else {
+        showInAppNotification("Could not find record button");
+      }
+    }, 150);
+  }, 200); // Increased timeout to allow calendar re-render to complete
 }
 
 async function deleteScheduledSessionHandler(sessionId: number) {
@@ -712,44 +760,94 @@ async function deleteScheduledSessionHandler(sessionId: number) {
     return;
   }
 
-  if (
-    confirm(
-      `Are you sure you want to delete the scheduled session "${session.title}"?`
-    )
-  ) {
-    try {
-      const success = await ipcRenderer.invoke(
-        "delete-scheduled-session",
-        userId,
-        sessionId
-      );
-      if (success) {
-        showInAppNotification("Session deleted successfully");
-        closeModal();
-        await renderCalendar();
-      } else {
-        showInAppNotification("Failed to delete session");
-      }
-    } catch (err) {
-      showInAppNotification("Error deleting session");
-    }
+  // Close any existing modals first
+  const detailsModal = document.getElementById("calendarDetailsModal");
+  if (detailsModal) {
+    detailsModal.remove();
   }
+
+  // Wait a moment for the modal to be removed, then show confirmation
+  setTimeout(() => {
+    showConfirmationModal({
+      title: "Delete Session",
+      message: `Are you sure you want to delete the scheduled session "${session.title}"?`,
+      confirmText: "Yes, Delete",
+      confirmClass: "export-button",
+      confirmStyle: {
+        background: "#dc3545",
+        color: "white",
+        border: "none",
+      },
+      onConfirm: async () => {
+        // User confirmed - proceed with deletion
+        try {
+          const success = await ipcRenderer.invoke(
+            "delete-scheduled-session",
+            userId,
+            sessionId
+          );
+          if (success) {
+            showInAppNotification("Session deleted successfully");
+            closeModal();
+            await renderCalendar();
+          } else {
+            showInAppNotification("Failed to delete session");
+          }
+        } catch (err) {
+          showInAppNotification("Error deleting session");
+        }
+      },
+    });
+  }, 100);
 }
 
 function closeModal() {
-  // Find and remove all calendar modals
   const modals = document.querySelectorAll(
-    "#calendarModal, #calendarDetailsModal"
+    "#calendarModal, #calendarDetailsModal, #confirmationModal"
   );
   modals.forEach((modal) => {
     modal.remove();
   });
+
+  // Don't modify document.body styles as they might be needed for other modals
+  // The global modal system should handle body styles appropriately
 }
+
+/*
+Usage examples for the reusable confirmation modal:
+
+1. Basic confirmation:
+showConfirmationModal({
+  message: "Are you sure you want to continue?",
+  onConfirm: () => { console.log("Confirmed!"); }
+});
+
+2. Custom title and buttons:
+showConfirmationModal({
+  title: "Delete Item",
+  message: "This action cannot be undone.",
+  confirmText: "Delete",
+  cancelText: "Keep",
+  onConfirm: () => { deleteItem(); },
+  onCancel: () => { console.log("Cancelled"); }
+});
+
+3. Custom styling (like delete button):
+showConfirmationModal({
+  title: "Warning",
+  message: "This will permanently delete your data.",
+  confirmText: "Delete",
+  confirmStyle: {
+    background: "#dc3545",
+    color: "white",
+    border: "none"
+  },
+  onConfirm: async () => { await deleteData(); }
+});
+*/
 
 export function cleanupCalendar() {
   // Reset the event listeners flag so they can be re-setup if needed
-  calendarEventListenersSetup = false;
-
-  // Clean up any open modals
+  calendarListenerAttached = false;
   closeModal();
 }

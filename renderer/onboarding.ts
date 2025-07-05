@@ -56,6 +56,7 @@ export function showOnboarding(): void {
 
     modal.innerHTML = `
       <div class="onboarding-modal-content">
+        <button class="onboarding-close-btn">&times;</button>
         <div class="onboarding-header">
           <h2>${step.title}</h2>
           <div class="onboarding-progress">
@@ -106,11 +107,37 @@ export function showOnboarding(): void {
     const nextBtn = modal.querySelector(
       ".onboarding-next"
     ) as HTMLButtonElement;
+    const closeBtn = modal.querySelector(
+      ".onboarding-close-btn"
+    ) as HTMLButtonElement;
 
     skipBtn.addEventListener("click", () => {
       modal.remove();
       markOnboardingComplete();
     });
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        modal.remove();
+        markOnboardingComplete();
+      });
+    }
+
+    // Overlay click handler
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        modal.remove();
+        markOnboardingComplete();
+      }
+    });
+
+    // Prevent modal content clicks from bubbling up
+    const modalContent = modal.querySelector(".onboarding-modal-content");
+    if (modalContent) {
+      modalContent.addEventListener("click", (e) => {
+        e.stopPropagation();
+      });
+    }
 
     if (prevBtn) {
       prevBtn.addEventListener("click", () => {

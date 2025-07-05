@@ -278,21 +278,37 @@ async function renderRecentActivity() {
     .slice(0, 3);
 
   // Longest streak (consecutive days with activity)
-  const allDates = dailySummary.map((row: DailySummaryRow) => row.date).sort();
-  let maxStreak = 0,
-    curStreak = 0,
-    prevDate: string | null = null;
-  for (const date of allDates) {
-    if (!prevDate) {
-      curStreak = 1;
+  const uniqueDates = [
+    ...new Set(dailySummary.map((row: DailySummaryRow) => row.date)),
+  ].sort();
+  let maxStreak = 0;
+  let currentStreak = 0;
+
+  for (let i = 0; i < uniqueDates.length; i++) {
+    if (i === 0) {
+      // First date - start counting
+      currentStreak = 1;
     } else {
-      const prev = new Date(prevDate);
-      const curr = new Date(date);
-      const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
-      curStreak = diff === 1 ? curStreak + 1 : 1;
+      // Check if current date is exactly one day after previous date
+      const prevDate = new Date(uniqueDates[i - 1]);
+      const currDate = new Date(uniqueDates[i]);
+
+      // Add one day to previous date and compare
+      const expectedNext = new Date(prevDate);
+      expectedNext.setDate(expectedNext.getDate() + 1);
+
+      if (expectedNext.toDateString() === currDate.toDateString()) {
+        // Consecutive day
+        currentStreak++;
+      } else {
+        // Gap found - save max and start new streak
+        maxStreak = Math.max(maxStreak, currentStreak);
+        currentStreak = 1;
+      }
     }
-    if (curStreak > maxStreak) maxStreak = curStreak;
-    prevDate = date;
+
+    // Always update max streak (handles case where longest streak is at the end)
+    maxStreak = Math.max(maxStreak, currentStreak);
   }
 
   // Render quick stats

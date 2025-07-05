@@ -1,23 +1,15 @@
 TODO / Ideas for Improvements
 
-- [x] Schedule sessions in advance (show them in the calendar, and get notified one day before the session and the same day, each time you login until you actually record)
 - [ ] Weekly/monthly reports: Generate and display reports for longer periods.
 - [ ] Integration with calendar/task apps: Link sessions to calendar events or tasks.
 - [ ] Cloud sync: Sync data across devices (optional, with user opt-in).
 - [ ] Admin profile to monitor all users and statistics.
 
-Longest streak
-lang.json
 UI chart overflowing
-tab colors, browser tabs (no margin)
 main div center
 pagination -> scroll on top, prev/next behaviour, in by date view split by 10 days
-prev button hover text color change
-modals close on overlay click, x button top right
 row click in summary tab -> show details
-delete - save changes below tags in edit session menu
 remove gradients from buttons
 consistent button ui
-event listeners when clicking outside modal (delete user)
 profile chapters text color
 change text color based on background color

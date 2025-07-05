@@ -179,6 +179,9 @@ function setupRecordAndPauseBtns() {
   pauseBtn.style.display = "none";
 }
 
+// Expose the function globally so it can be called from other modules
+(window as any).setupRecordAndPauseBtns = setupRecordAndPauseBtns;
+
 let hotkeyListenerAdded = false;
 
 function setupHotkeys() {
@@ -249,30 +252,36 @@ function setupHotkeys() {
 }
 
 ipcRenderer.on("get-session-info", () => {
-  showModal({
-    title: "Session Info",
-    fields: [
-      { name: "title", label: "Title:", type: "text", required: true },
-      {
-        name: "description",
-        label: "Description (optional):",
-        type: "textarea",
+  // Add a small delay to ensure any previous modals are fully closed
+  setTimeout(() => {
+    showModal({
+      title: "Session Info",
+      fields: [
+        { name: "title", label: "Title:", type: "text", required: true },
+        {
+          name: "description",
+          label: "Description (optional):",
+          type: "textarea",
+        },
+      ],
+      submitText: "Save",
+      cancelText: "Discard",
+      onSubmit: (values) => {
+        ipcRenderer.send("session-info-reply", {
+          title: values.title || "Coding Session",
+          description: values.description,
+        });
       },
-    ],
-    submitText: "Save",
-    cancelText: "Discard",
-    onSubmit: (values) => {
-      ipcRenderer.send("session-info-reply", {
-        title: values.title || "Coding Session",
-        description: values.description,
-      });
-    },
-    onCancel: () => {
-      if (confirm("Session will be discarded. Are you sure?")) {
-        ipcRenderer.send("session-info-reply", { title: "", description: "" });
-      }
-    },
-  });
+      onCancel: () => {
+        if (confirm("Session will be discarded. Are you sure?")) {
+          ipcRenderer.send("session-info-reply", {
+            title: "",
+            description: "",
+          });
+        }
+      },
+    });
+  }, 100); // Reduced delay since cleanup is simpler now
 });
 
 ipcRenderer.on("notify", (_event, data) => {
@@ -299,7 +308,7 @@ ipcRenderer.on("auto-resumed", () => {
 
 ipcRenderer.on("scheduled-session-notification", (_event, data) => {
   if (data && data.message) {
-    showNotification(`${data.title}: ${data.message}`);
+    showNotification(`${data.title} - ${data.message}`);
 
     // For "time to start" notifications, offer to switch to calendar
     if (data.type === "time_to_start") {

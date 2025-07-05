@@ -285,6 +285,14 @@ export function createExportModal(userId: number): void {
     if (e.target === modal) closeModal();
   });
 
+  // Prevent modal content clicks from bubbling up
+  const modalContent = modal.querySelector(".chart-modal-content");
+  if (modalContent) {
+    modalContent.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+  }
+
   // Close on Escape key
   const handleEscape = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
