@@ -17,6 +17,27 @@ export function displayOSInfo(os: string) {
   osDiv.textContent = `OS: ${os}`;
 }
 
+// Global modal cleanup function
+export function cleanupAllModals() {
+  // Clean up calendar modals
+  const calendarModals = document.querySelectorAll(
+    "#calendarModal, #calendarDetailsModal"
+  );
+  calendarModals.forEach((modal) => modal.remove());
+
+  // Clean up generic modals
+  const genericModals = document.querySelectorAll(
+    "#customModal, #customModalOverlay"
+  );
+  genericModals.forEach((modal) => modal.remove());
+
+  // Clean up any modal overlays
+  const overlays = document.querySelectorAll(
+    ".modal-overlay, .custom-modal-overlay"
+  );
+  overlays.forEach((overlay) => overlay.remove());
+}
+
 export interface ModalOptions {
   title: string;
   fields: {
@@ -1111,7 +1132,7 @@ export function showChartConfigModal(options: {
       try {
         renderCustomChart("chartPreview", config, options.data, 400, 180);
       } catch (error) {
-        console.error("Preview error:", error);
+        // Handle Preview error silently
       }
     }
   }

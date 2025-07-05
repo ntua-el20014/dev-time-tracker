@@ -7,9 +7,11 @@ import { getLanguageDataFromTitle } from "./utils/extractData";
 import { getIdleTimeoutSeconds } from "./utils/ipcHelp";
 import * as usage from "./backend/usage";
 import * as sessions from "./backend/sessions";
+import * as scheduledSessions from "./backend/scheduledSessions";
 import * as users from "./backend/users";
 import "./ipc/usageHandlers";
 import "./ipc/sessionHandlers";
+import "./ipc/scheduledSessionHandlers";
 import "./ipc/userHandlers";
 import "./ipc/dbHandler";
 import "./ipc/appHandlers";
@@ -57,6 +59,16 @@ app.whenReady().then(() => {
     // Create default user if none exists
     users.createUser("Default");
   }
+
+  // Check for scheduled session notifications every hour
+  setInterval(() => {
+    checkScheduledSessionNotifications();
+  }, 60 * 60 * 1000); // Every hour
+
+  // Initial check when app starts
+  setTimeout(() => {
+    checkScheduledSessionNotifications();
+  }, 5000); // Check 5 seconds after startup
 });
 
 function trackActiveWindow(userId: number) {
@@ -89,6 +101,57 @@ function trackActiveWindow(userId: number) {
   } catch (err) {
     // Handle tracking errors silently or log to a file if needed
     // Error details: ${err}
+  }
+}
+
+async function checkScheduledSessionNotifications() {
+  try {
+    const notifications =
+      scheduledSessions.getUpcomingSessionsForNotification();
+
+    for (const notification of notifications) {
+      let message = "";
+      let title = "";
+
+      switch (notification.type) {
+        case "day_before":
+          title = "Scheduled Session Tomorrow";
+          message = `Don't forget: "${notification.title}" is scheduled for tomorrow`;
+          if (notification.estimated_duration) {
+            message += ` (${notification.estimated_duration} minutes)`;
+          }
+          break;
+        case "same_day": {
+          title = "Session Today";
+          message = `Reminder: "${notification.title}" is scheduled for today`;
+          const sessionTime = new Date(notification.scheduled_datetime);
+          message += ` at ${sessionTime.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}`;
+          break;
+        }
+        case "time_to_start":
+          title = "Time to Start Session";
+          message = `It's time to start: "${notification.title}"`;
+          break;
+      }
+
+      // Send notification to renderer
+      mainWindow?.webContents.send("scheduled-session-notification", {
+        title,
+        message,
+        sessionId: notification.id,
+        type: notification.type,
+      });
+
+      // Mark notification as sent for day-before notifications
+      if (notification.type === "day_before") {
+        scheduledSessions.markNotificationSent(notification.id);
+      }
+    }
+  } catch (err) {
+    // Handle notification error silently
   }
 }
 

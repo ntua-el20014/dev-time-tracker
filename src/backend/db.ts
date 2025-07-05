@@ -1,24 +1,29 @@
-import Database from 'better-sqlite3';
-import { DB_PATH } from '../ipc/dbHandler';
+import Database from "better-sqlite3";
+import { DB_PATH } from "../ipc/dbHandler";
 const db = new Database(DB_PATH);
 
 // --- Table creation ---
-db.prepare(`
+db.prepare(
+  `
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     avatar TEXT
   )
-`).run();
+`
+).run();
 
-db.prepare(`
+db.prepare(
+  `
   CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT
   )
-`).run();
+`
+).run();
 
-db.prepare(`
+db.prepare(
+  `
   CREATE TABLE IF NOT EXISTS usage (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     app TEXT,
@@ -28,9 +33,11 @@ db.prepare(`
     user_id INTEGER,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
-`).run();
+`
+).run();
 
-db.prepare(`
+db.prepare(
+  `
   CREATE TABLE IF NOT EXISTS usage_summary (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     app TEXT,
@@ -43,9 +50,11 @@ db.prepare(`
     UNIQUE(app, language, date, user_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
-`).run();
+`
+).run();
 
-db.prepare(`
+db.prepare(
+  `
   CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT,
@@ -56,9 +65,11 @@ db.prepare(`
     user_id INTEGER,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
-`).run();
+`
+).run();
 
-db.prepare(`
+db.prepare(
+  `
   CREATE TABLE IF NOT EXISTS tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -67,9 +78,11 @@ db.prepare(`
     UNIQUE(name, user_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
-`).run();
+`
+).run();
 
-db.prepare(`
+db.prepare(
+  `
   CREATE TABLE IF NOT EXISTS session_tags (
     session_id INTEGER,
     tag_id INTEGER,
@@ -77,9 +90,11 @@ db.prepare(`
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
   )
-`).run();
+`
+).run();
 
-db.prepare(`
+db.prepare(
+  `
   CREATE TABLE IF NOT EXISTS daily_goals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -90,6 +105,42 @@ db.prepare(`
     UNIQUE(user_id, date)
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
-`).run();
+`
+).run();
+
+// Scheduled sessions table
+db.prepare(
+  `
+  CREATE TABLE IF NOT EXISTS scheduled_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    scheduled_datetime TEXT NOT NULL, -- ISO datetime string
+    estimated_duration INTEGER, -- in minutes
+    recurrence_type TEXT CHECK(recurrence_type IN ('none', 'weekly')) DEFAULT 'none',
+    recurrence_data TEXT, -- JSON for recurrence settings
+    status TEXT CHECK(status IN ('pending', 'notified', 'completed', 'missed', 'cancelled')) DEFAULT 'pending',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    last_notification_sent TEXT,
+    actual_session_id INTEGER, -- Links to sessions table when completed
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (actual_session_id) REFERENCES sessions(id) ON DELETE SET NULL
+  )
+`
+).run();
+
+// Scheduled session tags table
+db.prepare(
+  `
+  CREATE TABLE IF NOT EXISTS scheduled_session_tags (
+    scheduled_session_id INTEGER,
+    tag_id INTEGER,
+    PRIMARY KEY (scheduled_session_id, tag_id),
+    FOREIGN KEY (scheduled_session_id) REFERENCES scheduled_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+  )
+`
+).run();
 
 export default db;

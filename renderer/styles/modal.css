@@ -7,7 +7,7 @@
   top: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0,0,0,0.35);
+  background: rgba(0, 0, 0, 0.35);
   align-items: center;
   justify-content: center;
 }
@@ -22,11 +22,12 @@
   padding: 32px 28px 20px 28px;
   border-radius: 12px;
   min-width: 320px;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.18);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.18);
   position: relative;
 }
 
-.session-modal-content, .custom-modal-content {
+.session-modal-content,
+.custom-modal-content {
   max-height: 80vh;
   overflow-y: auto;
   z-index: 1000;
@@ -46,7 +47,7 @@
   width: 100%;
   margin-bottom: 12px;
   border-radius: 6px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   padding: 6px 10px;
   font-size: 1em;
   background: var(--row-odd);
@@ -98,7 +99,7 @@ input#tag-input {
   width: 70%;
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   background: var(--row-odd);
   color: var(--fg);
   font-size: 1em;
@@ -116,7 +117,7 @@ select#tag-select {
   margin-bottom: 2px;
   outline: none;
   transition: box-shadow 0.2s;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
   cursor: pointer;
   width: 220px;
   min-width: 120px;
@@ -132,17 +133,22 @@ select#tag-select option {
   color: #222;
 }
 
-.custom-modal-overlay, #customModalOverlay {
+.custom-modal-overlay,
+#customModalOverlay {
   position: fixed;
   inset: 0;
   display: block;
-  top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(0,0,0,0.3);
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.3);
   transition: opacity 0.2s;
   z-index: 999;
 }
 
-#customModal, .session-modal {
+#customModal,
+.session-modal {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -150,11 +156,12 @@ select#tag-select option {
   inset: 0;
   z-index: 1000;
   overflow: auto;
-  background: rgba(0,0,0,0.18);
+  background: rgba(0, 0, 0, 0.18);
 }
 
 @media (max-width: 600px) {
-  .session-modal-content, .custom-modal-content {
+  .session-modal-content,
+  .custom-modal-content {
     width: 98vw !important;
     min-width: 0 !important;
     max-width: 98vw !important;
@@ -426,16 +433,16 @@ select#tag-select option {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .export-modal .date-separator {
     text-align: center;
     padding: 4px 0;
   }
-  
+
   .export-modal .checkbox-item {
     padding: 10px;
   }
-  
+
   .chart-modal-content {
     width: 95%;
     margin: 10px;
@@ -482,4 +489,89 @@ select#tag-select option {
   color: var(--fg);
   margin: 0 8px;
   line-height: 32px;
+}
+
+/* Calendar modal styles - inherit from customModal */
+#calendarModal,
+#calendarDetailsModal {
+  display: none;
+  position: fixed;
+  z-index: 2000;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.35);
+  align-items: center;
+  justify-content: center;
+}
+
+#calendarModal.active,
+#calendarDetailsModal.active {
+  display: flex;
+}
+
+#calendarModal .session-modal-content,
+#calendarDetailsModal .session-modal-content {
+  background: var(--bg);
+  color: var(--fg);
+  padding: 32px 28px 20px 28px;
+  border-radius: 12px;
+  min-width: 320px;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.18);
+  position: relative;
+}
+
+#calendarModalForm label,
+#calendarDetailsModalForm label {
+  font-weight: 500;
+}
+
+#calendarModalForm input[type="text"],
+#calendarModalForm input[type="date"],
+#calendarModalForm input[type="time"],
+#calendarModalForm input[type="number"],
+#calendarModalForm textarea {
+  width: 100%;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  font-size: 1em;
+  background: var(--row-odd);
+  color: var(--fg);
+  box-sizing: border-box;
+}
+
+#calendarModalForm textarea {
+  height: 60px;
+  margin-bottom: 16px;
+  resize: vertical;
+}
+
+#calendarModalForm .session-modal-actions,
+#calendarDetailsModal .session-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+#calendarModalCancelBtn,
+#calendarDetailsModalCancelBtn {
+  padding: 6px 18px;
+  border-radius: 6px;
+  border: none;
+  background: var(--row-hover);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+#calendarModalForm button[type="submit"] {
+  padding: 6px 18px;
+  background: var(--accent);
+  color: #222;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
 }

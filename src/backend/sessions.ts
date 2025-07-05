@@ -57,7 +57,6 @@ export function getSessions(
     });
   } catch (err) {
     notifyRenderer("Failed to load sessions.", 5000);
-    console.error(err);
     return [];
   }
 }
@@ -84,9 +83,11 @@ export function addSession(
       .run(timestamp, start_time, duration, title, description || null, userId);
     const sessionId = info.lastInsertRowid as number;
     if (tags && tags.length) setSessionTags(userId, sessionId, tags);
+
+    // Send success notification to renderer
+    notifyRenderer(`Session "${title}" saved successfully!`);
   } catch (err) {
     notifyRenderer("Failed to add session.", 5000);
-    console.error(err);
   }
 }
 
@@ -106,7 +107,6 @@ export function editSession(
     if (tags) setSessionTags(userId, id, tags);
   } catch (err) {
     notifyRenderer("Failed to update session.", 5000);
-    console.error(err);
   }
 }
 
@@ -115,7 +115,6 @@ export function deleteSession(id: number) {
     db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
   } catch (err) {
     notifyRenderer("Failed to delete session.", 5000);
-    console.error(err);
   }
 }
 
@@ -128,7 +127,6 @@ export function getAllTags(userId: number): Tag[] {
       .all(userId) as Tag[];
   } catch (err) {
     notifyRenderer("Failed to load tags.", 5000);
-    console.error(err);
     return [];
   }
 }
@@ -152,7 +150,6 @@ export function addTag(
       return row?.id;
     } catch (err) {
       notifyRenderer("Failed to add or fetch tag.", 5000);
-      console.error(err);
       return undefined;
     }
   }
@@ -193,7 +190,6 @@ export function setSessionTags(
     }
   } catch (err) {
     notifyRenderer("Failed to set session tags.", 5000);
-    console.error(err);
   }
 }
 
@@ -212,7 +208,6 @@ export function getSessionTags(sessionId: number): string[] {
       .map((row: any) => row.name);
   } catch (err) {
     notifyRenderer("Failed to load session tags.", 5000);
-    console.error(err);
     return [];
   }
 }
@@ -228,7 +223,6 @@ export function deleteTag(userId: number, name: string) {
     }
   } catch (err) {
     notifyRenderer("Failed to delete tag.", 5000);
-    console.error(err);
   }
 }
 

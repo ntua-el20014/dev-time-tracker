@@ -1,64 +1,78 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
   default-src 'self';
   script-src 'self' 'unsafe-eval' http://localhost:3000;
   style-src 'self' 'unsafe-inline';
   img-src 'self' data:;
   connect-src 'self';
-  ">
-</head>
-<body>
-  <div id="root">
-  <div id="userLanding"></div>
-  <div id="mainUI" style="display:none;">
-  <div class="tab-bar">
-    <button class="tab active" data-tab="dashboard">Dashboard</button>
-    <button class="tab" data-tab="today">Today</button>
-    <button class="tab" data-tab="summary">Summary</button>
-    <button class="tab" data-tab="profile">My Profile</button>
-  </div>
-  <div id="tab-dashboard" class="tab-content" style="display:none">
-    <div class="container">
-      <div id="dashboardContent"></div>
+  "
+    />
+  </head>
+  <body>
+    <div id="root">
+      <div id="userLanding"></div>
+      <div id="mainUI" style="display: none">
+        <div class="tab-bar">
+          <button class="tab active" data-tab="dashboard">Dashboard</button>
+          <button class="tab" data-tab="today">Today</button>
+          <button class="tab" data-tab="summary">Summary</button>
+          <button class="tab" data-tab="calendar">Calendar</button>
+          <button class="tab" data-tab="profile">My Profile</button>
+        </div>
+        <div id="tab-dashboard" class="tab-content" style="display: none">
+          <div class="container">
+            <div id="dashboardContent"></div>
+          </div>
+        </div>
+        <div id="tab-today" class="tab-content" style="display: none">
+          <div class="container">
+            <table id="logTable">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Application</th>
+                  <th></th>
+                  <th>Language</th>
+                  <th>Time Spent Today</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="tab-summary" class="tab-content" style="display: none">
+          <div class="container">
+            <div id="summaryContent"></div>
+          </div>
+        </div>
+        <div id="tab-calendar" class="tab-content" style="display: none">
+          <div class="container">
+            <div id="calendarContent"></div>
+          </div>
+        </div>
+        <div id="tab-profile" class="tab-content" style="display: none">
+          <div class="container">
+            <h1>My Profile</h1>
+            <div id="profileContent"></div>
+          </div>
+        </div>
+        <button id="recordBtn">
+          <img id="recordIcon" src="" alt="Record" />
+        </button>
+        <button id="pauseBtn" style="display: none">
+          <img
+            id="pauseIcon"
+            src=""
+            alt="Pause"
+            style="width: 36px; height: 36px"
+          />
+        </button>
+      </div>
     </div>
-  </div>
-  <div id="tab-today" class="tab-content" style="display:none;">
-    <div class="container">
-      <table id="logTable">
-        <thead>
-          <tr>
-            <th></th>
-            <th>Application</th>
-            <th></th>
-            <th>Language</th>
-            <th>Time Spent Today</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-  <div id="tab-summary" class="tab-content" style="display:none;">
-    <div class="container">
-      <div id="summaryContent"></div>
-    </div>
-  </div>
-  <div id="tab-profile" class="tab-content" style="display:none;">
-    <div class="container">
-      <h1>My Profile</h1>
-      <div id="profileContent"></div>
-    </div>
-  </div>
-  <button id="recordBtn">
-    <img id="recordIcon" src="" alt="Record">
-  </button>
-  <button id="pauseBtn" style="display:none;">
-    <img id="pauseIcon" src="" alt="Pause" style="width:36px;height:36px;">
-  </button>
-  </div>
-  </div>
-</body>
+  </body>
 </html>

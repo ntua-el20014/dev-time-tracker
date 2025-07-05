@@ -58,3 +58,34 @@ export interface DailyGoal {
   description: string;
   isCompleted: number;
 }
+
+export interface ScheduledSession {
+  id?: number;
+  user_id: number;
+  title: string;
+  description?: string;
+  scheduled_datetime: string; // ISO datetime string
+  estimated_duration?: number; // in minutes
+  recurrence_type: "none" | "weekly";
+  recurrence_data?: RecurrenceData;
+  status: "pending" | "notified" | "completed" | "missed" | "cancelled";
+  created_at?: string;
+  last_notification_sent?: string;
+  actual_session_id?: number;
+  tags?: string[];
+}
+
+export interface RecurrenceData {
+  dayOfWeek?: number; // 0-6, Sunday is 0
+  endDate?: string; // ISO date string, when to stop recurring
+  occurrences?: number; // number of times to repeat
+}
+
+export interface ScheduledSessionNotification {
+  id: number;
+  title: string;
+  scheduled_datetime: string;
+  estimated_duration?: number;
+  type: "day_before" | "same_day" | "time_to_start";
+  tags?: string[];
+}

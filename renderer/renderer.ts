@@ -4,8 +4,14 @@ import { renderLogs } from "./logsTab";
 import { refreshProfile } from "./profileTab";
 import { renderSummary } from "./summaryTab";
 import { renderDashboard } from "./dashboardTab";
+import { renderCalendar } from "./calendarTab";
 import { initTheme, updateRecordBtn, updatePauseBtn } from "./theme";
-import { displayOSInfo, showModal, showNotification } from "./components";
+import {
+  displayOSInfo,
+  showModal,
+  showNotification,
+  showInAppNotification,
+} from "./components";
 import { renderUserLanding } from "./userLanding";
 import { getCurrentUserId } from "./utils";
 import { loadUserLangMap } from "../src/utils/extractData";
@@ -54,10 +60,17 @@ function setupTabs() {
         content.classList.add("active");
         content.style.display = "";
       }
+
+      // Force re-render on tab switch to ensure fresh content
       if (tabId === "dashboard") renderDashboard();
       if (tabId === "today") renderLogs();
       if (tabId === "profile") refreshProfile();
-      if (tabId === "summary") renderSummary();
+      if (tabId === "summary") {
+        // Force reset summary state to ensure fresh data
+        (window as any).__resetSummaryTabState = true;
+        renderSummary();
+      }
+      if (tabId === "calendar") renderCalendar();
     });
   });
 }
@@ -209,8 +222,15 @@ function setupHotkeys() {
         .querySelector('.tab[data-tab="summary"]')
         ?.dispatchEvent(new Event("click"));
     }
-    // Ctrl+4: Profile tab
+    // Ctrl+4: Calendar tab
     if (e.ctrlKey && e.key === "4") {
+      e.preventDefault();
+      document
+        .querySelector('.tab[data-tab="calendar"]')
+        ?.dispatchEvent(new Event("click"));
+    }
+    // Ctrl+4: Profile tab
+    if (e.ctrlKey && e.key === "5") {
       e.preventDefault();
       document
         .querySelector('.tab[data-tab="profile"]')
@@ -256,7 +276,7 @@ ipcRenderer.on("get-session-info", () => {
 });
 
 ipcRenderer.on("notify", (_event, data) => {
-  if (data && data.message) showNotification(data.message);
+  if (data && data.message) showInAppNotification(data.message);
 });
 
 ipcRenderer.on("auto-paused", () => {
@@ -274,6 +294,28 @@ ipcRenderer.on("auto-resumed", () => {
   const pauseIcon = document.getElementById("pauseIcon") as HTMLImageElement;
   if (pauseBtn && pauseIcon) {
     updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
+  }
+});
+
+ipcRenderer.on("scheduled-session-notification", (_event, data) => {
+  if (data && data.message) {
+    showNotification(`${data.title}: ${data.message}`);
+
+    // For "time to start" notifications, offer to switch to calendar
+    if (data.type === "time_to_start") {
+      setTimeout(() => {
+        if (
+          confirm("Would you like to open the calendar to start the session?")
+        ) {
+          const calendarTab = document.querySelector(
+            '.tab[data-tab="calendar"]'
+          ) as HTMLButtonElement;
+          if (calendarTab) {
+            calendarTab.click();
+          }
+        }
+      }, 2000);
+    }
   }
 });
 
