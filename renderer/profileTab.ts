@@ -6,6 +6,7 @@ import {
   renderPieChartJS,
   showColorGridPicker,
   showAvatarPicker,
+  showConfirmationModal,
 } from "./components";
 import { loadHotkey, setUserTheme } from "./theme";
 import {
@@ -261,7 +262,7 @@ async function renderSettings(container: HTMLElement) {
                     tag.name
                   )}" style="background:${tag.color};"></span>
                 </span>
-                <button class="delete-tag-btn" data-tag="${escapeHtml(
+                <button class="btn-delete btn-small delete-tag-btn" data-tag="${escapeHtml(
                   tag.name
                 )}">Delete</button>
               </li>
@@ -339,12 +340,16 @@ async function renderSettings(container: HTMLElement) {
   container.querySelectorAll(".delete-tag-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const tag = (btn as HTMLButtonElement).dataset.tag;
-      if (
-        confirm(`Delete tag "${tag}"? This will remove it from all sessions.`)
-      ) {
-        await ipcRenderer.invoke("delete-tag", getCurrentUserId(), tag);
-        renderSettings(container); // Refresh the list
-      }
+      showConfirmationModal({
+        title: "Delete Tag",
+        message: `Delete tag "${tag}"? This will remove it from all sessions.`,
+        confirmText: "Delete",
+        confirmClass: "btn-delete",
+        onConfirm: async () => {
+          await ipcRenderer.invoke("delete-tag", getCurrentUserId(), tag);
+          renderSettings(container); // Refresh the list
+        },
+      });
     });
   });
 
@@ -361,53 +366,61 @@ async function renderSettings(container: HTMLElement) {
       ? "light"
       : "dark";
     const colorToSave = accentInput.value;
-    const confirmed = confirm(
-      `Apply new accent color ${colorToSave} for ${currentTheme} theme?`
-    );
-    if (!confirmed) return;
-
-    await ipcRenderer.invoke(
-      "set-accent-color",
-      colorToSave,
-      currentTheme,
-      getCurrentUserId()
-    );
-    await applyAccentColor();
-    window.dispatchEvent(new Event("theme-changed"));
-    accentInput.value = colorToSave;
+    showConfirmationModal({
+      title: "Apply Accent Color",
+      message: `Apply new accent color ${colorToSave} for ${currentTheme} theme?`,
+      confirmText: "Apply",
+      onConfirm: async () => {
+        await ipcRenderer.invoke(
+          "set-accent-color",
+          colorToSave,
+          currentTheme,
+          getCurrentUserId()
+        );
+        await applyAccentColor();
+        window.dispatchEvent(new Event("theme-changed"));
+        accentInput.value = colorToSave;
+      },
+    });
   });
 
   resetAccentBtn.addEventListener("click", async () => {
-    if (!confirm("Reset both accent colors to default values?")) return;
-    await ipcRenderer.invoke(
-      "set-accent-color",
-      "#f0db4f",
-      "dark",
-      getCurrentUserId()
-    );
-    await ipcRenderer.invoke(
-      "set-accent-color",
-      "#007acc",
-      "light",
-      getCurrentUserId()
-    );
-    await applyAccentColor();
+    showConfirmationModal({
+      title: "Reset Accent Colors",
+      message: "Reset both accent colors to default values?",
+      confirmText: "Reset",
+      onConfirm: async () => {
+        await ipcRenderer.invoke(
+          "set-accent-color",
+          "#f0db4f",
+          "dark",
+          getCurrentUserId()
+        );
+        await ipcRenderer.invoke(
+          "set-accent-color",
+          "#007acc",
+          "light",
+          getCurrentUserId()
+        );
+        await applyAccentColor();
 
-    // Always get the current theme at the moment of reset
-    const currentTheme: "dark" | "light" = document.body.classList.contains(
-      "light"
-    )
-      ? "light"
-      : "dark";
-    const newAccent = await ipcRenderer.invoke(
-      "get-accent-color",
-      currentTheme,
-      getCurrentUserId()
-    );
-    accentInput.value = newAccent;
-    if (accentInput.parentElement) {
-      accentInput.parentElement.style.background = newAccent;
-    }
+        // Always get the current theme at the moment of reset
+        const currentTheme: "dark" | "light" = document.body.classList.contains(
+          "light"
+        )
+          ? "light"
+          : "dark";
+        const newAccent = await ipcRenderer.invoke(
+          "get-accent-color",
+          currentTheme,
+          getCurrentUserId()
+        );
+        accentInput.value = newAccent;
+        if (accentInput.parentElement) {
+          accentInput.parentElement.style.background = newAccent;
+        }
+      },
+    });
   });
 
   function updateAccentPickerForTheme() {

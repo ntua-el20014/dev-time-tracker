@@ -122,12 +122,12 @@ export function showModal(options: ModalOptions) {
       .join("") +
     `
   <div class="session-modal-actions">
-    <button type="button" id="customModalCancelBtn" class="${
+    <button type="button" id="customModalCancelBtn" class="btn-cancel ${
       options.cancelClass || ""
     }">${options.cancelText || "Cancel"}</button>
     ${
       options.submitText
-        ? `<button type="submit">${options.submitText}</button>`
+        ? `<button type="submit" class="btn-confirm">${options.submitText}</button>`
         : ""
     }
   </div>
@@ -658,9 +658,13 @@ export function showAvatarPicker(options: {
       thumb.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         pickerMenu.remove();
-        if (confirm("Delete this custom avatar?")) {
-          options.onDeleteCustom!(icon);
-        }
+        showConfirmationModal({
+          title: "Delete Avatar",
+          message: "Delete this custom avatar?",
+          confirmText: "Delete",
+          confirmClass: "btn-delete",
+          onConfirm: () => options.onDeleteCustom!(icon),
+        });
       });
     }
 
@@ -681,9 +685,13 @@ export function showAvatarPicker(options: {
       deleteOverlay.addEventListener("click", (e) => {
         e.stopPropagation();
         pickerMenu.remove();
-        if (confirm("Delete this custom avatar?")) {
-          options.onDeleteCustom!(icon);
-        }
+        showConfirmationModal({
+          title: "Delete Avatar",
+          message: "Delete this custom avatar?",
+          confirmText: "Delete",
+          confirmClass: "btn-delete",
+          onConfirm: () => options.onDeleteCustom!(icon),
+        });
       });
     }
   });
@@ -1270,7 +1278,7 @@ export function showConfirmationModal(options: ConfirmationModalOptions) {
         <h3>${title}</h3>
         <p style="margin: 20px 0;">${message}</p>
         <div class="session-modal-actions" style="display: flex; gap: 10px; justify-content: flex-end;">
-          <button type="button" id="confirmModalCancelBtn" style="padding: 8px 16px; border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); border-radius: 4px; cursor: pointer; transition: all 0.2s ease;">${cancelText}</button>
+          <button type="button" id="confirmModalCancelBtn" class="btn-cancel">${cancelText}</button>
           <button type="button" id="confirmModalOkBtn" class="${confirmClass}">${confirmText}</button>
         </div>
       </div>

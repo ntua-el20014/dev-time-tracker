@@ -2,6 +2,7 @@
 .container {
   width: 95%;
   max-width: 1400px;
+  margin: 0 auto;
   margin-top: 20px;
   background-color: var(--table-head);
   padding: 30px;
@@ -25,9 +26,8 @@
   justify-content: center;
   background: var(--table-head);
   padding: 0 24px;
-  width: 100%;
-  min-width: 400px;
-  max-width: 700px;
+  width: 95%;
+  max-width: 1400px;
   margin: 0 auto;
   border-radius: 0 0 12px 12px;
   position: sticky;
@@ -73,9 +73,7 @@
 
 #mainUI {
   width: 100%;
-  max-width: 1200px;
   margin: 0 auto;
-  min-width: 700px;
   box-sizing: border-box;
   display: block;
 }
@@ -86,4 +84,23 @@
   display: flex;
   gap: 16px;
   align-items: center;
+}
+
+/* Responsive layout for smaller screens */
+@media (max-width: 768px) {
+  .container {
+    width: 98%;
+    padding: 20px 15px;
+    margin: 0 auto;
+  }
+
+  .tab-bar {
+    width: 98%;
+    padding: 0 15px;
+  }
+
+  #mainUI {
+    min-width: 0;
+    width: 100%;
+  }
 }

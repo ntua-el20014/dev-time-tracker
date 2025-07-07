@@ -81,6 +81,13 @@
   font-weight: bold;
 }
 
+.calendar-container .calendar-controls button:hover {
+  background: color-mix(in srgb, var(--row-hover) 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: var(--accent);
+}
+
 .calendar-container .calendar-grid {
   display: block; /* Override the widget grid */
   gap: unset;
@@ -282,7 +289,19 @@
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.calendar-container .session-action-btn.btn-delete {
+  background: #d32f2f;
+  color: #fff;
+  margin-left: 8px;
+}
+
+.calendar-container .session-action-btn.btn-delete:hover {
+  background: #b71c1c;
+  transform: translateY(-1px);
 }
 
 .calendar-container .no-sessions {
@@ -295,23 +314,67 @@
 
 /* Button styles for calendar */
 .calendar-container .btn.secondary {
-  background: #6c757d;
-  color: white;
+  background: var(--row-hover);
+  color: var(--fg);
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.calendar-container .btn.secondary:hover {
+  background: color-mix(in srgb, var(--row-hover) 85%, #000 15%);
 }
 
 .calendar-container .btn.primary {
   background: var(--accent);
-  color: white;
+  color: #222;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.calendar-container .btn.primary:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000 15%);
 }
 
 .calendar-container .btn.success {
   background: #28a745;
   color: white;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.calendar-container .btn.success:hover {
+  background: #218838;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
 }
 
 .calendar-container .btn.danger {
   background: #dc3545;
   color: white;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.calendar-container .btn.danger:hover {
+  background: #c82333;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
 }
 
 .calendar-container .btn.small {

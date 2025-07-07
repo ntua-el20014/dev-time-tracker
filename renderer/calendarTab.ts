@@ -205,7 +205,7 @@ function renderUpcomingSessions(): string {
           ? `
       <div class="session-actions">
         <button class="export-button session-action-btn" data-action="start" data-session-id="${session.id}">Start Now</button>
-        <button class="session-action-btn" data-action="delete" data-session-id="${session.id}" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.3s ease; margin-left: 8px;">Delete</button>
+        <button class="session-action-btn btn-delete" data-action="delete" data-session-id="${session.id}">Delete</button>
       </div>
       `
           : ""
@@ -607,11 +607,11 @@ async function showSessionDetailsModal(sessionId: number) {
         </div>
         
         <div class="session-modal-actions">
-          <button type="button" id="calendarDetailsModalCancelBtn" style="padding: 8px 16px; border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); border-radius: 4px; cursor: pointer; transition: all 0.2s ease;">Close</button>
+          <button type="button" id="calendarDetailsModalCancelBtn" class="btn-cancel">Close</button>
           ${
             session.status === "pending" || session.status === "notified"
-              ? `<button type="button" id="start-session-details" class="export-button">Start Now</button>
-                 <button type="button" id="delete-session-details" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.3s ease;">Delete</button>`
+              ? `<button type="button" id="start-session-details" class="btn-confirm">Start Now</button>
+                 <button type="button" id="delete-session-details" class="btn-delete">Delete</button>`
               : ""
           }
         </div>
@@ -772,7 +772,7 @@ async function deleteScheduledSessionHandler(sessionId: number) {
       title: "Delete Session",
       message: `Are you sure you want to delete the scheduled session "${session.title}"?`,
       confirmText: "Yes, Delete",
-      confirmClass: "export-button",
+      confirmClass: "btn-delete",
       confirmStyle: {
         background: "#dc3545",
         color: "white",

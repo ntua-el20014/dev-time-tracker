@@ -1,4 +1,8 @@
-import { showInAppNotification, showNotification } from "./components";
+import {
+  showInAppNotification,
+  showNotification,
+  showConfirmationModal,
+} from "./components";
 import { clearAllOnboardingData } from "./onboarding";
 
 export function createExportDbButton(
@@ -88,21 +92,24 @@ export function createRollbackDbButton(): HTMLButtonElement {
   btn.textContent = "Rollback to Latest Backup";
   btn.onclick = async () => {
     const { ipcRenderer } = window.require("electron");
-    if (
-      !confirm(
-        "Are you sure you want to rollback to the latest backup? This will overwrite your current database."
-      )
-    )
-      return;
-    const result = await ipcRenderer.invoke("rollback-database");
-    if (result && result.status === "success") {
-      showNotification("Database rolled back to latest backup!");
-    } else {
-      showInAppNotification(
-        "Rollback failed." +
-          (result && result.message ? ` (${result.message})` : "")
-      );
-    }
+    showConfirmationModal({
+      title: "Rollback Database",
+      message:
+        "Are you sure you want to rollback to the latest backup? This will overwrite your current database.",
+      confirmText: "Rollback",
+      confirmClass: "btn-delete",
+      onConfirm: async () => {
+        const result = await ipcRenderer.invoke("rollback-database");
+        if (result && result.status === "success") {
+          showNotification("Database rolled back to latest backup!");
+        } else {
+          showInAppNotification(
+            "Rollback failed." +
+              (result && result.message ? ` (${result.message})` : "")
+          );
+        }
+      },
+    });
   };
   return btn;
 }
@@ -130,29 +137,30 @@ export function createClearOnboardingButton(): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.className = "goal-btn";
   btn.textContent = "Clear All Onboarding Data";
-  btn.style.background = "linear-gradient(135deg, #ff6b6b, #ee5a24)";
+  btn.style.background = "#ff6b6b";
   btn.style.color = "white";
 
   btn.onclick = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to clear all onboarding completion data? This will cause the onboarding tour to show for all users on their next login."
-      )
-    ) {
-      return;
-    }
-
-    try {
-      clearAllOnboardingData();
-      showNotification(
-        "All onboarding data cleared successfully! Users will see the onboarding tour on their next login."
-      );
-    } catch (error) {
-      showInAppNotification(
-        "Failed to clear onboarding data: " +
-          (error instanceof Error ? error.message : "Unknown error")
-      );
-    }
+    showConfirmationModal({
+      title: "Clear Onboarding Data",
+      message:
+        "Are you sure you want to clear all onboarding completion data? This will cause the onboarding tour to show for all users on their next login.",
+      confirmText: "Clear",
+      confirmClass: "btn-delete",
+      onConfirm: async () => {
+        try {
+          clearAllOnboardingData();
+          showNotification(
+            "All onboarding data cleared successfully! Users will see the onboarding tour on their next login."
+          );
+        } catch (error) {
+          showInAppNotification(
+            "Failed to clear onboarding data: " +
+              (error instanceof Error ? error.message : "Unknown error")
+          );
+        }
+      },
+    });
   };
   return btn;
 }

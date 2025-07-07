@@ -43,7 +43,7 @@ export async function renderLogs(date?: string) {
     }
         ${completed ? '<span class="goal-completed">(Completed)</span>' : ""}
       </span>
-      <button id="deleteDailyGoalBtn" class="goal-btn">Delete</button>
+      <button id="deleteDailyGoalBtn" class="btn-delete">Delete</button>
     `;
     dailyGoalDiv
       .querySelector("#deleteDailyGoalBtn")

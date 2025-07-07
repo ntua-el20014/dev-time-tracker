@@ -142,7 +142,8 @@
   min-width: 48px;
   min-height: 48px;
 }
-.choose-avatar-btn, .remove-avatar-btn {
+.choose-avatar-btn,
+.remove-avatar-btn {
   padding: 5px 14px;
   border-radius: 5px;
   border: none;
@@ -151,7 +152,7 @@
   font-weight: 600;
   font-size: 0.97em;
   cursor: pointer;
-  transition: background 0.18s, color 0.18s;
+  transition: all 0.2s ease;
 }
 .remove-avatar-btn {
   background: #eee;
@@ -160,9 +161,13 @@
 }
 .choose-avatar-btn:hover {
   background: color-mix(in srgb, var(--accent, #f0db4f), #000 12%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 .remove-avatar-btn:hover {
   background: color-mix(in srgb, #eee, #000 12%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 #userLanding #deleteUserRect {
@@ -183,4 +188,5 @@
 .delete-user-bubble:hover {
   background: #d32f2f !important;
   color: #fff !important;
+  transform: translateY(-1px);
 }

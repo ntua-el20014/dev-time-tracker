@@ -11,6 +11,7 @@ import {
   showModal,
   showNotification,
   showInAppNotification,
+  showConfirmationModal,
 } from "./components";
 import { renderUserLanding } from "./userLanding";
 import { getCurrentUserId } from "./utils";
@@ -273,12 +274,18 @@ ipcRenderer.on("get-session-info", () => {
         });
       },
       onCancel: () => {
-        if (confirm("Session will be discarded. Are you sure?")) {
-          ipcRenderer.send("session-info-reply", {
-            title: "",
-            description: "",
-          });
-        }
+        showConfirmationModal({
+          title: "Discard Session",
+          message: "Session will be discarded. Are you sure?",
+          confirmText: "Discard",
+          confirmClass: "btn-delete",
+          onConfirm: () => {
+            ipcRenderer.send("session-info-reply", {
+              title: "",
+              description: "",
+            });
+          },
+        });
       },
     });
   }, 100); // Reduced delay since cleanup is simpler now
@@ -313,16 +320,19 @@ ipcRenderer.on("scheduled-session-notification", (_event, data) => {
     // For "time to start" notifications, offer to switch to calendar
     if (data.type === "time_to_start") {
       setTimeout(() => {
-        if (
-          confirm("Would you like to open the calendar to start the session?")
-        ) {
-          const calendarTab = document.querySelector(
-            '.tab[data-tab="calendar"]'
-          ) as HTMLButtonElement;
-          if (calendarTab) {
-            calendarTab.click();
-          }
-        }
+        showConfirmationModal({
+          title: "Start Session",
+          message: "Would you like to open the calendar to start the session?",
+          confirmText: "Open Calendar",
+          onConfirm: () => {
+            const calendarTab = document.querySelector(
+              '.tab[data-tab="calendar"]'
+            ) as HTMLButtonElement;
+            if (calendarTab) {
+              calendarTab.click();
+            }
+          },
+        });
       }, 2000);
     }
   }

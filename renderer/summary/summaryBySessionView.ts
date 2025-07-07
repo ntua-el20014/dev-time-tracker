@@ -1,7 +1,11 @@
 import { ipcRenderer } from "electron";
 import edit from "../../assets/edit.png";
 import { escapeHtml, getCurrentUserId, prettyDate } from "../utils";
-import { showModal, showChartConfigModal } from "../components";
+import {
+  showModal,
+  showChartConfigModal,
+  showConfirmationModal,
+} from "../components";
 import { PaginationManager, PageInfo } from "../utils/performance";
 import { createExportModal } from "../utils/sessionExporter";
 import {
@@ -410,30 +414,26 @@ export async function showEditSessionModal(
     if (actionsDiv) {
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
-      deleteBtn.className = "delete-session-btn";
+      deleteBtn.className = "btn-delete";
       deleteBtn.textContent = "Delete Session";
-      deleteBtn.style.cssText = `
-        background: #d32f2f !important;
-        color: white !important;
-        border: none;
-        padding: 6px 18px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: bold;
-        margin-left: auto;
-      `;
 
       deleteBtn.addEventListener("click", async () => {
-        if (confirm("Delete this session? This cannot be undone.")) {
-          await ipcRenderer.invoke("delete-session", session.id);
-          // Close the modal manually
-          const modal = document.getElementById("customModal");
-          const closeBtn = modal?.querySelector(
-            ".modal-close-btn"
-          ) as HTMLButtonElement;
-          closeBtn?.click();
-          onChange();
-        }
+        showConfirmationModal({
+          title: "Delete Session",
+          message: "Delete this session? This cannot be undone.",
+          confirmText: "Delete",
+          confirmClass: "btn-delete",
+          onConfirm: async () => {
+            await ipcRenderer.invoke("delete-session", session.id);
+            // Close the modal manually
+            const modal = document.getElementById("customModal");
+            const closeBtn = modal?.querySelector(
+              ".modal-close-btn"
+            ) as HTMLButtonElement;
+            closeBtn?.click();
+            onChange();
+          },
+        });
       });
 
       // Insert delete button before the cancel button

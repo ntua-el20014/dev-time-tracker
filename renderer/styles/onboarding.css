@@ -139,11 +139,12 @@
   font-size: 0.9em;
   padding: 8px 12px;
   border-radius: 6px;
-  transition: color 0.2s;
+  transition: all 0.2s ease;
 }
 
 .onboarding-skip:hover {
   color: var(--fg);
+  background: var(--row-hover);
 }
 
 .onboarding-nav {
@@ -160,7 +161,7 @@
   border-radius: 8px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   font-size: 0.95em;
 }
 
@@ -174,6 +175,7 @@
 }
 
 .onboarding-next:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000 15%);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
@@ -193,7 +195,7 @@
   border-radius: 8px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   margin-right: 12px;
 }
 

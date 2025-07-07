@@ -1,3 +1,92 @@
+/* ==========================================
+   CONSISTENT BUTTON SYSTEM
+   ========================================== */
+
+/* Base button styles - apply to all buttons */
+.btn-base,
+.btn-cancel,
+.btn-confirm,
+.btn-delete,
+.btn-primary,
+.btn-secondary {
+  padding: 6px 18px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+/* Cancel buttons - neutral action */
+.btn-cancel {
+  background: var(--row-hover);
+  color: var(--fg);
+}
+
+.btn-cancel:hover {
+  background: color-mix(in srgb, var(--row-hover) 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Confirm/Primary buttons - positive action */
+.btn-confirm,
+.btn-primary {
+  background: var(--accent);
+  color: #222;
+  font-weight: bold;
+}
+
+.btn-confirm:hover,
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Delete buttons - destructive action */
+.btn-delete {
+  background: #d32f2f;
+  color: #fff;
+}
+
+.btn-delete:hover {
+  background: #b71c1c;
+  transform: translateY(-1px);
+}
+
+/* Secondary buttons - alternative action */
+.btn-secondary {
+  background: #e0e0e0;
+  color: #222;
+}
+
+.btn-secondary:hover {
+  background: color-mix(in srgb, #e0e0e0 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Small button variant */
+.btn-small {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* Large button variant */
+.btn-large {
+  padding: 10px 24px;
+  font-size: 16px;
+}
+
+/* ========================================== */
+
 /* modal.css */
 #customModal {
   display: none;
@@ -98,6 +187,8 @@
   gap: 12px;
 }
 
+/* Consistent Button Classes */
+.btn-cancel,
 #customModalCancelBtn {
   padding: 6px 18px;
   border-radius: 6px;
@@ -105,17 +196,18 @@
   background: var(--row-hover);
   color: var(--fg);
   cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-#customModalCancelBtn.delete {
-  background: #d32f2f !important;
-  color: #fff !important;
-  border: none;
-}
-#customModalCancelBtn.delete:hover {
-  background: #b71c1c !important;
+.btn-cancel:hover,
+#customModalCancelBtn:hover {
+  background: color-mix(in srgb, var(--row-hover) 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.btn-confirm,
 #customModalForm button[type="submit"] {
   padding: 6px 18px;
   background: var(--accent);
@@ -124,6 +216,32 @@
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
+  transition: all 0.2s ease;
+}
+
+.btn-confirm:hover,
+#customModalForm button[type="submit"]:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-delete,
+#customModalCancelBtn.delete {
+  background: #d32f2f !important;
+  color: #fff !important;
+  border: none;
+  padding: 6px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-delete:hover,
+#customModalCancelBtn.delete:hover {
+  background: #b71c1c !important;
+  transform: translateY(-1px);
 }
 
 input#tag-input {
@@ -303,11 +421,19 @@ select#tag-select option {
 .chart-modal-cancel {
   margin-right: 10px;
   padding: 8px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--row-hover);
+  border: none;
   border-radius: 4px;
   cursor: pointer;
   color: var(--fg);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.chart-modal-cancel:hover {
+  background: color-mix(in srgb, var(--row-hover) 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .chart-modal-submit {
@@ -318,6 +444,13 @@ select#tag-select option {
   border-radius: 4px;
   cursor: pointer;
   font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.chart-modal-submit:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .chart-title-input {
@@ -545,6 +678,15 @@ select#tag-select option {
   background: var(--row-hover);
   color: var(--fg);
   cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+#calendarModalCancelBtn:hover,
+#calendarDetailsModalCancelBtn:hover {
+  background: color-mix(in srgb, var(--row-hover) 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 #calendarModalForm button[type="submit"] {
@@ -555,4 +697,11 @@ select#tag-select option {
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
+  transition: all 0.2s ease;
+}
+
+#calendarModalForm button[type="submit"]:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }

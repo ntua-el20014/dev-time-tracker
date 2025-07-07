@@ -5,7 +5,7 @@ import {
   getMonday,
   prettyDate,
 } from "../../utils";
-import { renderCustomChart } from "../../components";
+import { renderCustomChart, showConfirmationModal } from "../../components";
 import type { DailySummaryRow, SessionRow } from "@shared/types";
 import type { ChartConfig } from "../../components";
 
@@ -89,9 +89,9 @@ export function renderCustomChartsSection() {
       <div class="chart-header">
         <h4>${chartData.config.title}</h4>
         <div class="chart-actions">
-          <button class="chart-action-btn" data-action="refresh" data-index="${index}" title="Refresh with current data">🔄</button>
-          <button class="chart-action-btn" data-action="duplicate" data-index="${index}" title="Duplicate chart">📋</button>
-          <button class="chart-action-btn" data-action="delete" data-index="${index}" title="Delete chart">🗑️</button>
+          <button class="chart-action-btn btn-secondary btn-small" data-action="refresh" data-index="${index}" title="Refresh with current data">🔄</button>
+          <button class="chart-action-btn btn-secondary btn-small" data-action="duplicate" data-index="${index}" title="Duplicate chart">📋</button>
+          <button class="chart-action-btn btn-delete btn-small" data-action="delete" data-index="${index}" title="Delete chart">🗑️</button>
         </div>
       </div>
       <div class="chart-container" id="${chartData.id}"></div>
@@ -121,10 +121,16 @@ export function renderCustomChartsSection() {
       const indexStr = (btn as HTMLElement).getAttribute("data-index");
 
       if (action === "clear" || (btn as HTMLElement).id === "clearAllCharts") {
-        if (confirm("Delete all custom charts?")) {
-          customCharts.length = 0;
-          renderCustomChartsSection();
-        }
+        showConfirmationModal({
+          title: "Delete All Charts",
+          message: "Delete all custom charts?",
+          confirmText: "Delete All",
+          confirmClass: "btn-delete",
+          onConfirm: () => {
+            customCharts.length = 0;
+            renderCustomChartsSection();
+          },
+        });
         return;
       }
 
@@ -157,10 +163,16 @@ export function renderCustomChartsSection() {
           break;
         }
         case "delete": {
-          if (confirm(`Delete chart "${chartData.config.title}"?`)) {
-            customCharts.splice(index, 1);
-            renderCustomChartsSection();
-          }
+          showConfirmationModal({
+            title: "Delete Chart",
+            message: `Delete chart "${chartData.config.title}"?`,
+            confirmText: "Delete",
+            confirmClass: "btn-delete",
+            onConfirm: () => {
+              customCharts.splice(index, 1);
+              renderCustomChartsSection();
+            },
+          });
           break;
         }
       }

@@ -6,10 +6,6 @@ TODO / Ideas for Improvements
 - [ ] Admin profile to monitor all users and statistics.
 
 UI chart overflowing
-main div center
 pagination -> scroll on top, prev/next behaviour, in by date view split by 10 days
 row click in summary tab -> show details
-remove gradients from buttons
-consistent button ui
-profile chapters text color
 change text color based on background color

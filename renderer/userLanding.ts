@@ -1,5 +1,5 @@
 import { ipcRenderer } from "electron";
-import { showModal } from "./components"; // Adjust path if needed
+import { showModal, showConfirmationModal } from "./components"; // Adjust path if needed
 
 /**
  * User Landing Page UI
@@ -172,23 +172,25 @@ export async function renderUserLanding(
             const userId = Number((bubble as HTMLElement).dataset.userid);
             const user = deletableUsers.find((u) => u.id === userId);
             if (!user) return;
-            if (
-              confirm(
-                `Are you sure you want to delete user "${user.username}"? This cannot be undone.`
-              )
-            ) {
-              await ipcRenderer.invoke("delete-user", userId);
-              if (localStorage.getItem("currentUserId") === String(userId)) {
-                localStorage.removeItem("currentUserId");
-              }
-              // Close the modal using the close button (which will trigger onCancel)
-              const modal = document.getElementById("customModal");
-              const closeBtn = modal?.querySelector(
-                ".modal-close-btn"
-              ) as HTMLButtonElement;
-              closeBtn?.click();
-              renderUserLanding(container, onUserSelected);
-            }
+            showConfirmationModal({
+              title: "Delete User",
+              message: `Are you sure you want to delete user "${user.username}"? This cannot be undone.`,
+              confirmText: "Delete",
+              confirmClass: "btn-delete",
+              onConfirm: async () => {
+                await ipcRenderer.invoke("delete-user", userId);
+                if (localStorage.getItem("currentUserId") === String(userId)) {
+                  localStorage.removeItem("currentUserId");
+                }
+                // Close the modal using the close button (which will trigger onCancel)
+                const modal = document.getElementById("customModal");
+                const closeBtn = modal?.querySelector(
+                  ".modal-close-btn"
+                ) as HTMLButtonElement;
+                closeBtn?.click();
+                renderUserLanding(container, onUserSelected);
+              },
+            });
           });
         });
 
