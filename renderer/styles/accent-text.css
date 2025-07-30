@@ -1,0 +1,201 @@
+/* Dynamic text colors for accent backgrounds */
+/* This file defines classes and utilities for text that should adapt to accent color backgrounds */
+
+/* CSS Custom Properties for dynamic text colors */
+:root {
+  --accent-text: #000000; /* Will be dynamically updated by colorUtils.ts */
+  --accent-border: rgba(
+    0,
+    0,
+    0,
+    0.2
+  ); /* Will be dynamically updated by colorUtils.ts */
+}
+
+/* Utility classes for components with accent backgrounds */
+.accent-bg {
+  background: var(--accent) !important;
+  color: var(--accent-text) !important;
+}
+
+.accent-bg-hover:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000 15%) !important;
+  color: var(--accent-text) !important;
+}
+
+/* Override hardcoded text colors for accent backgrounds */
+/* Record button */
+#recordBtn {
+  color: var(--accent-text) !important;
+}
+
+#recordBtn:hover {
+  color: var(--accent-text) !important;
+}
+
+/* Pause button when active */
+#pauseBtn.paused {
+  color: var(--accent-text) !important;
+}
+
+/* Notifications */
+.custom-notification {
+  color: var(--accent-text) !important;
+}
+
+/* Modal buttons */
+.btn-confirm,
+.btn-primary,
+#customModalForm button[type="submit"] {
+  color: var(--accent-text) !important;
+}
+
+.btn-confirm:hover,
+.btn-primary:hover,
+#customModalForm button[type="submit"]:hover {
+  color: var(--accent-text) !important;
+}
+
+/* Chart action buttons */
+.chart-action-btn:hover {
+  color: var(--accent-text) !important;
+}
+
+/* Chart modal submit */
+.chart-modal-submit {
+  color: var(--accent-text) !important;
+}
+
+.chart-modal-submit:hover {
+  color: var(--accent-text) !important;
+}
+
+/* Create chart button */
+.create-chart-button {
+  color: var(--accent-text) !important;
+}
+
+/* Calendar buttons */
+.calendar-container .btn.primary {
+  color: var(--accent-text) !important;
+}
+
+.calendar-container .btn.primary:hover {
+  color: var(--accent-text) !important;
+}
+
+/* Calendar form submit */
+#calendarModalForm button[type="submit"] {
+  color: var(--accent-text) !important;
+}
+
+#calendarModalForm button[type="submit"]:hover {
+  color: var(--accent-text) !important;
+}
+
+/* Summary filter buttons */
+.summary-filter-btn.active {
+  color: var(--accent-text) !important;
+}
+
+.summary-filter-btn.active:hover {
+  color: var(--accent-text) !important;
+}
+
+/* Filter buttons */
+.summary-filter-bar .filter-btn,
+.summary-filter-bar .filter-btn.apply {
+  color: var(--accent-text) !important;
+}
+
+.summary-filter-bar .filter-btn:hover,
+.summary-filter-bar .filter-btn.apply:hover {
+  color: var(--accent-text) !important;
+}
+
+/* Export button */
+.export-button {
+  color: var(--accent-text) !important;
+}
+
+.export-button:hover {
+  color: var(--accent-text) !important;
+}
+
+/* Profile buttons */
+.open-lang-json-btn {
+  color: var(--accent-text) !important;
+}
+
+.open-lang-json-btn:hover {
+  color: var(--accent-text) !important;
+}
+
+.theme-toggle-btn {
+  color: var(--accent-text) !important;
+}
+
+.theme-toggle-btn:hover {
+  color: var(--accent-text) !important;
+}
+
+.save-accent-btn {
+  color: var(--accent-text) !important;
+}
+
+.save-accent-btn:hover {
+  color: var(--accent-text) !important;
+}
+
+.choose-avatar-btn {
+  color: var(--accent-text) !important;
+}
+
+.choose-avatar-btn:hover {
+  color: var(--accent-text) !important;
+}
+
+/* Goals buttons */
+.goal-btn {
+  color: var(--accent-text) !important;
+}
+
+.goal-btn:hover,
+.goal-btn:focus {
+  color: var(--accent-text) !important;
+}
+
+/* Onboarding elements */
+.onboarding-action,
+.onboarding-next {
+  color: var(--accent-text) !important;
+}
+
+.onboarding-next:hover {
+  color: var(--accent-text) !important;
+}
+
+.help-button {
+  color: var(--accent-text) !important;
+}
+
+/* Timeline bars - these use accent as background but typically don't contain text */
+
+/* Session indicators in calendar */
+.calendar-container .session-indicator {
+  color: #ffffff !important; /* Keep white for session indicators as they're small */
+}
+
+/* User avatar fallbacks */
+.user-avatar-fallback {
+  color: var(--accent-text) !important;
+}
+
+#userLanding .user-rect div[style*="border-radius:50%"] {
+  color: var(--accent-text) !important;
+}
+
+/* Tab navigation */
+.tab.active {
+  color: var(--accent-text) !important;
+}

@@ -744,9 +744,7 @@ type CustomChartContainer = HTMLElement & { _customChartInstance?: Chart };
 export function renderCustomChart(
   containerId: string,
   config: ChartConfig,
-  data: (DailySummaryRow | SessionRow)[],
-  width = 500,
-  height = 300
+  data: (DailySummaryRow | SessionRow)[]
 ) {
   const container = document.getElementById(
     containerId
@@ -764,8 +762,6 @@ export function renderCustomChart(
 
   // Create canvas
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
   container.appendChild(canvas);
 
   // Get theme colors
@@ -808,7 +804,8 @@ export function renderCustomChart(
       ],
     },
     options: {
-      responsive: false,
+      responsive: true,
+      maintainAspectRatio: false,
       plugins: {
         title: {
           display: true,
@@ -1188,7 +1185,7 @@ export function showChartConfigModal(options: {
 
     if (options.data.length > 0) {
       try {
-        renderCustomChart("chartPreview", config, options.data, 400, 180);
+        renderCustomChart("chartPreview", config, options.data);
       } catch (error) {
         // Handle Preview error silently
       }

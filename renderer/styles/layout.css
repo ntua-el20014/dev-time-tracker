@@ -8,9 +8,10 @@
   padding: 30px;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  overflow: visible;
+  overflow: hidden;
   min-height: 0;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .header {
@@ -59,12 +60,16 @@
 
 .tab.active {
   background: var(--accent);
-  color: #222;
+  color: var(--accent-text);
 }
 
 .tab-content {
   display: none;
   min-height: 400px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .tab-content.active {
@@ -84,6 +89,19 @@
   display: flex;
   gap: 16px;
   align-items: center;
+}
+
+/* Additional overflow protection for summary content */
+#summaryContent {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+#summaryContent * {
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Responsive layout for smaller screens */

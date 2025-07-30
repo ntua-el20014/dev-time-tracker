@@ -18,6 +18,7 @@ import { getCurrentUserId } from "./utils";
 import { loadUserLangMap } from "../src/utils/extractData";
 import { showOnboarding, shouldShowOnboarding } from "./onboarding";
 import "./styles/base.css";
+import "./styles/accent-text.css";
 import "./styles/calendar.css";
 import "./styles/charts.css";
 import "./styles/dashboard.css";
@@ -30,6 +31,7 @@ import "./styles/table.css";
 import "./styles/theme.css";
 import "./styles/timeline.css";
 import "./styles/users.css";
+import { updateAccentTextColors } from "./utils/colorUtils";
 
 function setupTabs() {
   const tabs = Array.from(
@@ -353,6 +355,9 @@ export async function applyAccentColor() {
     document.documentElement.style.setProperty("--accent", accentColor);
     document.body.style.removeProperty("--accent");
   }
+
+  // Update text colors based on the new accent color
+  await updateAccentTextColors();
 }
 
 async function applyUserTheme() {
@@ -377,6 +382,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const mainUI = document.getElementById("mainUI");
   const storedUserId = localStorage.getItem("currentUserId");
 
+  // Initialize automatic text color updates for accent backgrounds
+
   function showMainUIForUser(userId: number) {
     localStorage.setItem("currentUserId", String(userId));
     if (mainUI) {
@@ -393,6 +400,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (shouldShowOnboarding()) {
       setTimeout(() => showOnboarding(), 500);
     }
+
+    // Check for scheduled session notifications 5 seconds after user logs in
+    setTimeout(() => {
+      ipcRenderer.invoke("check-notifications");
+    }, 5000);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).showMainUIForUser = showMainUIForUser;

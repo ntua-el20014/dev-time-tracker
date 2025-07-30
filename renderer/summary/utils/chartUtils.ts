@@ -103,13 +103,7 @@ export function renderCustomChartsSection() {
   // Render all charts after DOM is ready
   setTimeout(() => {
     customCharts.forEach((chartData) => {
-      renderCustomChart(
-        chartData.id,
-        chartData.config,
-        chartData.data,
-        500,
-        300
-      );
+      renderCustomChart(chartData.id, chartData.config, chartData.data);
     });
   }, 100);
 
@@ -144,13 +138,7 @@ export function renderCustomChartsSection() {
           // Get fresh data and re-render
           // Note: This will need to be updated to use the current filtered data from the parent
           setTimeout(() => {
-            renderCustomChart(
-              chartData.id,
-              chartData.config,
-              chartData.data,
-              500,
-              300
-            );
+            renderCustomChart(chartData.id, chartData.config, chartData.data);
           }, 100);
           break;
         }

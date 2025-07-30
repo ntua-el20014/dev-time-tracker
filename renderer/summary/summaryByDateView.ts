@@ -2,7 +2,7 @@ import { ipcRenderer } from "electron";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
 import { escapeHtml, getCurrentUserId, prettyDate } from "../utils";
 import { showChartConfigModal } from "../components";
-import { PaginationManager, PageInfo } from "../utils/performance";
+import { DateBasedPaginationManager, PageInfo } from "../utils/performance";
 import {
   createSortableHeader,
   sortData,
@@ -15,10 +15,10 @@ import type { DailySummaryRow } from "@shared/types";
 export interface ByDateViewState {
   filteredData: DailySummaryRow[];
   sortState: { column: string | null; direction: "asc" | "desc" };
-  pagination: PaginationManager<DailySummaryRow> | null;
+  pagination: DateBasedPaginationManager | null;
 }
 
-const BYDATE_ITEMS_PER_PAGE = 50;
+const DAYS_PER_PAGE = 10;
 
 export function createByDateViewState(): ByDateViewState {
   return {
@@ -119,13 +119,11 @@ export function renderByDateTable(
   data: DailySummaryRow[],
   state: ByDateViewState
 ) {
-  // Remove old table if exists
+  // Remove old table and pagination if they exist
   const oldTable = container.querySelector(".details-container");
   if (oldTable) oldTable.remove();
-
-  // Remove old pagination if exists
-  const oldPagination = container.querySelector(".pagination-container");
-  if (oldPagination) oldPagination.remove();
+  const oldPagination = container.querySelectorAll(".pagination-container");
+  oldPagination.forEach((p) => p.remove());
 
   // Sort data by date first (descending by default - most recent first)
   const sortedData =
@@ -153,9 +151,9 @@ export function renderByDateTable(
 
   // Initialize or update pagination
   if (!state.pagination) {
-    state.pagination = new PaginationManager<DailySummaryRow>(
-      BYDATE_ITEMS_PER_PAGE,
-      (pageData, pageInfo) => {
+    state.pagination = new DateBasedPaginationManager(
+      DAYS_PER_PAGE,
+      (pageData: DailySummaryRow[], pageInfo: PageInfo) => {
         renderByDatePage(container, pageData, state);
         updateByDatePaginationControls(container, pageInfo, state);
       }
@@ -259,29 +257,36 @@ export function updateByDatePaginationControls(
   pageInfo: PageInfo,
   state: ByDateViewState
 ) {
-  let paginationContainer = container.querySelector(
+  // Always remove any existing pagination containers first
+  const oldPaginationContainers = container.querySelectorAll(
     ".pagination-container"
-  ) as HTMLElement;
-
-  if (!paginationContainer) {
-    paginationContainer = document.createElement("div");
-    paginationContainer.className = "pagination-container";
-    container.appendChild(paginationContainer);
-  }
-
-  // Clear existing controls
-  paginationContainer.innerHTML = "";
+  );
+  oldPaginationContainers.forEach((pc) => pc.remove());
 
   if (pageInfo.totalPages <= 1) {
     return; // No pagination needed
   }
 
-  // Add pagination info
+  // Create new pagination container and always append at the end
+  const paginationContainer = document.createElement("div");
+  paginationContainer.className = "pagination-container";
+
+  // Add pagination info with date range
   const infoDiv = document.createElement("div");
   infoDiv.className = "pagination-info";
-  infoDiv.textContent = `Showing ${pageInfo.startIndex + 1}-${
-    pageInfo.endIndex
-  } of ${pageInfo.totalItems} items`;
+
+  if (state.pagination) {
+    const dateRange = state.pagination.getCurrentPageDateRange();
+    if (dateRange.startDay === dateRange.endDay) {
+      infoDiv.textContent = `Showing day ${dateRange.startDay} of ${dateRange.totalDays} (Page ${pageInfo.currentPage} of ${pageInfo.totalPages})`;
+    } else {
+      infoDiv.textContent = `Showing days ${dateRange.startDay}-${dateRange.endDay} of ${dateRange.totalDays} (Page ${pageInfo.currentPage} of ${pageInfo.totalPages})`;
+    }
+  } else {
+    const uniqueDates = new Set(state.filteredData.map((row) => row.date)).size;
+    infoDiv.textContent = `Showing ${uniqueDates} days of data (Page ${pageInfo.currentPage} of ${pageInfo.totalPages})`;
+  }
+
   paginationContainer.appendChild(infoDiv);
 
   // Add pagination controls
@@ -289,6 +294,9 @@ export function updateByDatePaginationControls(
     const controls = state.pagination.createPaginationControls();
     paginationContainer.appendChild(controls);
   }
+
+  // Always append pagination at the bottom
+  container.appendChild(paginationContainer);
 }
 
 export function handleByDateSort(

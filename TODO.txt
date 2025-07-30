@@ -5,7 +5,4 @@ TODO / Ideas for Improvements
 - [ ] Cloud sync: Sync data across devices (optional, with user opt-in).
 - [ ] Admin profile to monitor all users and statistics.
 
-UI chart overflowing
-pagination -> scroll on top, prev/next behaviour, in by date view split by 10 days
 row click in summary tab -> show details
-change text color based on background color

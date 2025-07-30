@@ -133,12 +133,6 @@ export async function renderBySessionView(
   `;
   container.appendChild(sessionTable);
 
-  // Create pagination controls container
-  const paginationContainer = document.createElement("div");
-  paginationContainer.id = "sessionPaginationContainer";
-  paginationContainer.className = "pagination-container";
-  container.appendChild(paginationContainer);
-
   // Attach click handlers to sortable headers
   sessionTable.querySelectorAll(".sortable-header").forEach((header) => {
     header.addEventListener("click", () => {
@@ -327,17 +321,19 @@ export function updatePaginationControls(
   pageInfo: PageInfo,
   state: BySessionViewState
 ) {
-  const paginationContainer = container.querySelector(
-    "#sessionPaginationContainer"
+  // Always remove any existing pagination containers first
+  const oldPaginationContainers = container.querySelectorAll(
+    ".pagination-container"
   );
-  if (!paginationContainer) return;
-
-  // Clear existing controls
-  paginationContainer.innerHTML = "";
+  oldPaginationContainers.forEach((pc) => pc.remove());
 
   if (pageInfo.totalPages <= 1) {
     return; // No pagination needed
   }
+
+  // Create new pagination container and always append at the end
+  const paginationContainer = document.createElement("div");
+  paginationContainer.className = "pagination-container";
 
   // Add pagination info
   const infoDiv = document.createElement("div");
@@ -352,6 +348,9 @@ export function updatePaginationControls(
     const controls = state.pagination.createPaginationControls();
     paginationContainer.appendChild(controls);
   }
+
+  // Always append pagination at the bottom
+  container.appendChild(paginationContainer);
 }
 
 export async function showEditSessionModal(

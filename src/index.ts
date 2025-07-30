@@ -60,15 +60,10 @@ app.whenReady().then(() => {
     users.createUser("Default");
   }
 
-  // Check for scheduled session notifications every hour
+  // Check for scheduled session notifications every minute for real-time notifications
   setInterval(() => {
     checkScheduledSessionNotifications();
-  }, 60 * 60 * 1000); // Every hour
-
-  // Initial check when app starts
-  setTimeout(() => {
-    checkScheduledSessionNotifications();
-  }, 5000); // Check 5 seconds after startup
+  }, 60 * 1000); // Every minute
 });
 
 function trackActiveWindow(userId: number) {
@@ -135,9 +130,7 @@ async function checkScheduledSessionNotifications() {
           title = "Time to Start Session";
           message = `It's time to start: "${notification.title}"`;
           break;
-      }
-
-      // Send notification to renderer
+      } // Send notification to renderer
       mainWindow?.webContents.send("scheduled-session-notification", {
         title,
         message,
@@ -145,10 +138,26 @@ async function checkScheduledSessionNotifications() {
         type: notification.type,
       });
 
-      // Mark notification as sent for day-before notifications
-      if (notification.type === "day_before") {
-        scheduledSessions.markNotificationSent(notification.id);
+      // For "time to start" notifications, bring the window to front
+      if (notification.type === "time_to_start" && mainWindow) {
+        // Show the window if it's minimized or hidden
+        if (mainWindow.isMinimized()) {
+          mainWindow.restore();
+        }
+
+        // Bring the window to front and focus it
+        mainWindow.show();
+        mainWindow.focus();
+
+        // On Windows, you might need to use setAlwaysOnTop temporarily
+        if (process.platform === "win32") {
+          mainWindow.setAlwaysOnTop(true);
+          mainWindow.setAlwaysOnTop(false);
+        }
       }
+
+      // Mark notification as sent for all notification types to prevent duplicates
+      scheduledSessions.markNotificationSent(notification.id);
     }
   } catch (err) {
     // Handle notification error silently
@@ -172,6 +181,16 @@ function createWindow() {
 
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.send("os-info", { os: os.platform() });
+  });
+
+  // Check for notifications when window gains focus
+  mainWindow.on("focus", () => {
+    checkScheduledSessionNotifications();
+  });
+
+  // Check for notifications when window is shown (e.g., from minimized state)
+  mainWindow.on("show", () => {
+    checkScheduledSessionNotifications();
   });
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
@@ -285,6 +304,11 @@ ipcMain.on("auto-resume", (_event, userId) => {
     );
     isPaused = false;
   }
+});
+
+// Handle manual notification check trigger (e.g., when user logs in)
+ipcMain.handle("check-notifications", async () => {
+  await checkScheduledSessionNotifications();
 });
 
 app.on("window-all-closed", () => {

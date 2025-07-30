@@ -302,6 +302,7 @@ export function getUpcomingSessionsForNotification(): ScheduledSessionNotificati
   todayEnd.setHours(23, 59, 59, 999);
 
   // Get sessions scheduled for tomorrow (day-before notification)
+  // Only consider sessions that are actually more than 2 hours away
   const tomorrowSessions = db
     .prepare(
       `
@@ -323,7 +324,7 @@ export function getUpcomingSessionsForNotification(): ScheduledSessionNotificati
     .prepare(
       `
     SELECT ss.id, ss.title, ss.scheduled_datetime, ss.estimated_duration,
-           GROUP_CONCAT(t.name, ',') as tag_names
+           ss.last_notification_sent, GROUP_CONCAT(t.name, ',') as tag_names
     FROM scheduled_sessions ss
     LEFT JOIN scheduled_session_tags sst ON ss.id = sst.scheduled_session_id
     LEFT JOIN tags t ON sst.tag_id = t.id
@@ -336,18 +337,26 @@ export function getUpcomingSessionsForNotification(): ScheduledSessionNotificati
 
   const notifications: ScheduledSessionNotification[] = [];
 
-  // Day-before notifications
+  // Day-before notifications - only for sessions that are actually tomorrow
+  // and not within the next 2 hours
   tomorrowSessions.forEach((session) => {
-    notifications.push({
-      id: session.id,
-      title: session.title,
-      scheduled_datetime: session.scheduled_datetime,
-      estimated_duration: session.estimated_duration,
-      type: "day_before",
-      tags: session.tag_names
-        ? session.tag_names.split(",").filter(Boolean)
-        : [],
-    });
+    const sessionTime = new Date(session.scheduled_datetime);
+    const timeDiff = sessionTime.getTime() - now.getTime();
+    const hoursUntil = timeDiff / (1000 * 60 * 60);
+
+    // Only show "day before" notification if session is more than 2 hours away
+    if (hoursUntil > 2) {
+      notifications.push({
+        id: session.id,
+        title: session.title,
+        scheduled_datetime: session.scheduled_datetime,
+        estimated_duration: session.estimated_duration,
+        type: "day_before",
+        tags: session.tag_names
+          ? session.tag_names.split(",").filter(Boolean)
+          : [],
+      });
+    }
   });
 
   // Same-day notifications
@@ -355,9 +364,17 @@ export function getUpcomingSessionsForNotification(): ScheduledSessionNotificati
     const sessionTime = new Date(session.scheduled_datetime);
     const timeDiff = sessionTime.getTime() - now.getTime();
     const hoursUntil = timeDiff / (1000 * 60 * 60);
+    const lastNotificationSent = session.last_notification_sent
+      ? new Date(session.last_notification_sent)
+      : null;
 
-    // Notify if session is in the next 2 hours
-    if (hoursUntil <= 2 && hoursUntil > 0) {
+    // Calculate time since last notification (in minutes)
+    const timeSinceLastNotification = lastNotificationSent
+      ? (now.getTime() - lastNotificationSent.getTime()) / (1000 * 60)
+      : Infinity;
+
+    // Notify if session is in the next 2 hours (but not if we sent a notification in the last 30 minutes)
+    if (hoursUntil <= 2 && hoursUntil > 0 && timeSinceLastNotification > 30) {
       notifications.push({
         id: session.id,
         title: session.title,
@@ -370,8 +387,12 @@ export function getUpcomingSessionsForNotification(): ScheduledSessionNotificati
       });
     }
 
-    // Notify if it's time to start (within 5 minutes)
-    if (hoursUntil <= 5 / 60 && hoursUntil > -(5 / 60)) {
+    // Notify if it's time to start (within 5 minutes, but not if we sent a notification in the last 2 minutes)
+    if (
+      hoursUntil <= 5 / 60 &&
+      hoursUntil > -(5 / 60) &&
+      timeSinceLastNotification > 2
+    ) {
       notifications.push({
         id: session.id,
         title: session.title,
