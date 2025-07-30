@@ -5,6 +5,7 @@ import {
   showModal,
   showChartConfigModal,
   showConfirmationModal,
+  showDetailsModal,
 } from "../components";
 import { PaginationManager, PageInfo } from "../utils/performance";
 import { createExportModal } from "../utils/sessionExporter";
@@ -242,7 +243,7 @@ export function renderSessionPage(
       if (m > 0) durationStr += `${m}m `;
       if (s > 0 || (!h && !m)) durationStr += `${s}s`;
       return `
-      <tr data-session-id="${session.id}">
+      <tr class="clickable-row" data-session-id="${session.id}">
         <td>
           ${escapeHtml(session.title)}
           ${
@@ -312,6 +313,25 @@ export function renderSessionPage(
           }
           renderSessionRows(container, updatedSessions, state, allTags);
         });
+    });
+  });
+
+  // Attach row click listeners for details
+  sessionTableBody.querySelectorAll(".clickable-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      const sessionId = (row as HTMLElement).getAttribute("data-session-id");
+      const session = state.filteredSessions.find(
+        (s: SessionRow) => String(s.id) === String(sessionId)
+      );
+      if (session && sessionId) {
+        showDetailsModal({
+          type: "session",
+          data: {
+            sessionId: parseInt(sessionId),
+            title: session.title,
+          },
+        });
+      }
     });
   });
 }

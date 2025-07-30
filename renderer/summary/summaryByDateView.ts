@@ -1,7 +1,7 @@
 import { ipcRenderer } from "electron";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
 import { escapeHtml, getCurrentUserId, prettyDate } from "../utils";
-import { showChartConfigModal } from "../components";
+import { showChartConfigModal, showDetailsModal } from "../components";
 import { DateBasedPaginationManager, PageInfo } from "../utils/performance";
 import {
   createSortableHeader,
@@ -125,28 +125,51 @@ export function renderByDateTable(
   const oldPagination = container.querySelectorAll(".pagination-container");
   oldPagination.forEach((p) => p.remove());
 
-  // Sort data by date first (descending by default - most recent first)
-  const sortedData =
-    state.sortState.column === "date"
-      ? sortData(data, "date", state.sortState.direction, (item, column) => {
-          if (column === "date") return new Date(item.date).getTime();
-          return String(item[column as keyof DailySummaryRow] || "");
-        })
-      : sortData(data, "date", "desc", (item) => new Date(item.date).getTime());
+  let finalSortedData: DailySummaryRow[];
 
-  // Apply sorting to non-date columns if needed
-  let finalSortedData = sortedData;
-  if (state.sortState.column && state.sortState.column !== "date") {
+  if (state.sortState.column === "date") {
+    // Sort by date - this affects the order of date groups
     finalSortedData = sortData(
-      sortedData,
-      state.sortState.column,
+      data,
+      "date",
       state.sortState.direction,
-      (item, column) => {
-        if (column === "app") return item.app;
-        if (column === "time") return item.total_time;
-        return String(item[column as keyof DailySummaryRow] || "");
+      (item) => {
+        return new Date(item.date).getTime();
       }
     );
+  } else {
+    // For non-date columns, we need to maintain date grouping but sort within each date
+    // First group by date
+    const grouped: { [date: string]: DailySummaryRow[] } = {};
+    data.forEach((row) => {
+      if (!grouped[row.date]) grouped[row.date] = [];
+      grouped[row.date].push(row);
+    });
+
+    // Sort dates (most recent first by default when no sort is applied)
+    const sortedDates = Object.keys(grouped).sort((a, b) => {
+      return new Date(b).getTime() - new Date(a).getTime();
+    });
+
+    // Sort within each date group if a non-date column is selected
+    if (state.sortState.column) {
+      Object.keys(grouped).forEach((date) => {
+        grouped[date] = sortData(
+          grouped[date],
+          state.sortState.column!,
+          state.sortState.direction,
+          (item, column) => {
+            if (column === "app") return item.app;
+            if (column === "time") return item.total_time;
+            if (column === "language") return item.language || "";
+            return String(item[column as keyof DailySummaryRow] || "");
+          }
+        );
+      });
+    }
+
+    // Flatten back to array maintaining date order
+    finalSortedData = sortedDates.flatMap((date) => grouped[date]);
   }
 
   // Initialize or update pagination
@@ -180,6 +203,9 @@ export function renderByDatePage(
     grouped[row.date].push(row);
   });
 
+  // Get unique dates from the sorted data to preserve the sort order
+  const orderedDates = Array.from(new Set(dataToRender.map((row) => row.date)));
+
   const detailsContainer = document.createElement("div");
   detailsContainer.className = "details-container";
 
@@ -191,7 +217,7 @@ export function renderByDatePage(
   table.innerHTML = `
     <thead>
       <tr>
-        <th></th>
+        ${createSortableHeader("Date", "date", state.sortState)}
         ${createSortableHeader("Editor", "app", state.sortState)}
         ${createSortableHeader("Time Spent", "time", state.sortState)}
       </tr>
@@ -205,19 +231,16 @@ export function renderByDatePage(
 
   let tableContent = "";
 
-  Object.entries(grouped).forEach(([date, rows]) => {
+  // Use ordered dates to preserve the sort order
+  orderedDates.forEach((date) => {
+    const rows = grouped[date];
+
     // Add date separator row
     tableContent += `
       <tr class="date-separator-row">
         <td colspan="3" class="date-separator">
-          <div class="sortable-header date-header" data-column="date">
-            ${prettyDate(date)}${
-      state.sortState.column === "date"
-        ? state.sortState.direction === "asc"
-          ? " ▲"
-          : " ▼"
-        : ""
-    }
+          <div class="date-header" data-column="date">
+            ${prettyDate(date)}
           </div>
         </td>
       </tr>
@@ -226,7 +249,9 @@ export function renderByDatePage(
     // Add data rows for this date
     rows.forEach((row: DailySummaryRow) => {
       tableContent += `
-        <tr>
+        <tr class="clickable-row" data-app="${escapeHtml(
+          row.app
+        )}" data-date="${row.date}">
           <td><img src="${row.icon}" alt="${escapeHtml(
         row.app
       )} icon" class="icon" /></td>
@@ -241,12 +266,26 @@ export function renderByDatePage(
   detailsContainer.appendChild(table);
   container.appendChild(detailsContainer);
 
-  // Attach click handlers to sortable headers
-  table.querySelectorAll(".sortable-header").forEach((header) => {
+  // Attach click handlers to sortable headers (both in thead and tbody)
+  container.querySelectorAll(".sortable-header").forEach((header) => {
     header.addEventListener("click", () => {
       const column = (header as HTMLElement).getAttribute("data-column");
       if (column) {
         handleByDateSort(container, column, state);
+      }
+    });
+  });
+
+  // Attach click handlers to clickable rows
+  table.querySelectorAll(".clickable-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      const app = (row as HTMLElement).getAttribute("data-app");
+      const date = (row as HTMLElement).getAttribute("data-date");
+      if (app && date) {
+        showDetailsModal({
+          type: "app-date",
+          data: { app, date },
+        });
       }
     });
   });
@@ -309,6 +348,8 @@ export function handleByDateSort(
       state.sortState.direction === "asc" ? "desc" : "asc";
   } else {
     state.sortState.column = column;
+    // For date column, start with ascending (oldest first) as requested
+    // For other columns, start with ascending
     state.sortState.direction = "asc";
   }
 

@@ -366,3 +366,18 @@ th {
 .summary-table .date-header:hover {
   background-color: var(--row-hover);
 }
+
+/* Clickable row styles */
+.clickable-row {
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.clickable-row:hover {
+  background-color: var(--row-hover) !important;
+  transform: translateY(-1px);
+}
+
+.clickable-row:active {
+  transform: translateY(0);
+}

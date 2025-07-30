@@ -22,6 +22,7 @@ import "./styles/accent-text.css";
 import "./styles/calendar.css";
 import "./styles/charts.css";
 import "./styles/dashboard.css";
+import "./styles/details-modal.css";
 import "./styles/goals.css";
 import "./styles/layout.css";
 import "./styles/modal.css";

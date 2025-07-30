@@ -1,8 +1,3 @@
 TODO / Ideas for Improvements
 
-- [ ] Weekly/monthly reports: Generate and display reports for longer periods.
-- [ ] Integration with calendar/task apps: Link sessions to calendar events or tasks.
-- [ ] Cloud sync: Sync data across devices (optional, with user opt-in).
-- [ ] Admin profile to monitor all users and statistics.
-
-row click in summary tab -> show details
+- [ ] Seperate Admin profile to monitor all users and statistics.

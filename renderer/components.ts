@@ -1336,3 +1336,6 @@ export function showConfirmationModal(options: ConfirmationModalOptions) {
     document.addEventListener("keydown", handleEscape);
   }, 10); // Small delay to ensure DOM is ready
 }
+
+// Export details modal
+export * from "./components/DetailsModal";

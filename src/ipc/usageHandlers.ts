@@ -6,7 +6,6 @@ ipcMain.handle("get-logs", async (_event, userId: number, date?: string) => {
   try {
     return usage.getSummary(userId, date);
   } catch (err) {
-    console.error("[Get Logs Error]", err);
     return [];
   }
 });
@@ -17,7 +16,6 @@ ipcMain.handle(
     try {
       return usage.getLoggedDaysOfMonth(userId, year, month);
     } catch (err) {
-      console.error("[Get Logged Days Of Month Error]", err);
       return [];
     }
   }
@@ -27,7 +25,6 @@ ipcMain.handle("get-editor-usage", async (_event, userId: number) => {
   try {
     return usage.getEditorUsage(userId);
   } catch (err) {
-    console.error("[Get Editor Usage Error]", err);
     return [];
   }
 });
@@ -38,7 +35,6 @@ ipcMain.handle(
     try {
       return usage.getDailySummary(userId, filters);
     } catch (err) {
-      console.error("[Get Daily Summary Error]", err);
       return [];
     }
   }
@@ -48,7 +44,6 @@ ipcMain.handle("get-language-usage", async (_event, userId: number) => {
   try {
     return usage.getLanguageUsage(userId);
   } catch (err) {
-    console.error("[Get Language Usage Error]", err);
     return [];
   }
 });
@@ -103,3 +98,27 @@ ipcMain.handle("get-user-editors", async (_event, userId) => {
 ipcMain.handle("get-user-lang-exts", async (_event, userId) => {
   return usage.getUserLangExts(userId);
 });
+
+// Get detailed usage data for a specific app on a specific date
+ipcMain.handle(
+  "get-usage-details-for-app-date",
+  async (_event, userId: number, app: string, date: string) => {
+    try {
+      return usage.getUsageDetailsForAppDate(userId, app, date);
+    } catch (err) {
+      return [];
+    }
+  }
+);
+
+// Get detailed usage data for a specific session
+ipcMain.handle(
+  "get-usage-details-for-session",
+  async (_event, userId: number, sessionId: number) => {
+    try {
+      return usage.getUsageDetailsForSession(userId, sessionId);
+    } catch (err) {
+      return null;
+    }
+  }
+);

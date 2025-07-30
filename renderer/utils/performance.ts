@@ -187,9 +187,12 @@ export class DateBasedPaginationManager {
   }
 
   getTotalPages(): number {
-    const grouped = this.groupByDate(this.data);
-    const uniqueDates = Object.keys(grouped);
-    return Math.ceil(uniqueDates.length / this.daysPerPage);
+    // Count unique dates preserving order
+    const seenDates = new Set<string>();
+    this.data.forEach((row) => {
+      seenDates.add(row.date);
+    });
+    return Math.ceil(seenDates.size / this.daysPerPage);
   }
 
   goToPage(page: number) {
@@ -262,9 +265,15 @@ export class DateBasedPaginationManager {
 
   private renderCurrentPage() {
     const grouped = this.groupByDate(this.data);
-    const uniqueDates = Object.keys(grouped).sort(
-      (a, b) => new Date(b).getTime() - new Date(a).getTime()
-    ); // Sort by date desc
+    // Use the order of dates as they appear in the data (preserving sort order from caller)
+    const seenDates = new Set<string>();
+    const uniqueDates: string[] = [];
+    this.data.forEach((row) => {
+      if (!seenDates.has(row.date)) {
+        seenDates.add(row.date);
+        uniqueDates.push(row.date);
+      }
+    });
 
     const startIndex = (this.currentPage - 1) * this.daysPerPage;
     const endIndex = Math.min(
@@ -294,10 +303,15 @@ export class DateBasedPaginationManager {
     endDay: number;
     totalDays: number;
   } {
-    const grouped = this.groupByDate(this.data);
-    const uniqueDates = Object.keys(grouped).sort(
-      (a, b) => new Date(b).getTime() - new Date(a).getTime()
-    );
+    // Use the order of dates as they appear in the data (preserving sort order from caller)
+    const seenDates = new Set<string>();
+    const uniqueDates: string[] = [];
+    this.data.forEach((row) => {
+      if (!seenDates.has(row.date)) {
+        seenDates.add(row.date);
+        uniqueDates.push(row.date);
+      }
+    });
 
     const startIndex = (this.currentPage - 1) * this.daysPerPage;
     const endIndex = Math.min(
