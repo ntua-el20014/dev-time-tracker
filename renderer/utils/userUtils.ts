@@ -1,6 +1,24 @@
+import { ipcRenderer } from "electron";
+
 export function getCurrentUserId(): number {
   const stored = localStorage.getItem("currentUserId");
   return stored ? Number(stored) : 1; // fallback to 1 if not set
+}
+
+// Role-based access control helpers
+export async function isCurrentUserAdmin(): Promise<boolean> {
+  const userId = getCurrentUserId();
+  return await ipcRenderer.invoke("is-user-admin", userId);
+}
+
+export async function isCurrentUserManagerOrAdmin(): Promise<boolean> {
+  const userId = getCurrentUserId();
+  return await ipcRenderer.invoke("is-user-manager-or-admin", userId);
+}
+
+export async function getCurrentUserInfo() {
+  const userId = getCurrentUserId();
+  return await ipcRenderer.invoke("get-user-info", userId);
 }
 
 // Custom avatar management functions

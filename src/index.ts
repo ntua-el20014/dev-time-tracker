@@ -31,6 +31,9 @@ const idleTimeoutSeconds = getIdleTimeoutSeconds();
 app.whenReady().then(() => {
   createWindow();
 
+  // Initialize admin user on startup
+  users.ensureAdminExists();
+
   // Listen for system idle (lock/unlock)
   powerMonitor.on("lock-screen", () => {
     if (!isPaused && trackingInterval) {

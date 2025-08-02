@@ -1,5 +1,6 @@
 import { ipcRenderer } from "electron";
 import { showModal, showConfirmationModal } from "./components"; // Adjust path if needed
+import { UserRole } from "../shared/types";
 
 /**
  * User Landing Page UI
@@ -13,6 +14,7 @@ export async function renderUserLanding(
     id: number;
     username: string;
     avatar?: string;
+    role: UserRole;
   }
 
   // Load users from the database
@@ -32,6 +34,16 @@ export async function renderUserLanding(
     return `<div class="user-avatar-fallback">${initials}</div>`;
   }
 
+  function getRoleBadge(role: UserRole): string {
+    const roleMap = {
+      [UserRole.ADMIN]: { text: "Admin", class: "admin" },
+      [UserRole.MANAGER]: { text: "Manager", class: "manager" },
+      [UserRole.EMPLOYEE]: { text: "Employee", class: "employee" },
+    };
+    const roleInfo = roleMap[role];
+    return `<span class="user-role-badge ${roleInfo.class}">${roleInfo.text}</span>`;
+  }
+
   container.innerHTML = `
     <div>
       <h2>Who is using Dev Time Tracker?</h2>
@@ -41,7 +53,10 @@ export async function renderUserLanding(
             (user) => `
             <div class="user-rect" data-userid="${user.id}" tabindex="0">
               ${getAvatar(user)}
-              <div>${user.username}</div>
+              <div class="user-info">
+                <div class="username">${user.username}</div>
+                ${getRoleBadge(user.role)}
+              </div>
             </div>
           `
           )

@@ -15,6 +15,7 @@ import {
   getCustomAvatars,
   addCustomAvatar,
   removeCustomAvatar,
+  isCurrentUserAdmin,
 } from "./utils";
 import { getLangIconUrl } from "../src/utils/extractData";
 import type { Tag } from "@shared/types";
@@ -610,6 +611,9 @@ export async function refreshProfile() {
   const profileDiv = document.getElementById("profileContent");
   if (!profileDiv) return;
 
+  // Check if current user is admin to show admin tab
+  const isAdmin = await isCurrentUserAdmin();
+
   profileDiv.innerHTML = `
   <div class="profile-main-flex">
     <nav id="profileSidebar" class="profile-sidebar">
@@ -619,7 +623,11 @@ export async function refreshProfile() {
         <li><button class="profile-chapter-btn" data-chapter="goals">Daily Goals</button></li>
         <li><button class="profile-chapter-btn" data-chapter="settings">Settings</button></li>
         <li><button class="profile-chapter-btn" data-chapter="hotkeys">Hotkeys</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="admin">Admin</button></li>
+        ${
+          isAdmin
+            ? '<li><button class="profile-chapter-btn" data-chapter="admin">Admin</button></li>'
+            : ""
+        }
       </ul>
       <button id="logoutBtn" class="logout-btn">Log Out</button>
     </nav>

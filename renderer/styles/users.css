@@ -190,3 +190,43 @@
   color: #fff !important;
   transform: translateY(-1px);
 }
+
+/* User role badges and info styling */
+.user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.user-info .username {
+  font-size: 1.1em;
+  font-weight: 500;
+  text-align: center;
+  word-break: break-word;
+}
+
+.user-role-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+
+.user-role-badge.admin {
+  background: #ff6b6b;
+  color: white;
+}
+
+.user-role-badge.manager {
+  background: #4ecdc4;
+  color: white;
+}
+
+.user-role-badge.employee {
+  background: var(--fg-muted);
+  color: white;
+}

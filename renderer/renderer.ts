@@ -32,6 +32,7 @@ import "./styles/table.css";
 import "./styles/theme.css";
 import "./styles/timeline.css";
 import "./styles/users.css";
+import "./styles/userRoleManager.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
 function setupTabs() {

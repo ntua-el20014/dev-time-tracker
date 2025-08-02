@@ -4,6 +4,8 @@ import {
   showConfirmationModal,
 } from "./components";
 import { clearAllOnboardingData } from "./onboarding";
+import { renderUserRoleManager } from "./components/UserRoleManager";
+import { isCurrentUserAdmin } from "./utils/userUtils";
 
 export function createExportDbButton(
   type: "db" | "json" | "csv"
@@ -165,15 +167,57 @@ export function createClearOnboardingButton(): HTMLButtonElement {
   return btn;
 }
 
-export function renderAdminPanel(container: HTMLElement) {
+export async function renderAdminPanel(container: HTMLElement) {
   container.innerHTML = "";
+
+  // Check if current user is admin
+  const isAdmin = await isCurrentUserAdmin();
+
+  if (!isAdmin) {
+    container.innerHTML = `
+      <div class="access-denied">
+        <h2>Access Denied</h2>
+        <p>You don't have permission to access the admin panel. Only administrators can access this section.</p>
+      </div>
+    `;
+    return container;
+  }
 
   const title = document.createElement("h2");
   title.style.marginBottom = "30px";
   title.textContent = "Admin Panel";
   container.appendChild(title);
 
+  // User Management Section
+  const userManagementSection = document.createElement("div");
+  userManagementSection.className = "admin-section";
+
+  const userManagementTitle = document.createElement("h3");
+  userManagementTitle.textContent = "User Management";
+  userManagementTitle.style.marginBottom = "15px";
+  userManagementTitle.style.color = "var(--fg-muted)";
+  userManagementSection.appendChild(userManagementTitle);
+
+  const userManagementContainer = document.createElement("div");
+  userManagementContainer.id = "userManagementContainer";
+  userManagementSection.appendChild(userManagementContainer);
+
+  container.appendChild(userManagementSection);
+
+  // Render user role manager
+  await renderUserRoleManager(userManagementContainer);
+
   // Database operations
+  const dbSeparator = document.createElement("hr");
+  dbSeparator.style.margin = "30px 0";
+  container.appendChild(dbSeparator);
+
+  const dbTitle = document.createElement("h3");
+  dbTitle.textContent = "Database Operations";
+  dbTitle.style.marginBottom = "15px";
+  dbTitle.style.color = "var(--fg-muted)";
+  container.appendChild(dbTitle);
+
   container.appendChild(createExportDbButton("db"));
   container.appendChild(createExportDbButton("json"));
   container.appendChild(createExportDbButton("csv"));

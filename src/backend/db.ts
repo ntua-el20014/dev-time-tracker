@@ -8,7 +8,8 @@ db.prepare(
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
-    avatar TEXT
+    avatar TEXT,
+    role TEXT DEFAULT 'employee' CHECK(role IN ('admin', 'manager', 'employee'))
   )
 `
 ).run();
