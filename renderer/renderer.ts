@@ -5,16 +5,17 @@ import { refreshProfile } from "./profileTab";
 import { renderSummary } from "./summaryTab";
 import { renderDashboard } from "./dashboardTab";
 import { renderCalendar } from "./calendarTab";
+import { renderProjects } from "./projectsTab";
 import { initTheme, updateRecordBtn, updatePauseBtn } from "./theme";
 import {
   displayOSInfo,
-  showModal,
   showNotification,
   showInAppNotification,
   showConfirmationModal,
 } from "./components";
 import { renderUserLanding } from "./components";
 import { getCurrentUserId } from "./utils";
+import { isCurrentUserManagerOrAdmin } from "./utils";
 import { loadUserLangMap } from "../src/utils/extractData";
 import { showOnboarding, shouldShowOnboarding } from "./components";
 import "./styles/base.css";
@@ -28,6 +29,7 @@ import "./styles/layout.css";
 import "./styles/modal.css";
 import "./styles/onboarding.css";
 import "./styles/profile.css";
+import "./styles/projects.css";
 import "./styles/table.css";
 import "./styles/theme.css";
 import "./styles/timeline.css";
@@ -76,8 +78,24 @@ function setupTabs() {
         renderSummary();
       }
       if (tabId === "calendar") renderCalendar();
+      if (tabId === "projects") renderProjects();
     });
   });
+}
+
+async function setupRoleBasedTabVisibility() {
+  const isManagerOrAdmin = await isCurrentUserManagerOrAdmin();
+  const projectsTab = document.querySelector(
+    '.tab[data-tab="projects"]'
+  ) as HTMLButtonElement;
+
+  if (projectsTab) {
+    if (isManagerOrAdmin) {
+      projectsTab.style.display = "";
+    } else {
+      projectsTab.style.display = "none";
+    }
+  }
 }
 
 function initUI() {
@@ -256,43 +274,148 @@ function setupHotkeys() {
   hotkeyListenerAdded = true;
 }
 
-ipcRenderer.on("get-session-info", () => {
+ipcRenderer.on("get-session-info", async () => {
   // Add a small delay to ensure any previous modals are fully closed
-  setTimeout(() => {
-    showModal({
-      title: "Session Info",
-      fields: [
-        { name: "title", label: "Title:", type: "text", required: true },
-        {
-          name: "description",
-          label: "Description (optional):",
-          type: "textarea",
+  setTimeout(async () => {
+    // Load available projects for selection
+    let projects = [];
+    try {
+      const userId = await ipcRenderer.invoke("get-current-user-id");
+      projects = await ipcRenderer.invoke("get-user-projects", userId);
+    } catch (error) {
+      // Failed to load projects, continue without them
+    }
+
+    // Add project selection if there are active projects
+    const activeProjects = projects.filter((p: any) => p.is_active); // Clean up any existing modals first
+    const existingModal = document.getElementById("customModal");
+    const existingOverlay = document.getElementById("customModalOverlay");
+    if (existingModal) existingModal.remove();
+    if (existingOverlay) existingOverlay.remove();
+
+    // Create the modal overlay
+    const overlay = document.createElement("div");
+    overlay.id = "customModalOverlay";
+    overlay.className = "custom-modal-overlay";
+    overlay.style.display = "block";
+    document.body.appendChild(overlay);
+
+    // Create the modal
+    const modal = document.createElement("div");
+    modal.id = "customModal";
+    modal.className = "active";
+
+    const projectOptions =
+      activeProjects.length > 0
+        ? activeProjects
+            .map((p: any) => `<option value="${p.id}">${p.name}</option>`)
+            .join("")
+        : "";
+
+    modal.innerHTML = `
+      <div class="session-modal-content">
+        <button class="modal-close-btn">&times;</button>
+        <h2>Session Info</h2>
+        <form id="sessionInfoForm">
+          <label for="session-title">Title:</label><br>
+          <input id="session-title" name="title" type="text" required><br>
+          
+          <label for="session-description">Description (optional):</label><br>
+          <textarea id="session-description" name="description"></textarea><br>
+          
+          ${
+            activeProjects.length > 0
+              ? `
+          <label for="session-project">Project (optional):</label><br>
+          <select id="session-project" name="project">
+            <option value="">No project</option>
+            ${projectOptions}
+          </select><br>
+          
+          <label>
+            <input type="checkbox" id="session-billable" name="billable"> Billable
+          </label><br>
+          `
+              : ""
+          }
+          
+          <div class="session-modal-actions">
+            <button type="button" id="sessionCancelBtn" class="btn-cancel">Discard</button>
+            <button type="submit" class="btn-confirm">Save</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const form = document.getElementById("sessionInfoForm") as HTMLFormElement;
+    const titleInput = document.getElementById(
+      "session-title"
+    ) as HTMLInputElement;
+    const cancelBtn = document.getElementById(
+      "sessionCancelBtn"
+    ) as HTMLButtonElement;
+    const closeBtn = modal.querySelector(
+      ".modal-close-btn"
+    ) as HTMLButtonElement;
+
+    // Focus the title input
+    setTimeout(() => titleInput.focus(), 50);
+
+    // Handle form submission
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const projectId = formData.get("project") as string;
+      const isBillable = (formData.get("billable") as string) === "on";
+
+      ipcRenderer.send("session-info-reply", {
+        title: (formData.get("title") as string) || "Coding Session",
+        description: formData.get("description") as string,
+        projectId: projectId ? parseInt(projectId) : undefined,
+        isBillable: isBillable,
+      });
+
+      modal.remove();
+      overlay.remove();
+    };
+
+    // Handle cancel and close
+    const closeModal = () => {
+      modal.remove();
+      overlay.remove();
+      showConfirmationModal({
+        title: "Discard Session",
+        message: "Session will be discarded. Are you sure?",
+        confirmText: "Discard",
+        confirmClass: "btn-delete",
+        onConfirm: () => {
+          ipcRenderer.send("session-info-reply", {
+            title: "",
+            description: "",
+          });
         },
-      ],
-      submitText: "Save",
-      cancelText: "Discard",
-      onSubmit: (values) => {
-        ipcRenderer.send("session-info-reply", {
-          title: values.title || "Coding Session",
-          description: values.description,
-        });
-      },
-      onCancel: () => {
-        showConfirmationModal({
-          title: "Discard Session",
-          message: "Session will be discarded. Are you sure?",
-          confirmText: "Discard",
-          confirmClass: "btn-delete",
-          onConfirm: () => {
-            ipcRenderer.send("session-info-reply", {
-              title: "",
-              description: "",
-            });
-          },
-        });
-      },
-    });
-  }, 100); // Reduced delay since cleanup is simpler now
+      });
+    };
+
+    cancelBtn.onclick = closeModal;
+    closeBtn.onclick = closeModal;
+
+    // Handle overlay click to close
+    overlay.onclick = (e) => {
+      if (e.target === overlay) {
+        closeModal();
+      }
+    };
+
+    // Prevent modal content clicks from closing modal
+    modal
+      .querySelector(".session-modal-content")
+      ?.addEventListener("click", (e) => {
+        e.stopPropagation();
+      });
+  }, 100);
 });
 
 ipcRenderer.on("notify", (_event, data) => {
@@ -392,6 +515,7 @@ document.addEventListener("DOMContentLoaded", () => {
       mainUI.style.display = "";
       renderMainUI();
       setupRecordAndPauseBtns();
+      setupRoleBasedTabVisibility();
     }
     if (landing) landing.style.display = "none";
 

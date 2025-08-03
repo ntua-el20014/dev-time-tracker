@@ -56,6 +56,36 @@ db.prepare(
 
 db.prepare(
   `
+  CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    color TEXT,
+    is_active INTEGER DEFAULT 1,
+    manager_id INTEGER NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE CASCADE
+  )
+`
+).run();
+
+db.prepare(
+  `
+  CREATE TABLE IF NOT EXISTS project_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    role TEXT DEFAULT 'employee' CHECK(role IN ('manager', 'employee')),
+    joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_id, user_id),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )
+`
+).run();
+
+db.prepare(
+  `
   CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT,
@@ -63,8 +93,11 @@ db.prepare(
     duration INTEGER,
     title TEXT,
     description TEXT,
+    project_id INTEGER,
+    is_billable INTEGER DEFAULT 0,
     user_id INTEGER,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
   )
 `
 ).run();
@@ -103,7 +136,7 @@ db.prepare(
     time INTEGER NOT NULL, -- in minutes
     description TEXT,
     isCompleted INTEGER DEFAULT 0,
-    UNIQUE(user_id, date)
+    UNIQUE(user_id, date),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
 `

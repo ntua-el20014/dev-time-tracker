@@ -53,13 +53,26 @@ export async function renderBySessionView(
     state.filteredSessions = sessions;
   }
 
-  // Unique tags for dropdown
+  // Unique tags and projects for dropdowns
   const uniqueTags = Array.from(new Set(sessions.flatMap((s) => s.tags || [])));
+  const uniqueProjects = Array.from(
+    new Set(sessions.filter((s) => s.project_name).map((s) => s.project_name!))
+  );
 
   // Create filter bar
   const filterBar = createFilterBar({
     filters: {
       "tag-session": { type: "select", label: "Tag", options: uniqueTags },
+      "project-session": {
+        type: "select",
+        label: "Project",
+        options: uniqueProjects,
+      },
+      "billable-session": {
+        type: "select",
+        label: "Billable",
+        options: ["Yes", "No"],
+      },
       "start-session": { type: "date", label: "Start" },
       "end-session": { type: "date", label: "End" },
     },
@@ -67,6 +80,10 @@ export async function renderBySessionView(
       const filters: Record<string, string> = {};
       if (filterValues["tag-session"])
         filters.tag = filterValues["tag-session"];
+      if (filterValues["project-session"])
+        filters.project = filterValues["project-session"];
+      if (filterValues["billable-session"])
+        filters.billable = filterValues["billable-session"];
       if (filterValues["start-session"])
         filters.startDate = filterValues["start-session"];
       if (filterValues["end-session"])
@@ -127,6 +144,7 @@ export async function renderBySessionView(
         ${createSortableHeader("Name", "name", state.sortState)}
         ${createSortableHeader("Date", "date", state.sortState)}
         ${createSortableHeader("Duration", "duration", state.sortState)}
+        ${createSortableHeader("Project", "project", state.sortState)}
         <th></th>
       </tr>
     </thead>
@@ -203,6 +221,7 @@ export function renderSessionRows(
         if (column === "name") return item.title;
         if (column === "date") return new Date(item.date).getTime();
         if (column === "duration") return item.duration || 0;
+        if (column === "project") return item.project_name || "";
         return String(item[column as keyof SessionRow] || "");
       }
     );
@@ -269,6 +288,25 @@ export function renderSessionPage(
         </td>
         <td>${prettyDate(session.date)}</td>
         <td>${durationStr.trim()}</td>
+        <td>
+          ${
+            session.project_name
+              ? `<div class="session-project">
+                  <div class="project-indicator" style="background-color: ${
+                    session.project_color || "#3b82f6"
+                  }"></div>
+                  <span class="project-name">${escapeHtml(
+                    session.project_name
+                  )}</span>
+                  ${
+                    session.is_billable
+                      ? '<span class="billable-indicator" title="Billable">💰</span>'
+                      : ""
+                  }
+                </div>`
+              : `<span class="no-project">No project</span>`
+          }
+        </td>
         <td>
           <button class="session-edit-btn" title="Edit session">
             <img src="${edit}" alt="Edit">

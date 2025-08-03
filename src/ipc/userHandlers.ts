@@ -20,6 +20,7 @@ ipcMain.handle("set-current-user", (_event, userId: number) =>
   users.setCurrentUser(userId)
 );
 ipcMain.handle("get-current-user", () => users.getCurrentUser());
+ipcMain.handle("get-current-user-id", () => users.getCurrentUser());
 ipcMain.handle("delete-user", (_event, userId: number) => {
   users.deleteUser(userId);
   return true;

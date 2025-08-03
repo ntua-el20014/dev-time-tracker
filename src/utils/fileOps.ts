@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import fs from 'fs';
-import AdmZip from 'adm-zip';
-import { parse as json2csv } from 'json2csv';
-import { parse as csvParse} from 'csv-parse';
-import * as users from '../backend/users';
-import * as sessions from '../backend/sessions';
-import * as usage from '../backend/usage';
-import path from 'path';
+import fs from "fs";
+import AdmZip from "adm-zip";
+import { parse as json2csv } from "json2csv";
+import { parse as csvParse } from "csv-parse";
+import * as users from "../backend/users";
+import * as sessions from "../backend/sessions";
+import * as usage from "../backend/usage";
+import * as projects from "../backend/projects";
+import path from "path";
 
 export function getAllDatabaseData() {
   const usersData = users.getAllUsers();
@@ -17,6 +18,7 @@ export function getAllDatabaseData() {
   const sessionTagsData = sessions.getAllSessionTagsData();
   const usageSummaryData = usage.getAllUsageSummaryData();
   const dailyGoalsData = usage.getAllDailyGoalsData();
+  const projectsData = projects.getAllProjectsData();
 
   return {
     users: usersData,
@@ -26,6 +28,7 @@ export function getAllDatabaseData() {
     session_tags: sessionTagsData,
     usage_summary: usageSummaryData,
     daily_goals: dailyGoalsData,
+    projects: projectsData,
   };
 }
 
@@ -37,6 +40,7 @@ export function clearAndImportAllTables(data: Record<string, any[]>) {
   usage.clearUsage();
   usage.clearUsageSummary();
   usage.clearDailyGoals();
+  projects.clearProjects();
 
   if (data.users) users.importUsers(data.users);
   if (data.sessions) sessions.importSessions(data.sessions);
@@ -45,33 +49,40 @@ export function clearAndImportAllTables(data: Record<string, any[]>) {
   if (data.usage) usage.importUsage(data.usage);
   if (data.usage_summary) usage.importUsageSummary(data.usage_summary);
   if (data.daily_goals) usage.importDailyGoals(data.daily_goals);
+  if (data.projects) projects.importProjects(data.projects);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function addCsvToZip(zip: AdmZip, data: any[], name: string) {
   if (data.length === 0) return;
   const csv = json2csv(data, { fields: Object.keys(data[0]) });
-  zip.addFile(`${name}.csv`, Buffer.from(csv, 'utf-8'));
+  zip.addFile(`${name}.csv`, Buffer.from(csv, "utf-8"));
 }
 
 export function readJsonFile(filePath: string) {
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
 }
 
-export async function readZipCsvs(filePath: string): Promise<Record<string, any[]>> {
+export async function readZipCsvs(
+  filePath: string
+): Promise<Record<string, any[]>> {
   const zip = new AdmZip(filePath);
   const entries = zip.getEntries();
   const result: Record<string, any[]> = {};
 
   for (const entry of entries) {
-    if (entry.entryName.endsWith('.csv')) {
-      const table = entry.entryName.replace('.csv', '');
-      const csvStr = entry.getData().toString('utf-8');
+    if (entry.entryName.endsWith(".csv")) {
+      const table = entry.entryName.replace(".csv", "");
+      const csvStr = entry.getData().toString("utf-8");
       result[table] = await new Promise((resolve, reject) => {
-        csvParse(csvStr, { columns: true, skip_empty_lines: true }, (err, records) => {
-          if (err) reject(err);
-          else resolve(records);
-        });
+        csvParse(
+          csvStr,
+          { columns: true, skip_empty_lines: true },
+          (err, records) => {
+            if (err) reject(err);
+            else resolve(records);
+          }
+        );
       });
     }
   }
@@ -79,7 +90,7 @@ export async function readZipCsvs(filePath: string): Promise<Record<string, any[
 }
 
 export function backupDatabase(dbPath: string) {
-  const backupPath = `${dbPath.replace('.db', '')}-backup-${Date.now()}.db`;
+  const backupPath = `${dbPath.replace(".db", "")}-backup-${Date.now()}.db`;
   const backupDir = path.dirname(backupPath);
   if (!fs.existsSync(backupDir)) {
     fs.mkdirSync(backupDir, { recursive: true });
@@ -94,14 +105,15 @@ export function restoreDatabase(backupPath: string, dbPath: string) {
 
 export function getLatestBackupFile(dbPath: string): string | null {
   const dir = path.dirname(dbPath);
-  const base = path.basename(dbPath, '.db');
-  const files = fs.readdirSync(dir)
-    .filter(f => f.startsWith(base + '-backup-') && f.endsWith('.db'))
-    .map(f => ({
+  const base = path.basename(dbPath, ".db");
+  const files = fs
+    .readdirSync(dir)
+    .filter((f) => f.startsWith(base + "-backup-") && f.endsWith(".db"))
+    .map((f) => ({
       file: path.join(dir, f),
-      time: Number(f.match(/backup-(\d+)\.db$/)?.[1] || 0)
+      time: Number(f.match(/backup-(\d+)\.db$/)?.[1] || 0),
     }))
-    .filter(f => f.time > 0)
+    .filter((f) => f.time > 0)
     .sort((a, b) => b.time - a.time);
 
   return files.length > 0 ? files[0].file : null;
@@ -109,8 +121,8 @@ export function getLatestBackupFile(dbPath: string): string | null {
 
 export function exportDataToCsv(data: any[], filePath: string) {
   if (!data || data.length === 0) {
-    throw new Error('No data to export.');
+    throw new Error("No data to export.");
   }
   const csv = json2csv(data, { fields: Object.keys(data[0]) });
-  fs.writeFileSync(filePath, csv, 'utf-8');
+  fs.writeFileSync(filePath, csv, "utf-8");
 }

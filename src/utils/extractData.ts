@@ -80,7 +80,7 @@ export function getLangIconUrl(ext?: string): string | null {
 
   // development
   if (process.env.NODE_ENV === "development") {
-    return `/icons/${icon}`;
+    return `/main_window/icons/${icon}`;
   }
   // production
   return `icons/${icon}`;

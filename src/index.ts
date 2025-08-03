@@ -13,6 +13,7 @@ import "./ipc/usageHandlers";
 import "./ipc/sessionHandlers";
 import "./ipc/scheduledSessionHandlers";
 import "./ipc/userHandlers";
+import "./ipc/projectHandlers";
 import "./ipc/dbHandler";
 import "./ipc/appHandlers";
 import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
@@ -242,6 +243,13 @@ ipcMain.handle("stop-tracking", async (_event, userId: number) => {
     clearInterval(trackingInterval);
     trackingInterval = null;
   }
+
+  // Check if there's an active session to stop
+  if (!sessionStart) {
+    // No active session to stop
+    return;
+  }
+
   let duration = sessionActiveDuration;
   if (!isPaused && lastActiveTimestamp) {
     const now = new Date();
@@ -250,19 +258,26 @@ ipcMain.handle("stop-tracking", async (_event, userId: number) => {
     );
   }
   sessionEnd = new Date();
+
   if (sessionStart && sessionEnd) {
     if (duration >= 10) {
       // Only record if >= 10 seconds
       // Ask renderer for session title/description
       const getSessionInfo = () =>
-        new Promise<{ title: string; description: string }>((resolve) => {
+        new Promise<{
+          title: string;
+          description: string;
+          projectId?: number;
+          isBillable?: boolean;
+        }>((resolve) => {
           ipcMain.once("session-info-reply", (_event, data) => {
             resolve(data);
           });
           mainWindow?.webContents.send("get-session-info");
         });
 
-      const { title, description } = await getSessionInfo();
+      const { title, description, projectId, isBillable } =
+        await getSessionInfo();
       if (title && title.trim() !== "") {
         const date = sessionStart.toLocaleDateString("en-CA");
         const start_time = sessionStart.toISOString();
@@ -272,7 +287,10 @@ ipcMain.handle("stop-tracking", async (_event, userId: number) => {
           start_time,
           duration,
           title,
-          description
+          description,
+          undefined, // tags
+          projectId,
+          isBillable || false
         );
       }
     }

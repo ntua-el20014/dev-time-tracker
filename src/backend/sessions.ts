@@ -6,14 +6,23 @@ import { Tag, SessionRow } from "./types";
 
 export function getSessions(
   userId: number,
-  filters?: { tag?: string; startDate?: string; endDate?: string }
+  filters?: {
+    tag?: string;
+    startDate?: string;
+    endDate?: string;
+    projectId?: number;
+    billableOnly?: boolean;
+  }
 ) {
   try {
     let query = `
       SELECT 
         s.id, s.timestamp, s.start_time, s.duration, s.title, s.description,
+        s.project_id, s.is_billable,
+        p.name as project_name, p.color as project_color,
         GROUP_CONCAT(t.name, ',') as tag_names
       FROM sessions s
+      LEFT JOIN projects p ON s.project_id = p.id
       LEFT JOIN session_tags st ON s.id = st.session_id
       LEFT JOIN tags t ON st.tag_id = t.id
       WHERE s.user_id = ?
@@ -27,6 +36,15 @@ export function getSessions(
     if (filters?.endDate) {
       query += " AND date(s.timestamp) <= date(?)";
       params.push(filters.endDate);
+    }
+    if (filters?.projectId) {
+      query += " AND s.project_id = ?";
+      params.push(filters.projectId);
+    }
+    if (filters?.billableOnly === true) {
+      query += " AND s.is_billable = 1";
+    } else if (filters?.billableOnly === false) {
+      query += " AND s.is_billable = 0";
     }
     if (filters?.tag) {
       query += `
@@ -68,7 +86,9 @@ export function addSession(
   duration: number,
   title: string,
   description?: string,
-  tags?: string[]
+  tags?: string[],
+  projectId?: number,
+  isBillable: boolean = false
 ) {
   try {
     const now = new Date();
@@ -76,11 +96,20 @@ export function addSession(
     const info = db
       .prepare(
         `
-      INSERT INTO sessions (timestamp, start_time, duration, title, description, user_id)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO sessions (timestamp, start_time, duration, title, description, project_id, is_billable, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `
       )
-      .run(timestamp, start_time, duration, title, description || null, userId);
+      .run(
+        timestamp,
+        start_time,
+        duration,
+        title,
+        description || null,
+        projectId || null,
+        isBillable ? 1 : 0,
+        userId
+      );
     const sessionId = info.lastInsertRowid as number;
     if (tags && tags.length) setSessionTags(userId, sessionId, tags);
 
@@ -96,14 +125,16 @@ export function editSession(
   id: number,
   title: string,
   description: string,
-  tags?: string[]
+  tags?: string[],
+  projectId?: number,
+  isBillable: boolean = false
 ) {
   try {
     db.prepare(
       `
-      UPDATE sessions SET title = ?, description = ? WHERE id = ?
+      UPDATE sessions SET title = ?, description = ?, project_id = ?, is_billable = ? WHERE id = ?
     `
-    ).run(title, description, id);
+    ).run(title, description, projectId || null, isBillable ? 1 : 0, id);
     if (tags) setSessionTags(userId, id, tags);
   } catch (err) {
     notifyRenderer("Failed to update session.", 5000);
@@ -243,7 +274,7 @@ export function clearSessions() {
 }
 export function importSessions(sessionsArr: any[]) {
   const stmt = db.prepare(
-    "INSERT INTO sessions (id, timestamp, start_time, duration, title, description, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO sessions (id, timestamp, start_time, duration, title, description, project_id, is_billable, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   for (const row of sessionsArr) {
     stmt.run(
@@ -253,6 +284,8 @@ export function importSessions(sessionsArr: any[]) {
       row.duration,
       row.title,
       row.description,
+      row.project_id || null,
+      row.is_billable || 0,
       row.user_id
     );
   }

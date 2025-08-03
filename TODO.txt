@@ -4,13 +4,9 @@ TODO / Ideas for Improvements
 - [ ] Role-Based Access Control
   - [ ] Admin role: Full system access and user management
   - [ ] Manager role: Team oversight and basic reporting
-  - [ ] Employee role: Personal tracking only
 - [ ] Client Database
   - [ ] Add client management with contact info and hourly rates
   - [ ] Client profile pages with project history
-- [ ] Project Categorization
-  - [ ] Allow sessions to be categorized by client/project
-  - [ ] Add billable vs non-billable time tracking
 
 ## Phase 2: Essential Business Operations (High Priority)
 - [ ] Basic Invoice Generation

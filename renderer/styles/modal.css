@@ -163,7 +163,8 @@
 }
 
 #customModalForm input[type="text"],
-#customModalForm textarea {
+#customModalForm textarea,
+#customModalForm select {
   width: 100%;
   margin-bottom: 12px;
   border-radius: 6px;
@@ -175,13 +176,58 @@
   box-sizing: border-box;
 }
 
+#customModalForm select {
+  cursor: pointer;
+}
+
+#customModalForm select option {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* Specific styles for session info form */
+#sessionInfoForm select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+#sessionInfoForm select option {
+  background: var(--bg);
+  color: var(--fg);
+  padding: 4px 8px;
+}
+
+#customModalForm textarea,
+#customModalForm select {
+  width: 100%;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  font-size: 1em;
+  background: var(--row-odd);
+  color: var(--bg);
+  box-sizing: border-box;
+}
+
+#customModalForm select {
+  cursor: pointer;
+}
+
+#customModalForm select option {
+  background: var(--bg);
+  color: var(--fg);
+}
+
 #customModalForm textarea {
   height: 60px;
   margin-bottom: 16px;
   resize: vertical;
 }
 
-#customModalForm .session-modal-actions {
+#customModalForm .session-modal-actions,
+.session-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;

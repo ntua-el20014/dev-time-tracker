@@ -14,8 +14,12 @@ export interface SessionRow {
   duration: number;
   title: string;
   description: string | null;
+  project_id?: number;
+  is_billable?: number;
   tags?: string[];
   date: string;
+  project_name?: string;
+  project_color?: string;
 }
 
 export interface LogEntry {
@@ -95,4 +99,27 @@ export interface ScheduledSessionNotification {
   estimated_duration?: number;
   type: "day_before" | "same_day" | "time_to_start";
   tags?: string[];
+}
+
+export interface Project {
+  id: number;
+  name: string;
+  description?: string;
+  color?: string;
+  is_active: number;
+  manager_id: number;
+  created_at: string;
+}
+
+export interface ProjectMember {
+  id: number;
+  project_id: number;
+  user_id: number;
+  role: "manager" | "member";
+  assigned_at: string;
+}
+
+export interface ProjectWithMembers extends Project {
+  members?: ProjectMember[];
+  manager_name?: string;
 }
