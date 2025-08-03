@@ -1,6 +1,7 @@
 import { ipcRenderer } from "electron";
 import { UserRole } from "../../shared/types";
-import { showConfirmationModal, showInAppNotification } from "../components";
+import { showConfirmationModal } from "./Modals";
+import { showInAppNotification } from "./Notifications";
 
 interface User {
   id: number;

@@ -1,6 +1,6 @@
 import { ipcRenderer } from "electron";
-import { showModal, showConfirmationModal } from "./components"; // Adjust path if needed
-import { UserRole } from "../shared/types";
+import { showModal, showConfirmationModal } from "./Modals";
+import { UserRole } from "../../shared/types";
 
 /**
  * User Landing Page UI

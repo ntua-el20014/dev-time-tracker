@@ -1,4 +1,4 @@
-import { getCurrentUserId } from "./utils";
+import { getCurrentUserId } from "../utils";
 
 interface OnboardingStep {
   title: string;

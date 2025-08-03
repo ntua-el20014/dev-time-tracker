@@ -7,6 +7,8 @@ import {
   showColorGridPicker,
   showAvatarPicker,
   showConfirmationModal,
+  renderAdminPanel,
+  showOnboarding,
 } from "./components";
 import { loadHotkey, setUserTheme } from "./theme";
 import {
@@ -19,8 +21,6 @@ import {
 } from "./utils";
 import { getLangIconUrl } from "../src/utils/extractData";
 import type { Tag } from "@shared/types";
-import { renderAdminPanel } from "./admin";
-import { showOnboarding } from "./onboarding";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function escapeHtml(text: string) {
@@ -704,7 +704,7 @@ export async function refreshProfile() {
       if (window) {
         (window as any).__resetSummaryTabState = true;
       }
-      import("./userLanding").then((mod) => {
+      import("./components/UserLanding").then((mod) => {
         mod.renderUserLanding(landing, (userId: number) => {
           (window as any).showMainUIForUser(userId);
         });

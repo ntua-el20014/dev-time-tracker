@@ -1,11 +1,8 @@
-import {
-  showInAppNotification,
-  showNotification,
-  showConfirmationModal,
-} from "./components";
-import { clearAllOnboardingData } from "./onboarding";
-import { renderUserRoleManager } from "./components/UserRoleManager";
-import { isCurrentUserAdmin } from "./utils/userUtils";
+import { showInAppNotification, showNotification } from "./Notifications";
+import { showConfirmationModal } from "./Modals";
+import { clearAllOnboardingData } from "./Onboarding";
+import { renderUserRoleManager } from "./UserRoleManager";
+import { isCurrentUserAdmin } from "../utils/userUtils";
 
 export function createExportDbButton(
   type: "db" | "json" | "csv"

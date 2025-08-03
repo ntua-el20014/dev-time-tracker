@@ -13,10 +13,10 @@ import {
   showInAppNotification,
   showConfirmationModal,
 } from "./components";
-import { renderUserLanding } from "./userLanding";
+import { renderUserLanding } from "./components";
 import { getCurrentUserId } from "./utils";
 import { loadUserLangMap } from "../src/utils/extractData";
-import { showOnboarding, shouldShowOnboarding } from "./onboarding";
+import { showOnboarding, shouldShowOnboarding } from "./components";
 import "./styles/base.css";
 import "./styles/accent-text.css";
 import "./styles/calendar.css";
