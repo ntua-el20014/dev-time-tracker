@@ -751,3 +751,70 @@ select#tag-select option {
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
+/* Project Form Styling - Match Calendar Modal */
+#projectForm input[type="text"],
+#projectForm textarea,
+#projectEditForm input[type="text"],
+#projectEditForm textarea {
+  width: 100%;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  font-size: 1em;
+  background: var(--row-odd);
+  color: var(--fg);
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#projectForm input[type="color"],
+#projectEditForm input[type="color"] {
+  width: 50px;
+  height: 50px;
+  padding: 2px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--row-odd);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#projectForm input[type="text"]:focus,
+#projectForm textarea:focus,
+#projectForm input[type="color"]:focus,
+#projectEditForm input[type="text"]:focus,
+#projectEditForm textarea:focus,
+#projectEditForm input[type="color"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2);
+}
+
+#projectForm textarea,
+#projectEditForm textarea {
+  height: 60px;
+  margin-bottom: 16px;
+  resize: vertical;
+}
+
+.color-picker-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#projectForm input[type="color"]::-webkit-color-swatch-wrapper,
+#projectEditForm input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+}
+
+#projectForm input[type="color"]::-webkit-color-swatch,
+#projectEditForm input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}

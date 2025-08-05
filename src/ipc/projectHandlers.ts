@@ -27,6 +27,10 @@ ipcMain.handle("get-user-projects", (_event, userId: number) => {
   return projects.getUserProjects(userId);
 });
 
+ipcMain.handle("get-user-projects-with-members", (_event, userId: number) => {
+  return projects.getUserProjectsWithMembers(userId);
+});
+
 ipcMain.handle("get-projects-for-user", (_event, userId: number) => {
   return projects.getProjectsForUser(userId);
 });

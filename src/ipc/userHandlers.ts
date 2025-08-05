@@ -42,3 +42,7 @@ ipcMain.handle("is-user-admin", (_event, userId: number) =>
 ipcMain.handle("is-user-manager-or-admin", (_event, userId: number) =>
   users.isUserManagerOrAdmin(userId)
 );
+ipcMain.handle("get-user-role", (_event, userId: number) => {
+  const user = users.getUserInfo(userId);
+  return user?.role;
+});

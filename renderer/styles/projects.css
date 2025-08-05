@@ -643,24 +643,6 @@
   background: var(--accent-hover, var(--accent));
 }
 
-/* Color picker styles for project modals */
-.color-picker-container {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.color-picker-container input[type="color"] {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  background: none;
-  padding: 0;
-}
-
 .color-picker-container input[type="color"]::-webkit-color-swatch-wrapper {
   padding: 0;
   border: 2px solid var(--border);
@@ -672,10 +654,208 @@
   border-radius: 50%;
 }
 
-.color-preview {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+/* Role note styling for project member management */
+.role-note {
+  color: var(--fg-muted);
+  font-style: italic;
+  font-size: 11px;
+}
+
+.info-note {
+  color: var(--fg-muted);
+  font-size: 12px;
+  margin: 10px 0;
+  font-style: italic;
+}
+
+/* Members Management Modal */
+.members-modal-content {
+  margin: 0;
+  padding: 0;
+}
+
+.members-section {
+  margin-bottom: 20px;
+}
+
+.members-section h3 {
+  margin: 0 0 15px 0;
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.members-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.member-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.2s ease;
+}
+
+.member-item:last-child {
+  border-bottom: none;
+}
+
+.member-item:hover {
+  background: var(--bg-hover);
+}
+
+.member-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.member-info small {
+  color: var(--fg-muted);
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.member-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.role-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  min-width: 90px;
+}
+
+.role-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-20);
+}
+
+.btn-remove-member {
+  padding: 4px 8px;
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-remove-member:hover {
+  background: var(--danger-hover);
+  transform: translateY(-1px);
+}
+
+.manager-label {
+  color: var(--accent);
+  font-weight: 500;
+  font-size: 12px;
+  background: var(--accent-20);
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.add-member-section {
+  padding: 15px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.add-member-section h3 {
+  margin: 0 0 15px 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.add-member-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.add-member-form select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  min-width: 150px;
+}
+
+.add-member-form select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-20);
+}
+
+.add-member-form button {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.add-member-form button:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.add-member-form button:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+  .add-member-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .add-member-form select,
+  .add-member-form button {
+    width: 100%;
+  }
+
+  .member-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .member-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }

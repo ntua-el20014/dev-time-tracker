@@ -1,6 +1,7 @@
 import db from "./db";
 import { notifyRenderer } from "../utils/ipcHelp";
 import { Project, ProjectWithMembers } from "../../shared/types";
+import { isUserManagerOrAdmin } from "./users";
 
 // --- Project management functions ---
 
@@ -11,6 +12,15 @@ export function createProject(
   managerId: number
 ): number | undefined {
   try {
+    // Validate that the manager has appropriate permissions
+    if (!isUserManagerOrAdmin(managerId)) {
+      notifyRenderer(
+        "Only admins and managers can be assigned as project managers.",
+        5000
+      );
+      return undefined;
+    }
+
     const info = db
       .prepare(
         `INSERT INTO projects (name, description, color, manager_id) VALUES (?, ?, ?, ?)`
@@ -178,6 +188,15 @@ export function addProjectMember(
   role: "manager" | "member" = "member"
 ) {
   try {
+    // If assigning manager role, validate that the user has appropriate permissions
+    if (role === "manager" && !isUserManagerOrAdmin(userId)) {
+      notifyRenderer(
+        "Only admins and managers can be assigned as project managers.",
+        5000
+      );
+      return;
+    }
+
     db.prepare(
       `INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)`
     ).run(projectId, userId, role);
@@ -214,6 +233,15 @@ export function updateProjectMemberRole(
   role: "manager" | "member"
 ) {
   try {
+    // If assigning manager role, validate that the user has appropriate permissions
+    if (role === "manager" && !isUserManagerOrAdmin(userId)) {
+      notifyRenderer(
+        "Only admins and managers can be assigned as project managers.",
+        5000
+      );
+      return;
+    }
+
     db.prepare(
       `UPDATE project_members SET role = ? WHERE project_id = ? AND user_id = ?`
     ).run(role, projectId, userId);
@@ -228,6 +256,15 @@ export function transferProjectManagement(
   newManagerId: number
 ) {
   try {
+    // Validate that the new manager has appropriate permissions
+    if (!isUserManagerOrAdmin(newManagerId)) {
+      notifyRenderer(
+        "Only admins and managers can be assigned as project managers.",
+        5000
+      );
+      return;
+    }
+
     db.transaction(() => {
       // Update the project manager
       db.prepare(`UPDATE projects SET manager_id = ? WHERE id = ?`).run(
@@ -284,6 +321,49 @@ export function getUserProjects(userId: number): Project[] {
       .all(userId) as Project[];
   } catch (err) {
     notifyRenderer("Failed to load user projects.", 5000);
+    return [];
+  }
+}
+
+export function getUserProjectsWithMembers(
+  userId: number
+): ProjectWithMembers[] {
+  try {
+    const projects = db
+      .prepare(
+        `
+        SELECT 
+          p.*,
+          u.username as manager_name
+        FROM projects p 
+        LEFT JOIN users u ON p.manager_id = u.id
+        INNER JOIN project_members pm ON p.id = pm.project_id
+        WHERE pm.user_id = ?
+        ORDER BY p.name COLLATE NOCASE
+      `
+      )
+      .all(userId) as ProjectWithMembers[];
+
+    // Get members for each project
+    projects.forEach((project) => {
+      project.members = db
+        .prepare(
+          `
+          SELECT 
+            pm.*,
+            u.username
+          FROM project_members pm
+          LEFT JOIN users u ON pm.user_id = u.id
+          WHERE pm.project_id = ?
+          ORDER BY pm.role DESC, u.username
+        `
+        )
+        .all(project.id) as any[];
+    });
+
+    return projects;
+  } catch (err) {
+    notifyRenderer("Failed to load user projects with members.", 5000);
     return [];
   }
 }

@@ -1,5 +1,10 @@
 -- Database population script for dev-time-tracker
 -- This creates and populates the database from scratch
+--
+-- IMPORTANT BUSINESS RULES:
+-- - Only users with 'admin' or 'manager' roles can be assigned as project managers
+-- - Project member roles are 'manager' or 'member' (not 'employee')
+-- - Role validation is enforced in the application layer
 
 -- Drop all tables if they exist
 DROP TABLE IF EXISTS scheduled_session_tags;
@@ -66,7 +71,7 @@ CREATE TABLE project_members (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
-  role TEXT DEFAULT 'employee' CHECK(role IN ('manager', 'employee')),
+  role TEXT DEFAULT 'member' CHECK(role IN ('manager', 'member')),
   joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(project_id, user_id),
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
@@ -150,6 +155,7 @@ INSERT INTO users (id, username, avatar, role) VALUES
 (4, 'Designer Charlie', '', 'employee');
 
 -- Projects
+-- Note: Only users with 'admin' or 'manager' roles can be assigned as project managers
 INSERT INTO projects (name, description, color, manager_id) VALUES 
 ('E-commerce Platform', 'Main company e-commerce website', '#3b82f6', 1),
 ('Mobile App', 'React Native mobile application', '#10b981', 1),
@@ -158,24 +164,25 @@ INSERT INTO projects (name, description, color, manager_id) VALUES
 ('Documentation Site', 'Company documentation portal', '#8b5cf6', 2);
 
 -- Project memberships
+-- Note: Only users with 'admin' or 'manager' roles can have 'manager' role in projects
 INSERT INTO project_members (project_id, user_id, role) VALUES 
 -- Project 1: E-commerce Platform
-(1, 1, 'manager'),
-(1, 3, 'employee'),
-(1, 4, 'employee'),
+(1, 1, 'manager'),  -- Admin User (admin role)
+(1, 3, 'member'),   -- Developer Alice (employee role)
+(1, 4, 'member'),   -- Designer Charlie (employee role)
 -- Project 2: Mobile App
-(2, 1, 'manager'),
-(2, 3, 'employee'),
+(2, 1, 'manager'),  -- Admin User (admin role)
+(2, 3, 'member'),   -- Developer Alice (employee role)
 -- Project 3: Admin Dashboard
-(3, 2, 'manager'),
-(3, 3, 'employee'),
-(3, 4, 'employee'),
+(3, 2, 'manager'),  -- Manager Bob (manager role)
+(3, 3, 'member'),   -- Developer Alice (employee role)
+(3, 4, 'member'),   -- Designer Charlie (employee role)
 -- Project 4: API Microservices
-(4, 2, 'manager'),
-(4, 3, 'employee'),
+(4, 2, 'manager'),  -- Manager Bob (manager role)
+(4, 3, 'member'),   -- Developer Alice (employee role)
 -- Project 5: Documentation Site
-(5, 2, 'manager'),
-(5, 4, 'employee');
+(5, 2, 'manager'),  -- Manager Bob (manager role)
+(5, 4, 'member');   -- Designer Charlie (employee role)
 
 -- Tags for each user
 INSERT INTO tags (name, user_id, color) VALUES 
