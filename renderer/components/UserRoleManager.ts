@@ -78,10 +78,10 @@ export async function renderUserRoleManager(container: HTMLElement) {
             <strong>Employee:</strong> Personal time tracking only. Can view and manage their own sessions, usage data, and profile settings.
           </div>
           <div class="role-description">
-            <strong>Manager:</strong> Team oversight and basic reporting. Can view team statistics and generate reports for their assigned team members.
+            <strong>Manager:</strong> Project oversight and basic management. Can view project statistics and manage project members.
           </div>
           <div class="role-description">
-            <strong>Admin:</strong> Full system access. Can manage all users, system settings, database operations, and has access to all data.
+            <strong>Admin:</strong> Full system access. Can manage all users, projects, database operations, and has access to all data.
           </div>
         </div>
       </div>

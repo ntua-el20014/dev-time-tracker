@@ -41,19 +41,19 @@ export async function renderProjects() {
       </div>
       
       <div class="projects-stats">
-        <div class="project-stat-card">
+        <div class="project-stat-card active-projects">
           <div class="stat-number">${
             currentProjects.filter((p) => p.is_active).length
           }</div>
           <div class="stat-label">Active Projects</div>
         </div>
-        <div class="project-stat-card">
+        <div class="project-stat-card archived-projects">
           <div class="stat-number">${
             currentProjects.filter((p) => !p.is_active).length
           }</div>
           <div class="stat-label">Archived Projects</div>
         </div>
-        <div class="project-stat-card">
+        <div class="project-stat-card total-projects">
           <div class="stat-number">${currentProjects.length}</div>
           <div class="stat-label">Total Projects</div>
         </div>
@@ -361,9 +361,16 @@ function showCreateProjectModal() {
   cancelBtn.onclick = closeModal;
   closeBtn.onclick = closeModal;
 
-  // Handle overlay click to close
+  // Handle overlay click to close modal
   overlay.onclick = (e) => {
     if (e.target === overlay) {
+      closeModal();
+    }
+  };
+
+  // Handle modal background click to close modal
+  modal.onclick = (e) => {
+    if (e.target === modal) {
       closeModal();
     }
   };
@@ -480,9 +487,16 @@ function showEditProjectModal(projectId: number) {
   cancelBtn.onclick = closeModal;
   closeBtn.onclick = closeModal;
 
-  // Handle overlay click to close
+  // Handle overlay click to close modal
   overlay.onclick = (e) => {
     if (e.target === overlay) {
+      closeModal();
+    }
+  };
+
+  // Handle modal background click to close modal
+  modal.onclick = (e) => {
+    if (e.target === modal) {
       closeModal();
     }
   };

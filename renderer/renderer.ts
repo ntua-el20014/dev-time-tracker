@@ -256,12 +256,16 @@ function setupHotkeys() {
         .querySelector('.tab[data-tab="calendar"]')
         ?.dispatchEvent(new Event("click"));
     }
-    // Ctrl+5: Projects tab
+    // Ctrl+5: Projects tab (only if user has access)
     if (e.ctrlKey && e.key === "5") {
       e.preventDefault();
-      document
-        .querySelector('.tab[data-tab="projects"]')
-        ?.dispatchEvent(new Event("click"));
+      const projectsTab = document.querySelector(
+        '.tab[data-tab="projects"]'
+      ) as HTMLButtonElement;
+      // Only trigger if the tab is visible (user has access)
+      if (projectsTab && projectsTab.style.display !== "none") {
+        projectsTab.dispatchEvent(new Event("click"));
+      }
     }
     // Ctrl+6: Profile tab
     if (e.ctrlKey && e.key === "6") {

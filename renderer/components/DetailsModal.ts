@@ -47,7 +47,7 @@ export function showDetailsModal(config: DetailsModalConfig) {
 
   const closeBtn = document.createElement("button");
   closeBtn.textContent = "×";
-  closeBtn.className = "details-modal-close";
+  closeBtn.className = "modal-close-btn";
   closeBtn.onclick = () => {
     backdrop.remove();
     config.onClose?.();

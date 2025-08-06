@@ -74,30 +74,61 @@
 
 /* Projects Stats Section */
 .projects-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
+  display: flex;
+  gap: 15px;
   margin-bottom: 30px;
+  justify-content: space-between;
 }
 
 .project-stat-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border);
+  flex: 1;
   border-radius: 8px;
-  padding: 20px;
+  padding: 16px;
   text-align: center;
+  transition: all 0.2s ease;
+  min-width: 0; /* Allow flex items to shrink */
+}
+
+/* Active Projects Card - Green */
+.project-stat-card.active-projects {
+  background: rgba(34, 197, 94, 0.1);
+  border: 2px solid #22c55e;
+}
+
+.project-stat-card.active-projects .stat-label {
+  color: #22c55e;
+}
+
+/* Archived Projects Card - Orange */
+.project-stat-card.archived-projects {
+  background: rgba(249, 115, 22, 0.1);
+  border: 2px solid #f97316;
+}
+
+.project-stat-card.archived-projects .stat-label {
+  color: #f97316;
+}
+
+/* Total Projects Card - Blue */
+.project-stat-card.total-projects {
+  background: rgba(59, 130, 246, 0.1);
+  border: 2px solid #3b82f6;
+}
+
+.project-stat-card.total-projects .stat-label {
+  color: #3b82f6;
 }
 
 .stat-number {
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 700;
-  color: var(--accent);
-  margin-bottom: 8px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
 }
 
 .stat-label {
-  font-size: 14px;
-  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }

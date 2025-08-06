@@ -4,16 +4,6 @@ TODO / Ideas for Improvements
   - do something with million lines of code for modals
 - Specific:
   - role management modal: testing
-  - fix X on session/summary details modal and export/chart modal
-  - clicking outside add/edit project modal should close it
-
-## Phase 1: Foundation & Core Business Features (High Priority)
-- [ ] Role-Based Access Control
-  - [ ] Admin role: Full system access and user management
-  - [ ] Manager role: Team oversight and basic reporting
-- [ ] Client Database
-  - [ ] Add client management with contact info and hourly rates
-  - [ ] Client profile pages with project history
 
 ## Phase 2: Essential Business Operations (High Priority)
 - [ ] Basic Invoice Generation

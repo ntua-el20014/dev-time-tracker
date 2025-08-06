@@ -37,6 +37,7 @@
   padding: 20px 24px;
   border-bottom: 1px solid var(--border);
   background-color: var(--table-head);
+  position: relative;
 }
 
 .details-modal-header h2 {
@@ -44,21 +45,6 @@
   color: var(--accent);
   font-size: 1.4em;
   font-weight: 600;
-}
-
-.details-modal-close {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: var(--fg);
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.details-modal-close:hover {
-  background-color: var(--row-hover);
 }
 
 .details-modal-loading {

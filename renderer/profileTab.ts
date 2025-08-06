@@ -739,22 +739,7 @@ function renderHotkeys(container: HTMLElement) {
       )} + ${keyImg("p")}</span> Pause/Resume recording</li>
       <li><span style="min-width:180px;display:inline-block;">${keyImg(
         "ctrl"
-      )} + 1</span> Dashboard tab</li>
-      <li><span style="min-width:180px;display:inline-block;">${keyImg(
-        "ctrl"
-      )} + 2</span> Today tab</li>
-      <li><span style="min-width:180px;display:inline-block;">${keyImg(
-        "ctrl"
-      )} + 3</span> Summary tab</li>
-      <li><span style="min-width:180px;display:inline-block;">${keyImg(
-        "ctrl"
-      )} + 4</span> Calendar tab</li>
-      <li><span style="min-width:180px;display:inline-block;">${keyImg(
-        "ctrl"
-      )} + 5</span> Projects tab</li>
-      <li><span style="min-width:180px;display:inline-block;">${keyImg(
-        "ctrl"
-      )} + 6</span> Profile tab</li>
+      )} + ${keyImg("hashtag")}</span> Switch to tab (# = 1,2,3...)</li>
     </ul>
     <div class="info-note" style="margin-top:16px;">
       Shortcuts work globally except when typing in an input or textarea.

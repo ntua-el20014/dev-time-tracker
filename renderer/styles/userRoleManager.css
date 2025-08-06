@@ -13,7 +13,7 @@
 .user-role-table-container {
   background: var(--bg-secondary);
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   margin-bottom: 30px;
   border: 1px solid var(--border);
 }
@@ -21,6 +21,7 @@
 .user-role-table {
   width: 100%;
   border-collapse: collapse;
+  overflow: visible; /* Ensure table doesn't clip dropdown content */
 }
 
 .user-role-table th {
@@ -89,23 +90,24 @@
 
 .role-badge.role-admin {
   background: #ff6b6b;
-  color: white;
+  color: var(--fg);
 }
 
 .role-badge.role-manager {
   background: #4ecdc4;
-  color: white;
+  color: var(--fg);
 }
 
 .role-badge.role-employee {
   background: var(--fg-muted);
-  color: white;
+  color: var(--fg);
 }
 
 .user-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative; /* Create positioning context for dropdowns */
 }
 
 .role-select {
@@ -176,6 +178,12 @@
 
 .role-description strong {
   color: var(--accent);
+}
+
+/* Ensure dropdowns in the user role table appear above other content */
+.user-role-table .custom-dropdown .dropdown-menu {
+  z-index: 1000;
+  position: absolute;
 }
 
 /* Responsive design */

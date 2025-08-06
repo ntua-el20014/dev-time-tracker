@@ -446,6 +446,7 @@ select#tag-select option {
   padding: 20px 20px 0 20px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
+  position: relative;
 }
 
 .chart-modal-header h3 {
