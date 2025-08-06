@@ -9,3 +9,4 @@ export * from "./UserLanding";
 export * from "./AdminPanel";
 export * from "./DetailsModal";
 export * from "./UserRoleManager";
+export * from "./CustomDropdown";

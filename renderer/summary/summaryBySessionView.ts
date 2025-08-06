@@ -15,7 +15,7 @@ import {
   createFilterBar,
 } from "./utils/tableUtils";
 import { addCustomChart } from "./utils/chartUtils";
-import type { SessionRow, Tag } from "@shared/types";
+import type { SessionRow, Tag, Project } from "@shared/types";
 
 // State for by-session view
 export interface BySessionViewState {
@@ -43,6 +43,10 @@ export async function renderBySessionView(
   // Fetch all tags and sessions for dropdowns
   const allTags: Tag[] = await ipcRenderer.invoke(
     "get-all-tags",
+    getCurrentUserId()
+  );
+  const allProjects = await ipcRenderer.invoke(
+    "get-user-projects",
     getCurrentUserId()
   );
   let sessions: SessionRow[];
@@ -77,13 +81,23 @@ export async function renderBySessionView(
       "end-session": { type: "date", label: "End" },
     },
     onApply: async (filterValues) => {
-      const filters: Record<string, string> = {};
+      const filters: Record<string, string | number | boolean> = {};
       if (filterValues["tag-session"])
         filters.tag = filterValues["tag-session"];
-      if (filterValues["project-session"])
-        filters.project = filterValues["project-session"];
-      if (filterValues["billable-session"])
-        filters.billable = filterValues["billable-session"];
+      if (filterValues["project-session"]) {
+        // Convert project name to project ID
+        const projectName = filterValues["project-session"];
+        const project = allProjects.find(
+          (p: Project) => p.name === projectName
+        );
+        if (project) {
+          filters.projectId = project.id;
+        }
+      }
+      if (filterValues["billable-session"]) {
+        // Convert "Yes"/"No" to boolean
+        filters.billableOnly = filterValues["billable-session"] === "Yes";
+      }
       if (filterValues["start-session"])
         filters.startDate = filterValues["start-session"];
       if (filterValues["end-session"])

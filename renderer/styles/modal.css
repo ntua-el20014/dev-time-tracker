@@ -207,7 +207,7 @@
   padding: 6px 10px;
   font-size: 1em;
   background: var(--row-odd);
-  color: var(--bg);
+  color: var(--fg);
   box-sizing: border-box;
 }
 

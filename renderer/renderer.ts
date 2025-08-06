@@ -22,6 +22,7 @@ import "./styles/base.css";
 import "./styles/accent-text.css";
 import "./styles/calendar.css";
 import "./styles/charts.css";
+import "./styles/custom-dropdown.css";
 import "./styles/dashboard.css";
 import "./styles/details-modal.css";
 import "./styles/goals.css";
@@ -255,8 +256,15 @@ function setupHotkeys() {
         .querySelector('.tab[data-tab="calendar"]')
         ?.dispatchEvent(new Event("click"));
     }
-    // Ctrl+4: Profile tab
+    // Ctrl+5: Projects tab
     if (e.ctrlKey && e.key === "5") {
+      e.preventDefault();
+      document
+        .querySelector('.tab[data-tab="projects"]')
+        ?.dispatchEvent(new Event("click"));
+    }
+    // Ctrl+6: Profile tab
+    if (e.ctrlKey && e.key === "6") {
       e.preventDefault();
       document
         .querySelector('.tab[data-tab="profile"]')
@@ -305,13 +313,6 @@ ipcRenderer.on("get-session-info", async () => {
     modal.id = "customModal";
     modal.className = "active";
 
-    const projectOptions =
-      activeProjects.length > 0
-        ? activeProjects
-            .map((p: any) => `<option value="${p.id}">${p.name}</option>`)
-            .join("")
-        : "";
-
     modal.innerHTML = `
       <div class="session-modal-content">
         <button class="modal-close-btn">&times;</button>
@@ -327,10 +328,7 @@ ipcRenderer.on("get-session-info", async () => {
             activeProjects.length > 0
               ? `
           <label for="session-project">Project (optional):</label><br>
-          <select id="session-project" name="project">
-            <option value="">No project</option>
-            ${projectOptions}
-          </select><br>
+          <div id="session-project-container"></div><br>
           
           <label>
             <input type="checkbox" id="session-billable" name="billable"> Billable
@@ -348,6 +346,32 @@ ipcRenderer.on("get-session-info", async () => {
     `;
 
     document.body.appendChild(modal);
+
+    // Create custom dropdown for project selection
+    let projectDropdown: any = null;
+    if (activeProjects.length > 0) {
+      const projectContainer = document.getElementById(
+        "session-project-container"
+      );
+      if (projectContainer) {
+        const { createCustomDropdown } = await import(
+          "./components/CustomDropdown"
+        );
+        projectDropdown = createCustomDropdown({
+          id: "session-project",
+          name: "project",
+          placeholder: "No project",
+          options: [
+            { value: "", label: "No project" },
+            ...activeProjects.map((p: any) => ({
+              value: p.id.toString(),
+              label: p.name,
+            })),
+          ],
+        });
+        projectContainer.appendChild(projectDropdown.getElement());
+      }
+    }
 
     const form = document.getElementById("sessionInfoForm") as HTMLFormElement;
     const titleInput = document.getElementById(
@@ -367,7 +391,7 @@ ipcRenderer.on("get-session-info", async () => {
     form.onsubmit = (e) => {
       e.preventDefault();
       const formData = new FormData(form);
-      const projectId = formData.get("project") as string;
+      const projectId = projectDropdown ? projectDropdown.getValue() : "";
       const isBillable = (formData.get("billable") as string) === "on";
 
       ipcRenderer.send("session-info-reply", {

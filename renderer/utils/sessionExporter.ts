@@ -26,14 +26,17 @@ export class SessionExporter {
     try {
       const data = await this.collectData(userId, options);
 
+      let success = false;
       if (options.format === "csv") {
-        await this.exportAsCSV(data);
+        success = await this.exportAsCSV(data);
       } else {
-        await this.exportAsJSON(data);
+        success = await this.exportAsJSON(data);
       }
 
-      // Show success notification
-      showNotification("Data exported successfully!");
+      // Only show success notification if export was actually completed
+      if (success) {
+        showNotification("Data exported successfully!");
+      }
     } catch (error) {
       showNotification("Export failed. Please try again.");
     }
@@ -117,7 +120,7 @@ export class SessionExporter {
     return data;
   }
 
-  private async exportAsCSV(data: Record<string, unknown[]>): Promise<void> {
+  private async exportAsCSV(data: Record<string, unknown[]>): Promise<boolean> {
     const { filePath } = await ipcRenderer.invoke("show-save-dialog", {
       title: "Export as CSV",
       defaultPath: `dev-tracker-export-${
@@ -126,12 +129,15 @@ export class SessionExporter {
       filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
     });
 
-    if (!filePath) return;
+    if (!filePath) return false;
 
     await ipcRenderer.invoke("export-custom-csv", data, filePath);
+    return true;
   }
 
-  private async exportAsJSON(data: Record<string, unknown[]>): Promise<void> {
+  private async exportAsJSON(
+    data: Record<string, unknown[]>
+  ): Promise<boolean> {
     const { filePath } = await ipcRenderer.invoke("show-save-dialog", {
       title: "Export as JSON",
       defaultPath: `dev-tracker-export-${
@@ -140,9 +146,10 @@ export class SessionExporter {
       filters: [{ name: "JSON File", extensions: ["json"] }],
     });
 
-    if (!filePath) return;
+    if (!filePath) return false;
 
     await ipcRenderer.invoke("export-custom-json", data, filePath);
+    return true;
   }
 }
 
@@ -161,10 +168,7 @@ export function createExportModal(userId: number): void {
         <form id="exportForm">
           <div class="form-group">
             <label for="exportFormat">Export Format:</label>
-            <select id="exportFormat" name="format" required>
-              <option value="csv">CSV (ZIP Archive)</option>
-              <option value="json">JSON File</option>
-            </select>
+            <div id="exportFormat-container"></div>
           </div>
           
           <div class="form-group">
@@ -220,6 +224,21 @@ export function createExportModal(userId: number): void {
 
   document.body.appendChild(modal);
 
+  // Create custom dropdown for export format
+  const { createCustomDropdown } = require("../components/CustomDropdown");
+  const exportFormatDropdown = createCustomDropdown({
+    id: "exportFormat",
+    name: "format",
+    value: "csv",
+    options: [
+      { value: "csv", label: "CSV (ZIP Archive)" },
+      { value: "json", label: "JSON File" },
+    ],
+  });
+  document
+    .getElementById("exportFormat-container")
+    ?.appendChild(exportFormatDropdown.getElement());
+
   const form = modal.querySelector("#exportForm") as HTMLFormElement;
   const submitBtn = modal.querySelector(
     ".chart-modal-submit"
@@ -237,7 +256,7 @@ export function createExportModal(userId: number): void {
 
     const formData = new FormData(form);
     const options: ExportOptions = {
-      format: formData.get("format") as "csv" | "json",
+      format: exportFormatDropdown.getValue() as "csv" | "json",
       includeFields: {
         sessions: formData.has("sessions"),
         dailySummary: formData.has("dailySummary"),

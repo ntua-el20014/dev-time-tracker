@@ -53,19 +53,9 @@ export async function renderUserRoleManager(container: HTMLElement) {
                 </td>
                 <td>
                   <div class="user-actions">
-                    <select class="role-select" data-user-id="${
+                    <div class="role-select-container" data-user-id="${
                       user.id
-                    }" data-current-role="${user.role}">
-                      <option value="${UserRole.EMPLOYEE}" ${
-                  user.role === UserRole.EMPLOYEE ? "selected" : ""
-                }>Employee</option>
-                      <option value="${UserRole.MANAGER}" ${
-                  user.role === UserRole.MANAGER ? "selected" : ""
-                }>Manager</option>
-                      <option value="${UserRole.ADMIN}" ${
-                  user.role === UserRole.ADMIN ? "selected" : ""
-                }>Admin</option>
-                    </select>
+                    }" data-current-role="${user.role}"></div>
                     <button class="update-role-btn" data-user-id="${user.id}" ${
                   user.id === 1 ? "disabled" : ""
                 }>
@@ -98,17 +88,42 @@ export async function renderUserRoleManager(container: HTMLElement) {
     </div>
   `;
 
+  // Create custom dropdowns for role selection
+  const { createCustomDropdown } = require("./CustomDropdown");
+  const roleDropdowns = new Map();
+
+  const roleContainers = container.querySelectorAll(".role-select-container");
+  roleContainers.forEach((roleContainer: any) => {
+    const userId = parseInt(roleContainer.dataset.userId);
+    const currentRole = roleContainer.dataset.currentRole as UserRole;
+
+    const roleDropdown = createCustomDropdown({
+      id: `user-role-${userId}`,
+      name: `user-role-${userId}`,
+      value: currentRole,
+      options: [
+        { value: UserRole.EMPLOYEE, label: "Employee" },
+        { value: UserRole.MANAGER, label: "Manager" },
+        { value: UserRole.ADMIN, label: "Admin" },
+      ],
+    });
+
+    roleContainer.appendChild(roleDropdown.getElement());
+    roleDropdowns.set(userId, roleDropdown);
+  });
+
   // Add event listeners for role updates
   const updateButtons = container.querySelectorAll(".update-role-btn");
   updateButtons.forEach((button) => {
     button.addEventListener("click", async (e) => {
       const btn = e.target as HTMLButtonElement;
       const userId = parseInt(btn.dataset.userId!);
-      const select = container.querySelector(
-        `select[data-user-id="${userId}"]`
-      ) as HTMLSelectElement;
-      const newRole = select.value as UserRole;
-      const currentRole = select.dataset.currentRole as UserRole;
+      const roleDropdown = roleDropdowns.get(userId);
+
+      if (!roleDropdown) return;
+
+      const newRole = roleDropdown.getValue() as UserRole;
+      const currentRole = roleDropdown.config.value as UserRole;
 
       if (newRole === currentRole) {
         showInAppNotification("No changes made to user role.", 3000);
@@ -128,7 +143,7 @@ export async function renderUserRoleManager(container: HTMLElement) {
             "Cannot remove the last admin. There must be at least one admin user.",
             5000
           );
-          select.value = currentRole; // Reset the select
+          roleDropdown.setValue(currentRole); // Reset the dropdown
           return;
         }
       }
@@ -155,7 +170,8 @@ export async function renderUserRoleManager(container: HTMLElement) {
               roleBadge.textContent = getRoleDisplayName(newRole);
             }
 
-            select.dataset.currentRole = newRole;
+            // Update the dropdown's internal current value
+            roleDropdown.config.value = newRole;
             showInAppNotification(
               `Successfully updated ${
                 user.username
@@ -167,11 +183,11 @@ export async function renderUserRoleManager(container: HTMLElement) {
               "Failed to update user role. Please try again.",
               5000
             );
-            select.value = currentRole; // Reset the select on error
+            roleDropdown.setValue(currentRole); // Reset the dropdown on error
           }
         },
         onCancel: () => {
-          select.value = currentRole; // Reset the select if cancelled
+          roleDropdown.setValue(currentRole); // Reset the dropdown if cancelled
         },
       });
     });

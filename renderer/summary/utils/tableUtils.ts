@@ -59,13 +59,17 @@ export function createFilterBar(options: {
   const isByDateView =
     "start-bydate" in options.filters && "end-bydate" in options.filters;
 
+  // Check if this is session view (has session-specific filters)
+  const isSessionView =
+    "tag-session" in options.filters || "project-session" in options.filters;
+
   // Create first row for non-date filters (or all filters if not by-date view)
   const firstRow = document.createElement("div");
   firstRow.className = "filter-row";
 
-  // Create second row for date filters (only for by-date view)
+  // Create second row for date filters (only for by-date view or session view)
   let dateRow: HTMLElement | null = null;
-  if (isByDateView) {
+  if (isByDateView || isSessionView) {
     dateRow = document.createElement("div");
     dateRow.className = "filter-row date-filters";
   }
@@ -77,14 +81,21 @@ export function createFilterBar(options: {
 
     let input: HTMLElement;
     if (config.type === "select") {
-      const select = document.createElement("select");
-      select.id = `filter-${key}`;
-      select.innerHTML =
-        `<option value="">All</option>` +
-        (config.options || [])
-          .map((opt) => `<option value="${opt}">${opt}</option>`)
-          .join("");
-      input = select;
+      const {
+        createCustomDropdown,
+      } = require("../../components/CustomDropdown");
+      const { registerDropdown } = require("../../utils/dropdownUtils");
+      const dropdown = createCustomDropdown({
+        id: `filter-${key}`,
+        name: `filter-${key}`,
+        placeholder: "All",
+        options: [
+          { value: "", label: "All" },
+          ...(config.options || []).map((opt) => ({ value: opt, label: opt })),
+        ],
+      });
+      registerDropdown(`filter-${key}`, dropdown);
+      input = dropdown.getElement();
     } else {
       const dateInput = document.createElement("input");
       dateInput.type = "date";
@@ -94,8 +105,8 @@ export function createFilterBar(options: {
 
     label.appendChild(input);
 
-    // Place date filters in separate row for by-date view
-    if (isByDateView && config.type === "date") {
+    // Place date filters in separate row for by-date view or session view
+    if ((isByDateView || isSessionView) && config.type === "date") {
       dateRow!.appendChild(label);
     } else {
       firstRow.appendChild(label);
@@ -125,8 +136,24 @@ export function createFilterBar(options: {
       const input = filterBar.querySelector(`#filter-${key}`) as
         | HTMLInputElement
         | HTMLSelectElement;
-      if (input && input.value) {
-        filterValues[key] = input.value;
+
+      if (input) {
+        let value = "";
+
+        // Check if it's a custom dropdown
+        if (input.classList && input.classList.contains("dropdown-trigger")) {
+          // Find the custom dropdown instance
+          const { getDropdown } = require("../../utils/dropdownUtils");
+          const dropdown = getDropdown(`filter-${key}`);
+          value = dropdown?.getValue() || "";
+        } else {
+          // Regular input/select element
+          value = input.value;
+        }
+
+        if (value) {
+          filterValues[key] = value;
+        }
       }
     });
     options.onApply(filterValues);
@@ -141,7 +168,19 @@ export function createFilterBar(options: {
       const input = filterBar.querySelector(`#filter-${key}`) as
         | HTMLInputElement
         | HTMLSelectElement;
-      if (input) input.value = "";
+
+      if (input) {
+        // Check if it's a custom dropdown
+        if (input.classList && input.classList.contains("dropdown-trigger")) {
+          // Find the custom dropdown instance
+          const { getDropdown } = require("../../utils/dropdownUtils");
+          const dropdown = getDropdown(`filter-${key}`);
+          dropdown?.setValue("");
+        } else {
+          // Regular input/select element
+          input.value = "";
+        }
+      }
     });
     options.onClear();
   };

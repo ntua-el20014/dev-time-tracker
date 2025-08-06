@@ -1,12 +1,11 @@
 TODO / Ideas for Improvements
 ## Fixes:
 - General:
-  - fix dropdowns appearence
   - do something with million lines of code for modals
 - Specific:
-  - fix filters in summary tab (not all working)
-  - notification when clicking outside modal (e.g. export data)
-  - role management modal: text color, testing
+  - role management modal: testing
+  - fix X on session/summary details modal and export/chart modal
+  - clicking outside add/edit project modal should close it
 
 ## Phase 1: Foundation & Core Business Features (High Priority)
 - [ ] Role-Based Access Control

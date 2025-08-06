@@ -637,49 +637,17 @@ export function showChartConfigModal(options: {
           
           <div class="form-group">
             <label for="chartType">Chart Type:</label>
-            <select id="chartType" required>
-              <option value="bar">Bar Chart</option>
-              <option value="line">Line Chart</option>
-              <option value="pie">Pie Chart</option>
-              <option value="doughnut">Doughnut Chart</option>
-            </select>
+            <div id="chartType-container"></div>
           </div>
           
           <div class="form-group">
             <label for="groupBy">Group Data By:</label>
-            <select id="groupBy" required>
-              <option value="date">Date</option>
-              <option value="language">Programming Language</option>
-              <option value="editor">Editor/IDE</option>
-              ${
-                options.dataSource === "sessions"
-                  ? '<option value="tag">Tag</option>'
-                  : ""
-              }
-              <option value="day-of-week">Day of Week</option>
-              ${
-                options.dataSource === "sessions"
-                  ? '<option value="hour-of-day">Hour of Day</option>'
-                  : ""
-              }
-            </select>
+            <div id="groupBy-container"></div>
           </div>
           
           <div class="form-group">
             <label for="aggregation">Show:</label>
-            <select id="aggregation" required>
-              <option value="total-time">Total Time Spent</option>
-              ${
-                options.dataSource === "sessions"
-                  ? '<option value="session-count">Number of Sessions</option>'
-                  : ""
-              }
-              ${
-                options.dataSource === "sessions"
-                  ? '<option value="average-duration">Average Session Duration</option>'
-                  : ""
-              }
-            </select>
+            <div id="aggregation-container"></div>
           </div>
           
           <div class="chart-preview">
@@ -699,12 +667,10 @@ export function showChartConfigModal(options: {
 
   document.body.appendChild(modal);
 
+  // Create custom dropdowns
+  const { createCustomDropdown } = require("./CustomDropdown");
+
   const titleInput = modal.querySelector("#chartTitle") as HTMLInputElement;
-  const typeSelect = modal.querySelector("#chartType") as HTMLSelectElement;
-  const groupBySelect = modal.querySelector("#groupBy") as HTMLSelectElement;
-  const aggregationSelect = modal.querySelector(
-    "#aggregation"
-  ) as HTMLSelectElement;
   const createBtn = modal.querySelector("#createChartBtn") as HTMLButtonElement;
   const cancelBtn = modal.querySelector(
     ".chart-modal-cancel"
@@ -717,10 +683,10 @@ export function showChartConfigModal(options: {
   function updatePreview() {
     const config: ChartConfig = {
       title: titleInput.value,
-      chartType: typeSelect.value as ChartConfig["chartType"],
+      chartType: chartTypeDropdown.getValue() as ChartConfig["chartType"],
       dataSource: options.dataSource,
-      groupBy: groupBySelect.value as ChartConfig["groupBy"],
-      aggregation: aggregationSelect.value as ChartConfig["aggregation"],
+      groupBy: groupByDropdown.getValue() as ChartConfig["groupBy"],
+      aggregation: aggregationDropdown.getValue() as ChartConfig["aggregation"],
     };
 
     if (options.data.length > 0) {
@@ -732,12 +698,70 @@ export function showChartConfigModal(options: {
     }
   }
 
-  [titleInput, typeSelect, groupBySelect, aggregationSelect].forEach(
-    (element) => {
-      element.addEventListener("change", updatePreview);
-      element.addEventListener("input", updatePreview);
-    }
-  );
+  // Chart Type dropdown
+  const chartTypeDropdown = createCustomDropdown({
+    id: "chartType",
+    name: "chartType",
+    value: "bar",
+    options: [
+      { value: "bar", label: "Bar Chart" },
+      { value: "line", label: "Line Chart" },
+      { value: "pie", label: "Pie Chart" },
+      { value: "doughnut", label: "Doughnut Chart" },
+    ],
+    onChange: updatePreview,
+  });
+  document
+    .getElementById("chartType-container")
+    ?.appendChild(chartTypeDropdown.getElement());
+
+  // Group By dropdown
+  const groupByOptions = [
+    { value: "date", label: "Date" },
+    { value: "language", label: "Programming Language" },
+    { value: "editor", label: "Editor/IDE" },
+    ...(options.dataSource === "sessions"
+      ? [{ value: "tag", label: "Tag" }]
+      : []),
+    { value: "day-of-week", label: "Day of Week" },
+    ...(options.dataSource === "sessions"
+      ? [{ value: "hour-of-day", label: "Hour of Day" }]
+      : []),
+  ];
+  const groupByDropdown = createCustomDropdown({
+    id: "groupBy",
+    name: "groupBy",
+    value: "date",
+    options: groupByOptions,
+    onChange: updatePreview,
+  });
+  document
+    .getElementById("groupBy-container")
+    ?.appendChild(groupByDropdown.getElement());
+
+  // Aggregation dropdown
+  const aggregationOptions = [
+    { value: "total-time", label: "Total Time Spent" },
+    ...(options.dataSource === "sessions"
+      ? [{ value: "session-count", label: "Number of Sessions" }]
+      : []),
+    ...(options.dataSource === "sessions"
+      ? [{ value: "average-duration", label: "Average Session Duration" }]
+      : []),
+  ];
+  const aggregationDropdown = createCustomDropdown({
+    id: "aggregation",
+    name: "aggregation",
+    value: "total-time",
+    options: aggregationOptions,
+    onChange: updatePreview,
+  });
+  document
+    .getElementById("aggregation-container")
+    ?.appendChild(aggregationDropdown.getElement());
+
+  // Add event listeners for preview updates
+  titleInput.addEventListener("input", updatePreview);
 
   // Initial preview
   setTimeout(updatePreview, 100);
@@ -752,10 +776,10 @@ export function showChartConfigModal(options: {
   createBtn.addEventListener("click", () => {
     const config: ChartConfig = {
       title: titleInput.value,
-      chartType: typeSelect.value as ChartConfig["chartType"],
+      chartType: chartTypeDropdown.getValue() as ChartConfig["chartType"],
       dataSource: options.dataSource,
-      groupBy: groupBySelect.value as ChartConfig["groupBy"],
-      aggregation: aggregationSelect.value as ChartConfig["aggregation"],
+      groupBy: groupByDropdown.getValue() as ChartConfig["groupBy"],
+      aggregation: aggregationDropdown.getValue() as ChartConfig["aggregation"],
     };
 
     options.onCreateChart(config, options.data);

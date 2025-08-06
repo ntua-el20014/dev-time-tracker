@@ -648,29 +648,6 @@ async function showManageMembersModal(projectId: number) {
   isMemberModalOpen = true;
 
   try {
-    // Get all users and current project members
-    const allUsers = await ipcRenderer.invoke("get-all-users");
-
-    // Helper functions
-    const generateRoleOptions = (userId: number, currentRole: string) => {
-      const user = allUsers.find((u: any) => u.id === userId);
-      const canBeManager =
-        user && (user.role === "admin" || user.role === "manager");
-
-      return `
-        <option value="member" ${
-          currentRole === "member" ? "selected" : ""
-        }>Member</option>
-        ${
-          canBeManager
-            ? `<option value="manager" ${
-                currentRole === "manager" ? "selected" : ""
-              }>Manager</option>`
-            : ""
-        }
-      `;
-    };
-
     const refreshModalContent = async () => {
       // Refresh data
       const freshUsers = await ipcRenderer.invoke("get-all-users");
@@ -696,12 +673,8 @@ async function showManageMembersModal(projectId: number) {
                 ${
                   member.user_id !== project.manager_id
                     ? `
-                  <select class="role-select" data-user-id="${member.user_id}">
-                    ${generateRoleOptions(member.user_id, displayRole)}
-                  </select>
-                  <button class="btn-remove-member" data-user-id="${
-                    member.user_id
-                  }">Remove</button>
+                  <div class="role-select-container" data-user-id="${member.user_id}" data-current-role="${displayRole}"></div>
+                  <button class="btn-remove-member" data-user-id="${member.user_id}">Remove</button>
                 `
                     : '<span class="manager-label">Project Manager</span>'
                 }
@@ -736,29 +709,144 @@ async function showManageMembersModal(projectId: number) {
       const modal = document.getElementById("customModal");
       if (!modal) return;
 
+      // Create custom dropdowns
+      const { createCustomDropdown } = require("./components/CustomDropdown");
+
+      // Create role select dropdowns for existing members
+      const roleContainers = modal.querySelectorAll(".role-select-container");
+      const roleDropdowns = new Map();
+
+      roleContainers.forEach((container: any) => {
+        const userId = container.dataset.userId;
+        const currentRole = container.dataset.currentRole;
+        const user = data.allUsers.find((u: any) => u.id === parseInt(userId));
+        const canBeManager =
+          user && (user.role === "admin" || user.role === "manager");
+
+        const options = [{ value: "member", label: "Member" }];
+
+        if (canBeManager) {
+          options.push({ value: "manager", label: "Manager" });
+        }
+
+        const roleDropdown = createCustomDropdown({
+          id: `role-${userId}`,
+          name: `role-${userId}`,
+          value: currentRole,
+          options: options,
+          onChange: async (newRole: string) => {
+            const oldValue = currentRole;
+            const dbRole = newRole === "member" ? "employee" : "manager";
+
+            try {
+              if (newRole === "manager") {
+                await ipcRenderer.invoke(
+                  "transfer-project-management",
+                  projectId,
+                  parseInt(userId)
+                );
+              } else {
+                await ipcRenderer.invoke(
+                  "update-project-member-role",
+                  projectId,
+                  parseInt(userId),
+                  dbRole
+                );
+              }
+              showInAppNotification("Role updated successfully!", 3000);
+
+              setTimeout(async () => {
+                await loadProjects();
+                renderProjects();
+                modal?.classList.remove("active");
+                modal?.remove();
+                document.getElementById("customModalOverlay")?.remove();
+                isMemberModalOpen = false;
+              }, 500);
+            } catch (error) {
+              showInAppNotification(`Failed to update role: ${error}`, 5000);
+              roleDropdown.setValue(oldValue);
+            }
+          },
+        });
+
+        container.appendChild(roleDropdown.getElement());
+        roleDropdowns.set(userId, roleDropdown);
+      });
+
+      // Create dropdowns for adding new members
+      let userSelectDropdown: any = null;
+      let roleSelectDropdown: any = null;
+
+      if (data.availableUsers.length > 0) {
+        // User selection dropdown
+        const userContainer = modal.querySelector("#userSelect-container");
+        if (userContainer) {
+          userSelectDropdown = createCustomDropdown({
+            id: "userSelect",
+            name: "userSelect",
+            placeholder: "Select a user...",
+            options: [
+              { value: "", label: "Select a user..." },
+              ...data.availableUsers.map((user: any) => ({
+                value: user.id.toString(),
+                label: user.username,
+              })),
+            ],
+            onChange: (userId: string) => {
+              if (roleSelectDropdown && userId) {
+                const selectedUser = data.allUsers.find(
+                  (u: any) => u.id === parseInt(userId)
+                );
+                const canBeManager =
+                  selectedUser &&
+                  (selectedUser.role === "admin" ||
+                    selectedUser.role === "manager");
+
+                const options = [{ value: "member", label: "Member" }];
+                if (canBeManager) {
+                  options.push({ value: "manager", label: "Manager" });
+                }
+
+                roleSelectDropdown.setOptions(options);
+                roleSelectDropdown.setValue("member");
+              }
+            },
+          });
+          userContainer.appendChild(userSelectDropdown.getElement());
+        }
+
+        // Role selection dropdown for new member
+        const roleContainer = modal.querySelector("#roleSelect-container");
+        if (roleContainer) {
+          roleSelectDropdown = createCustomDropdown({
+            id: "roleSelect",
+            name: "roleSelect",
+            value: "member",
+            options: [{ value: "member", label: "Member" }],
+          });
+          roleContainer.appendChild(roleSelectDropdown.getElement());
+        }
+      }
+
       // Add member functionality
       const addMemberBtn = modal.querySelector(
         "#addMemberBtn"
       ) as HTMLButtonElement;
       if (addMemberBtn) {
         addMemberBtn.onclick = async () => {
-          const userSelect = modal.querySelector(
-            "#userSelect"
-          ) as HTMLSelectElement;
-          const roleSelect = modal.querySelector(
-            "#roleSelect"
-          ) as HTMLSelectElement;
+          const userValue = userSelectDropdown?.getValue();
 
-          if (userSelect.value) {
+          if (userValue) {
             try {
               // Map frontend role to database role
-              const frontendRole = roleSelect.value;
+              const frontendRole = roleSelectDropdown?.getValue() || "member";
               const dbRole = frontendRole === "member" ? "employee" : "manager";
 
               await ipcRenderer.invoke(
                 "add-project-member",
                 projectId,
-                parseInt(userSelect.value),
+                parseInt(userValue),
                 dbRole
               );
               showInAppNotification("Member added successfully!", 3000);
@@ -778,127 +866,7 @@ async function showManageMembersModal(projectId: number) {
             }
           }
         };
-
-        // Update role options when user is selected
-        const userSelect = modal.querySelector(
-          "#userSelect"
-        ) as HTMLSelectElement;
-        const roleSelect = modal.querySelector(
-          "#roleSelect"
-        ) as HTMLSelectElement;
-
-        if (userSelect && roleSelect) {
-          userSelect.addEventListener("change", () => {
-            const selectedUserId = parseInt(userSelect.value);
-            if (selectedUserId) {
-              const selectedUser = data.allUsers.find(
-                (u: any) => u.id === selectedUserId
-              );
-              const canBeManager =
-                selectedUser &&
-                (selectedUser.role === "admin" ||
-                  selectedUser.role === "manager");
-
-              roleSelect.innerHTML = `
-                <option value="member">Member</option>
-                ${
-                  canBeManager ? '<option value="manager">Manager</option>' : ""
-                }
-              `;
-            } else {
-              roleSelect.innerHTML = '<option value="member">Member</option>';
-            }
-          });
-        }
       }
-
-      // Role change functionality - use event delegation
-      modal.addEventListener("change", async (e) => {
-        const target = e.target as HTMLSelectElement;
-        if (target.classList.contains("role-select")) {
-          const userId = parseInt(target.dataset.userId!);
-          const newRole = target.value as "manager" | "member";
-          const oldValue = target.value === "manager" ? "member" : "manager";
-
-          // Map frontend roles to database roles
-          const dbRole = newRole === "member" ? "employee" : "manager";
-
-          try {
-            // Any time someone becomes a manager, they should become THE project manager
-            if (newRole === "manager") {
-              await ipcRenderer.invoke(
-                "transfer-project-management",
-                projectId,
-                userId
-              );
-            } else {
-              await ipcRenderer.invoke(
-                "update-project-member-role",
-                projectId,
-                userId,
-                dbRole
-              );
-            }
-            showInAppNotification("Role updated successfully!", 3000);
-
-            // Wait a bit before refreshing to ensure database is updated
-            setTimeout(async () => {
-              await loadProjects();
-              renderProjects();
-              // Close modal after successful update
-              modal?.classList.remove("active");
-              modal?.remove();
-              document.getElementById("customModalOverlay")?.remove();
-              isMemberModalOpen = false;
-            }, 500);
-          } catch (error) {
-            showInAppNotification("Failed to update role", 5000);
-            // Revert the select value
-            target.value = oldValue;
-          }
-        }
-      });
-
-      // Remove member functionality - use event delegation
-      modal.addEventListener("click", async (e) => {
-        const target = e.target as HTMLButtonElement;
-        if (target.classList.contains("btn-remove-member")) {
-          e.preventDefault();
-          e.stopPropagation();
-
-          const userId = parseInt(target.dataset.userId!);
-          const memberName =
-            target
-              .closest(".member-item")
-              ?.querySelector(".member-info")
-              ?.textContent?.split("(")[0]
-              ?.trim() || "this member";
-
-          showConfirmationModal({
-            title: "Remove Member",
-            message: `Are you sure you want to remove ${memberName} from the project?`,
-            confirmText: "Remove",
-            onConfirm: async () => {
-              try {
-                await ipcRenderer.invoke(
-                  "remove-project-member",
-                  projectId,
-                  userId
-                );
-                showInAppNotification("Member removed successfully!", 3000);
-                // Close modal and refresh projects
-                modal?.classList.remove("active");
-                modal?.remove();
-                document.getElementById("customModalOverlay")?.remove();
-                isMemberModalOpen = false;
-                loadProjects().then(() => renderProjects());
-              } catch (error) {
-                showInAppNotification("Failed to remove member", 5000);
-              }
-            },
-          });
-        }
-      });
     };
 
     // Use showModal but override content after creation
@@ -935,13 +903,8 @@ async function showManageMembersModal(projectId: number) {
               <div class="add-member-section">
                 <h3>Add New Member</h3>
                 <div class="add-member-form">
-                  <select id="userSelect">
-                    <option value="">Select a user...</option>
-                    ${data.userOptions}
-                  </select>
-                  <select id="roleSelect">
-                    <option value="member">Member</option>
-                  </select>
+                  <div id="userSelect-container"></div>
+                  <div id="roleSelect-container"></div>
                   <button type="button" id="addMemberBtn" class="btn-confirm">Add Member</button>
                 </div>
                 <p class="info-note" style="margin-top: 10px; font-size: 12px; color: var(--fg-muted);">
