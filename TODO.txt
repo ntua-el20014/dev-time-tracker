@@ -1,48 +1,10 @@
 TODO / Ideas for Improvements
 ## Fixes:
 - General:
-  - do something with million lines of code for modals
 - Specific:
   - role management modal: testing
 
-## Phase 2: Essential Business Operations (High Priority)
-- [ ] Basic Invoice Generation
-  - [ ] Generate simple invoices with time breakdowns
-  - [ ] PDF export with basic templates
-- [ ] Team Organization
-  - [ ] Organize employees into teams/departments
-  - [ ] Department-level reporting
-- [ ] Shared Projects
-  - [ ] Multiple employees can track time on the same project
-  - [ ] Project-level permissions and visibility
-- [ ] Enhanced CSV/Excel export for payroll systems
-
-## Phase 3: Advanced Features & Management (Medium Priority)
-- [ ] Project Budgets
-  - [ ] Set time/budget limits per project with progress tracking
-  - [ ] Budget alerts when approaching limits
-- [ ] Essential Reports
-  - [ ] Time allocation by team/project
-  - [ ] Export reports in CSV/PDF formats
-- [ ] Bulk User Operations
-  - [ ] Import/export employee data via CSV
-- [ ] Basic Google Calendar sync for meetings
-
-## Phase 4: Performance & User Experience (Medium Priority)
-- [ ] Performance Improvements
-  - [ ] Database optimization for larger teams
-  - [ ] Faster data loading and pagination
-- [ ] Enhanced UI/UX
-  - [ ] Improved responsive design
-  - [ ] Better keyboard shortcuts and accessibility
-- [ ] Automated local backup
-- [ ] Basic audit trails for data changes
-
 ## Phase 5: Nice-to-Have Features (Lower Priority)
-- [ ] Simple API for basic integrations
-- [ ] Time Management Enhancements
-  - [ ] Break reminders and focus scheduling
-  - [ ] Simple time blocking features
 - [ ] Gamification
     - [ ] Simple rewards for meeting time goals
     - [ ] Leaderboards for teams

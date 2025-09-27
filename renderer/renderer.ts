@@ -103,7 +103,7 @@ function initUI() {
   const localToday = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD format
   initTheme();
 
-  ipcRenderer.on("os-info", (_event, data) => {
+  ipcRenderer.on("os-info", (_event: any, data: { os?: string }) => {
     if (data && data.os) displayOSInfo(data.os);
   });
 
@@ -446,7 +446,7 @@ ipcRenderer.on("get-session-info", async () => {
   }, 100);
 });
 
-ipcRenderer.on("notify", (_event, data) => {
+ipcRenderer.on("notify", (_event: any, data: { message?: string }) => {
   if (data && data.message) showInAppNotification(data.message);
 });
 
@@ -468,30 +468,42 @@ ipcRenderer.on("auto-resumed", () => {
   }
 });
 
-ipcRenderer.on("scheduled-session-notification", (_event, data) => {
-  if (data && data.message) {
-    showNotification(`${data.title} - ${data.message}`);
+ipcRenderer.on(
+  "scheduled-session-notification",
+  (
+    _event: any,
+    data: {
+      title?: string;
+      message?: string;
+      sessionId?: number;
+      type?: string;
+    }
+  ) => {
+    if (data && data.message) {
+      showNotification(`${data.title} - ${data.message}`);
 
-    // For "time to start" notifications, offer to switch to calendar
-    if (data.type === "time_to_start") {
-      setTimeout(() => {
-        showConfirmationModal({
-          title: "Start Session",
-          message: "Would you like to open the calendar to start the session?",
-          confirmText: "Open Calendar",
-          onConfirm: () => {
-            const calendarTab = document.querySelector(
-              '.tab[data-tab="calendar"]'
-            ) as HTMLButtonElement;
-            if (calendarTab) {
-              calendarTab.click();
-            }
-          },
-        });
-      }, 2000);
+      // For "time to start" notifications, offer to switch to calendar
+      if (data.type === "time_to_start") {
+        setTimeout(() => {
+          showConfirmationModal({
+            title: "Start Session",
+            message:
+              "Would you like to open the calendar to start the session?",
+            confirmText: "Open Calendar",
+            onConfirm: () => {
+              const calendarTab = document.querySelector(
+                '.tab[data-tab="calendar"]'
+              ) as HTMLButtonElement;
+              if (calendarTab) {
+                calendarTab.click();
+              }
+            },
+          });
+        }, 2000);
+      }
     }
   }
-});
+);
 
 export async function applyAccentColor() {
   const theme = document.body.classList.contains("light") ? "light" : "dark";

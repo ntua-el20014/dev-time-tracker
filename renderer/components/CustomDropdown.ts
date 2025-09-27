@@ -29,7 +29,7 @@ export class CustomDropdown {
   private config: CustomDropdownConfig;
   private selectedValue: string;
   private isOpen: boolean = false;
-  private selectedIndex: number = -1;
+  // selectedIndex tracking removed because it's never read; focus is handled by DOM focus
 
   constructor(config: CustomDropdownConfig) {
     this.config = config;
@@ -257,7 +257,6 @@ export class CustomDropdown {
     if (!this.isOpen) return;
 
     this.isOpen = false;
-    this.selectedIndex = -1;
     this.container.classList.remove("open");
     const trigger = this.container.querySelector(
       ".dropdown-trigger"
@@ -284,7 +283,7 @@ export class CustomDropdown {
     if (index < 0) index = options.length - 1;
     if (index >= options.length) index = 0;
 
-    this.selectedIndex = index;
+    // Focus the option directly; no need to track selectedIndex in state
     (options[index] as HTMLElement).focus();
   }
 
