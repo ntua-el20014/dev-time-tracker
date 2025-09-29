@@ -1,49 +1,58 @@
 import db from "./db";
 import { ScheduledSession, ScheduledSessionNotification } from "@shared/types";
+import { v4 as uuidv4 } from "uuid";
 
 export function createScheduledSession(
   scheduledSession: Omit<ScheduledSession, "id" | "created_at">
 ): number {
-  const stmt = db.prepare(`
-    INSERT INTO scheduled_sessions 
-    (user_id, title, description, scheduled_datetime, estimated_duration, 
-     recurrence_type, recurrence_data, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  // Use a transaction to ensure all operations succeed or fail together
+  const transaction = db.transaction(() => {
+    const stmt = db.prepare(`
+        INSERT INTO scheduled_sessions 
+        (local_id, user_id, title, description, scheduled_datetime, estimated_duration, 
+         recurrence_type, recurrence_data, status, synced, last_modified)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+      `);
 
-  const result = stmt.run(
-    scheduledSession.user_id,
-    scheduledSession.title,
-    scheduledSession.description || null,
-    scheduledSession.scheduled_datetime,
-    scheduledSession.estimated_duration || null,
-    scheduledSession.recurrence_type,
-    scheduledSession.recurrence_data
-      ? JSON.stringify(scheduledSession.recurrence_data)
-      : null,
-    scheduledSession.status
-  );
-
-  const sessionId = result.lastInsertRowid as number;
-
-  // Handle tags if provided
-  if (scheduledSession.tags && scheduledSession.tags.length > 0) {
-    setScheduledSessionTags(
+    const result = stmt.run(
+      uuidv4(),
       scheduledSession.user_id,
-      sessionId,
-      scheduledSession.tags
+      scheduledSession.title,
+      scheduledSession.description || null,
+      scheduledSession.scheduled_datetime,
+      scheduledSession.estimated_duration || null,
+      scheduledSession.recurrence_type,
+      scheduledSession.recurrence_data
+        ? JSON.stringify(scheduledSession.recurrence_data)
+        : null,
+      scheduledSession.status,
+      new Date().toISOString()
     );
-  }
 
-  // Generate recurring sessions if needed
-  if (
-    scheduledSession.recurrence_type === "weekly" &&
-    scheduledSession.recurrence_data
-  ) {
-    generateRecurringInstances(sessionId, scheduledSession);
-  }
+    const sessionId = result.lastInsertRowid as number;
 
-  return sessionId;
+    // Handle tags if provided
+    if (scheduledSession.tags && scheduledSession.tags.length > 0) {
+      setScheduledSessionTags(
+        scheduledSession.user_id,
+        sessionId,
+        scheduledSession.tags
+      );
+    }
+
+    // Generate recurring sessions if needed
+    if (
+      scheduledSession.recurrence_type === "weekly" &&
+      scheduledSession.recurrence_data
+    ) {
+      generateRecurringInstances(sessionId, scheduledSession);
+    }
+
+    return sessionId;
+  });
+
+  // Execute the transaction and return the session ID
+  return transaction();
 }
 
 export function getScheduledSessions(
@@ -145,7 +154,7 @@ export function updateScheduledSession(
 
     const stmt = db.prepare(`
       UPDATE scheduled_sessions 
-      SET ${setClause.join(", ")}
+      SET ${setClause.join(", ")}, synced = 0, last_modified = CURRENT_TIMESTAMP
       WHERE user_id = ? AND id = ?
     `);
 
@@ -205,7 +214,7 @@ export function setScheduledSessionTags(
     "SELECT id FROM tags WHERE name = ? AND user_id = ?"
   );
   const createTagStmt = db.prepare(
-    "INSERT INTO tags (name, user_id) VALUES (?, ?)"
+    "INSERT INTO tags (local_id, name, user_id, synced, last_modified) VALUES (?, ?, ?, ?, ?)"
   );
 
   for (const tagName of tagNames) {
@@ -213,7 +222,13 @@ export function setScheduledSessionTags(
       | { id: number }
       | undefined;
     if (!tagRow) {
-      const result = createTagStmt.run(tagName, userId);
+      const result = createTagStmt.run(
+        uuidv4(),
+        tagName,
+        userId,
+        0,
+        new Date().toISOString()
+      );
       tagIds.push(result.lastInsertRowid as number);
     } else {
       tagIds.push(tagRow.id);
@@ -222,10 +237,16 @@ export function setScheduledSessionTags(
 
   // Insert new tag associations
   const insertTagStmt = db.prepare(
-    "INSERT INTO scheduled_session_tags (scheduled_session_id, tag_id) VALUES (?, ?)"
+    "INSERT INTO scheduled_session_tags (local_id, scheduled_session_id, tag_id, synced, last_modified) VALUES (?, ?, ?, ?, ?)"
   );
   for (const tagId of tagIds) {
-    insertTagStmt.run(scheduledSessionId, tagId);
+    insertTagStmt.run(
+      uuidv4(),
+      scheduledSessionId,
+      tagId,
+      0,
+      new Date().toISOString()
+    );
   }
 }
 
@@ -237,7 +258,7 @@ function generateRecurringInstances(
 
   const { endDate, occurrences } = baseSession.recurrence_data;
   const startDate = new Date(baseSession.scheduled_datetime);
-  const instances = [];
+  const instances: Array<Omit<ScheduledSession, "id" | "created_at">> = [];
 
   const currentDate = new Date(startDate);
   currentDate.setDate(currentDate.getDate() + 7); // Start with next week
@@ -267,26 +288,34 @@ function generateRecurringInstances(
     count++;
   }
 
-  // Insert all instances
-  const stmt = db.prepare(`
-    INSERT INTO scheduled_sessions 
-    (user_id, title, description, scheduled_datetime, estimated_duration, 
-     recurrence_type, recurrence_data, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  // Use a transaction to ensure all recurring instances are created atomically
+  const transaction = db.transaction(() => {
+    const stmt = db.prepare(`
+      INSERT INTO scheduled_sessions 
+      (local_id, user_id, title, description, scheduled_datetime, estimated_duration, 
+       recurrence_type, recurrence_data, status, synced, last_modified)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-  for (const instance of instances) {
-    stmt.run(
-      instance.user_id,
-      instance.title,
-      instance.description || null,
-      instance.scheduled_datetime,
-      instance.estimated_duration || null,
-      "none", // Individual instances are not recurring
-      null,
-      instance.status
-    );
-  }
+    for (const instance of instances) {
+      stmt.run(
+        uuidv4(),
+        instance.user_id,
+        instance.title,
+        instance.description || null,
+        instance.scheduled_datetime,
+        instance.estimated_duration || null,
+        "none", // Individual instances are not recurring
+        null,
+        instance.status,
+        0, // synced
+        new Date().toISOString() // last_modified
+      );
+    }
+  });
+
+  // Execute the transaction
+  transaction();
 }
 
 // Notification functions
@@ -411,7 +440,7 @@ export function getUpcomingSessionsForNotification(): ScheduledSessionNotificati
 
 export function markNotificationSent(sessionId: number): void {
   const stmt = db.prepare(
-    "UPDATE scheduled_sessions SET last_notification_sent = CURRENT_TIMESTAMP WHERE id = ?"
+    "UPDATE scheduled_sessions SET last_notification_sent = CURRENT_TIMESTAMP, synced = 0, last_modified = ? WHERE id = ?"
   );
-  stmt.run(sessionId);
+  stmt.run(new Date().toISOString(), sessionId);
 }

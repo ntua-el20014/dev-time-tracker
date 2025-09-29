@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import db from "./db";
 import { notifyRenderer } from "../utils/ipcHelp";
 import { getLocalDateString } from "../utils/timeFormat";
 import type { DailySummaryFilters } from "./types";
+import { v4 as uuidv4 } from "uuid";
 
 export function logWindow(
   userId: number,
@@ -16,22 +16,34 @@ export function logWindow(
   try {
     const timestamp = new Date().toISOString();
     db.prepare(
-      `INSERT INTO usage (app, title, language, timestamp, user_id) VALUES (?, ?, ?, ?, ?)`
-    ).run(app, title, lang, timestamp, userId);
+      `INSERT INTO usage (local_id, app, title, language, timestamp, user_id, synced, last_modified) VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
+    ).run(uuidv4(), app, title, lang, timestamp, userId, timestamp);
 
     const date = getLocalDateString();
 
     db.prepare(
       `
-      INSERT INTO usage_summary (app, language, lang_ext, date, icon, time_spent, user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO usage_summary (local_id, app, language, lang_ext, date, icon, time_spent, user_id, synced, last_modified)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
       ON CONFLICT(app, language, date, user_id)
       DO UPDATE SET 
         time_spent = time_spent + excluded.time_spent,
         icon = CASE WHEN usage_summary.icon IS NULL OR usage_summary.icon = '' THEN excluded.icon ELSE usage_summary.icon END,
-        lang_ext = CASE WHEN excluded.lang_ext IS NOT NULL THEN excluded.lang_ext ELSE usage_summary.lang_ext END
+        lang_ext = CASE WHEN excluded.lang_ext IS NOT NULL THEN excluded.lang_ext ELSE usage_summary.lang_ext END,
+        synced = 0,
+        last_modified = excluded.last_modified
     `
-    ).run(app, lang, langExt, date, icon, intervalSeconds, userId);
+    ).run(
+      uuidv4(),
+      app,
+      lang,
+      langExt,
+      date,
+      icon,
+      intervalSeconds,
+      userId,
+      new Date().toISOString()
+    );
   } catch (err) {
     notifyRenderer("Failed to log window usage. Please try again.", 5000);
   }
@@ -200,10 +212,25 @@ export function setDailyGoal(
 ) {
   db.prepare(
     `
-    INSERT OR IGNORE INTO daily_goals (user_id, date, time, description, isCompleted)
-    VALUES (?, ?, ?, ?, 0)
+    INSERT INTO daily_goals (local_id, user_id, date, time, description, isCompleted, synced, last_modified)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, date)
+    DO UPDATE SET
+      time = excluded.time,
+      description = excluded.description,
+      synced = 0,
+      last_modified = excluded.last_modified
   `
-  ).run(userId, date, time, description);
+  ).run(
+    uuidv4(),
+    userId,
+    date,
+    time,
+    description,
+    0,
+    0,
+    new Date().toISOString()
+  );
 }
 
 export function getDailyGoal(userId: number, date: string) {
@@ -225,8 +252,8 @@ export function deleteDailyGoal(userId: number, date: string) {
 
 export function completeDailyGoal(userId: number, date: string) {
   db.prepare(
-    `UPDATE daily_goals SET isCompleted = 1 WHERE user_id = ? AND date = ?`
-  ).run(userId, date);
+    `UPDATE daily_goals SET isCompleted = 1, synced = 0, last_modified = ? WHERE user_id = ? AND date = ?`
+  ).run(new Date().toISOString(), userId, date);
 }
 
 export function getTotalTimeForDay(userId: number, date: string): number {
@@ -356,16 +383,19 @@ export function clearUsage() {
 }
 export function importUsage(usageArr: any[]) {
   const stmt = db.prepare(
-    "INSERT INTO usage (id, app, title, language, timestamp, user_id) VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT INTO usage (id, local_id, app, title, language, timestamp, user_id, synced, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   for (const row of usageArr) {
     stmt.run(
       row.id,
+      uuidv4(),
       row.app,
       row.title,
       row.language,
       row.timestamp,
-      row.user_id
+      row.user_id,
+      0,
+      new Date().toISOString()
     );
   }
 }
@@ -374,18 +404,21 @@ export function clearUsageSummary() {
 }
 export function importUsageSummary(usageSummaryArr: any[]) {
   const stmt = db.prepare(
-    "INSERT INTO usage_summary (id, app, language, lang_ext, date, icon, time_spent, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO usage_summary (id, local_id, app, language, lang_ext, date, icon, time_spent, user_id, synced, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   for (const row of usageSummaryArr) {
     stmt.run(
       row.id,
+      uuidv4(),
       row.app,
       row.language,
       row.lang_ext,
       row.date,
       row.icon,
       row.time_spent,
-      row.user_id
+      row.user_id,
+      0,
+      new Date().toISOString()
     );
   }
 }
@@ -394,16 +427,19 @@ export function clearDailyGoals() {
 }
 export function importDailyGoals(dailyGoalsArr: any[]) {
   const stmt = db.prepare(
-    "INSERT INTO daily_goals (id, user_id, date, time, description, isCompleted) VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT INTO daily_goals (id, local_id, user_id, date, time, description, isCompleted, synced, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   for (const row of dailyGoalsArr) {
     stmt.run(
       row.id,
+      uuidv4(),
       row.user_id,
       row.date,
       row.time,
       row.description,
-      row.isCompleted
+      row.isCompleted,
+      0,
+      new Date().toISOString()
     );
   }
 }
