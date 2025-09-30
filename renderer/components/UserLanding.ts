@@ -99,12 +99,29 @@ export async function renderUserLanding(
             type: "text",
             required: true,
           },
+          {
+            name: "email",
+            label: "Email",
+            type: "text",
+            required: true,
+          },
+          {
+            name: "password",
+            label: "Password",
+            type: "text",
+            required: true,
+          },
         ],
         submitText: "Add",
         onSubmit: async (values) => {
-          const username = values.username;
-          if (username && username.trim()) {
-            await ipcRenderer.invoke("create-user", username.trim(), "");
+          const { username, email, password } = values;
+          if (username?.trim() && email?.trim() && password) {
+            await ipcRenderer.invoke("create-user", {
+              username: username.trim(),
+              email: email.trim(),
+              password: password,
+              avatar: "",
+            });
           }
           setTimeout(() => {
             renderUserLanding(container, onUserSelected);

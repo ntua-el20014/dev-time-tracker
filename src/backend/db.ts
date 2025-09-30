@@ -27,6 +27,8 @@ db.prepare(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     local_id TEXT UNIQUE,
     username TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE,
+    password_hash TEXT,
     avatar TEXT,
     role TEXT DEFAULT 'employee' CHECK(role IN ('admin', 'manager', 'employee')),
     org_id INTEGER,

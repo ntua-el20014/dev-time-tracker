@@ -1,0 +1,81 @@
+/* Auth landing container */
+.auth-landing {
+  max-width: 700px;
+  margin: 40px auto;
+  padding: 32px 0;
+}
+
+.auth-landing h2 {
+  text-align: center;
+  margin-bottom: 32px;
+  font-size: 2em;
+  color: var(--accent, #ffe066);
+}
+
+.auth-options {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.auth-option {
+  width: 180px;
+  border-radius: 18px;
+  box-shadow: 0 2px 12px #0001;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 12px;
+  cursor: pointer;
+  transition: box-shadow 0.2s, transform 0.15s;
+  background: var(--bg-light);
+}
+
+.auth-option:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px #0002;
+}
+
+.auth-option .icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  font-size: 1.8em;
+}
+
+.auth-option .label {
+  font-size: 1.2em;
+  color: var(--fg);
+  margin-bottom: 8px;
+}
+
+.auth-option .description {
+  font-size: 0.9em;
+  color: var(--fg-muted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* Test mode UI */
+.test-mode-ui {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #0001;
+  transition: transform 0.15s;
+}
+
+.test-mode-ui:hover {
+  transform: translateY(-2px);
+}

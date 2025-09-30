@@ -13,9 +13,15 @@ import {
   showInAppNotification,
   showConfirmationModal,
 } from "./components";
-import { renderUserLanding } from "./components";
+import { renderLandingPage } from "./components";
+// import { renderUserLanding } from "./components";
 import { getCurrentUserId } from "./utils";
 import { isCurrentUserManagerOrAdmin } from "./utils";
+import {
+  checkAuthStatus,
+  onAuthStateChange,
+  getCurrentUser,
+} from "../src/supabase/api";
 import { loadUserLangMap } from "../src/utils/extractData";
 import { showOnboarding, shouldShowOnboarding } from "./components";
 import "./styles/base.css";
@@ -36,6 +42,7 @@ import "./styles/theme.css";
 import "./styles/timeline.css";
 import "./styles/users.css";
 import "./styles/userRoleManager.css";
+import "./styles/auth.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
 function setupTabs() {
@@ -541,15 +548,13 @@ async function applyUserTheme() {
   window.dispatchEvent(new Event("theme-changed"));
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  localStorage.removeItem("currentUserId");
-  const landing = document.getElementById("userLanding");
+document.addEventListener("DOMContentLoaded", async () => {
+  const landing = document.getElementById("userLanding") as HTMLDivElement;
   const mainUI = document.getElementById("mainUI");
-  const storedUserId = localStorage.getItem("currentUserId");
 
   // Initialize automatic text color updates for accent backgrounds
 
-  function showMainUIForUser(userId: number) {
+  function showMainUIForUser(userId: string | number) {
     localStorage.setItem("currentUserId", String(userId));
     if (mainUI) {
       mainUI.style.display = "";
@@ -572,19 +577,81 @@ document.addEventListener("DOMContentLoaded", () => {
       ipcRenderer.invoke("check-notifications");
     }, 5000);
 
+    // Start daily goal checker after user is authenticated
+    startDailyGoalChecker();
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).showMainUIForUser = showMainUIForUser;
   }
 
-  if (storedUserId) {
-    // Stored user ID found, show main UI
-    showMainUIForUser(Number(storedUserId));
-  } else if (landing) {
-    // No stored user ID, rendering user landing
-    renderUserLanding(landing, (userId) => {
-      showMainUIForUser(userId);
-    });
+  // Check if user is authenticated with Supabase
+  try {
+    const isAuthenticated = await checkAuthStatus();
+
+    if (isAuthenticated) {
+      // User is authenticated, show main UI
+      if (landing) landing.style.display = "none";
+      if (mainUI) mainUI.style.display = "";
+
+      // Get the current user and initialize main UI
+      const user = await getCurrentUser();
+      if (user) {
+        showMainUIForUser(user.id);
+      } else {
+        throw new Error("No authenticated user found");
+      }
+    } else {
+      // No authenticated user, show auth landing
+      if (landing) {
+        if (mainUI) mainUI.style.display = "none";
+        landing.style.display = "";
+        renderLandingPage(landing, (session: any) => {
+          showMainUIForUser(session.user.id);
+          if (landing) landing.style.display = "none";
+        });
+      }
+    }
+  } catch (error) {
+    // If there's an error checking auth, fall back to stored user ID
+    const storedUserId = localStorage.getItem("currentUserId");
+
+    if (storedUserId) {
+      // If we have a stored user, go straight to main UI
+      if (landing) landing.style.display = "none";
+      if (mainUI) mainUI.style.display = "";
+      showMainUIForUser(storedUserId);
+    } else {
+      // No stored user, show auth landing
+      if (landing) {
+        if (mainUI) mainUI.style.display = "none";
+        landing.style.display = "";
+        renderLandingPage(landing, (session: any) => {
+          showMainUIForUser(session.user.id);
+          landing.style.display = "none";
+        });
+      }
+    }
   }
+
+  // Listen for auth state changes
+  onAuthStateChange((session: any) => {
+    if (session) {
+      // User signed in
+      showMainUIForUser(session.user.id);
+      if (landing) landing.style.display = "none";
+    } else {
+      // User signed out
+      localStorage.removeItem("currentUserId");
+      if (mainUI) mainUI.style.display = "none";
+      if (landing) {
+        landing.style.display = "";
+        renderLandingPage(landing, (newSession: any) => {
+          showMainUIForUser(newSession.user.id);
+          landing.style.display = "none";
+        });
+      }
+    }
+  });
 });
 
 function renderMainUI() {
@@ -596,23 +663,28 @@ function renderMainUI() {
 let dailyGoalCheckInterval: NodeJS.Timeout | null = null;
 
 async function checkDailyGoalProgress() {
-  const userId = getCurrentUserId();
-  const today = new Date().toLocaleDateString("en-CA");
-  const dailyGoal = await ipcRenderer.invoke("get-daily-goal", userId, today);
-  if (!dailyGoal) return;
+  try {
+    const userId = getCurrentUserId();
+    const today = new Date().toLocaleDateString("en-CA");
+    const dailyGoal = await ipcRenderer.invoke("get-daily-goal", userId, today);
+    if (!dailyGoal) return;
 
-  const totalMins = await ipcRenderer.invoke(
-    "get-total-time-for-day",
-    userId,
-    today
-  );
+    const totalMins = await ipcRenderer.invoke(
+      "get-total-time-for-day",
+      userId,
+      today
+    );
 
-  if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {
-    await ipcRenderer.invoke("complete-daily-goal", userId, today);
-    showNotification("🎉 Daily goal achieved!");
-    // Optionally, re-render dashboard/logs
-    renderDashboard();
-    renderLogs(today);
+    if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {
+      await ipcRenderer.invoke("complete-daily-goal", userId, today);
+      showNotification("🎉 Daily goal achieved!");
+      // Optionally, re-render dashboard/logs
+      renderDashboard();
+      renderLogs(today);
+    }
+  } catch (error) {
+    // No user logged in yet, skip daily goal check
+    return;
   }
 }
 
@@ -621,8 +693,3 @@ function startDailyGoalChecker() {
   checkDailyGoalProgress();
   dailyGoalCheckInterval = setInterval(checkDailyGoalProgress, 60 * 1000);
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-  // ...existing code...
-  startDailyGoalChecker();
-});

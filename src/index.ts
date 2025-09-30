@@ -9,6 +9,7 @@ import * as usage from "./backend/usage";
 import * as sessions from "./backend/sessions";
 import * as scheduledSessions from "./backend/scheduledSessions";
 import * as users from "./backend/users";
+import { UserRole } from "../shared/types";
 import "./ipc/usageHandlers";
 import "./ipc/sessionHandlers";
 import "./ipc/scheduledSessionHandlers";
@@ -61,7 +62,12 @@ app.whenReady().then(() => {
 
   if (users.getAllUsers().length === 0) {
     // Create default user if none exists
-    users.createUser("Default");
+    users.createUser({
+      username: "Default",
+      email: "default@local.dev",
+      password: "default123", // This will be hashed
+      role: UserRole.EMPLOYEE,
+    });
   }
 
   // Check for scheduled session notifications every minute for real-time notifications
@@ -175,6 +181,7 @@ function createWindow() {
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
+      webSecurity: false, // Allow external API calls (needed for Supabase)
     },
   });
 

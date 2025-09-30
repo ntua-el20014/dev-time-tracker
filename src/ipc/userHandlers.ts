@@ -1,19 +1,23 @@
 import { ipcMain } from "electron";
 import * as users from "../backend/users";
-import { UserRole } from "../../shared/types";
+import { UserRole, CreateUserData } from "../../shared/types";
 
 ipcMain.handle("get-or-create-default-users", () => {
   if (users.getAllUsers().length === 0) {
-    users.createUser("Default", "", UserRole.ADMIN); // First user is admin
+    users.createUser({
+      username: "Default",
+      email: "default@admin.local",
+      password: "defaultadmin",
+      avatar: "",
+      role: UserRole.ADMIN,
+    }); // First user is admin
   }
   users.ensureAdminExists(); // Ensure at least one admin exists
   return users.getAllUsers();
 });
 
-ipcMain.handle(
-  "create-user",
-  (_event, username: string, avatar: string, role?: UserRole) =>
-    users.createUser(username, avatar, role)
+ipcMain.handle("create-user", (_event, data: CreateUserData) =>
+  users.createUser(data)
 );
 ipcMain.handle("get-all-users", () => users.getAllUsers());
 ipcMain.handle("set-current-user", (_event, userId: number) =>

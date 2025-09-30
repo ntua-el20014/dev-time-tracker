@@ -704,8 +704,8 @@ export async function refreshProfile() {
       if (window) {
         (window as any).__resetSummaryTabState = true;
       }
-      import("./components/UserLanding").then((mod) => {
-        mod.renderUserLanding(landing, (userId: number) => {
+      import("./components/LandingPage").then((mod) => {
+        mod.renderLandingPage(landing, (userId: number) => {
           (window as any).showMainUIForUser(userId);
         });
       });

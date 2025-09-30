@@ -1,20 +1,32 @@
 import db from "./db";
 import { notifyRenderer } from "../utils/ipcHelp";
-import { UserRole } from "../../shared/types";
+import { UserRole, CreateUserData } from "../../shared/types";
 import { v4 as uuidv4 } from "uuid";
+import crypto from "crypto";
 
 // --- User management functions ---
-export function createUser(
-  username: string,
-  avatar = "",
-  role: UserRole = UserRole.EMPLOYEE
-): number | undefined {
+export function createUser(data: CreateUserData): number | undefined {
+  const {
+    username,
+    email,
+    password,
+    avatar = "",
+    role = UserRole.EMPLOYEE,
+  } = data;
   try {
     const info = db
       .prepare(
-        `INSERT INTO users (local_id, username, avatar, role, synced, last_modified) VALUES (?, ?, ?, ?, 0, ?)`
+        `INSERT INTO users (local_id, username, email, password_hash, avatar, role, synced, last_modified) VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
       )
-      .run(uuidv4(), username, avatar, role, new Date().toISOString());
+      .run(
+        uuidv4(),
+        username,
+        email,
+        crypto.createHash("sha256").update(password).digest("hex"),
+        avatar,
+        role,
+        new Date().toISOString()
+      );
     return info.lastInsertRowid as number;
   } catch {
     const row = db
@@ -22,6 +34,17 @@ export function createUser(
       .get(username) as { id: number } | undefined;
     return row?.id;
   }
+}
+
+export function validatePassword(userId: number, password: string): boolean {
+  const hashedPassword = crypto
+    .createHash("sha256")
+    .update(password)
+    .digest("hex");
+  const row = db
+    .prepare(`SELECT password_hash FROM users WHERE id = ?`)
+    .get(userId) as { password_hash: string } | undefined;
+  return row?.password_hash === hashedPassword;
 }
 
 export function getAllUsers(): {
@@ -136,7 +159,13 @@ export function ensureAdminExists() {
     if (firstUser) {
       setUserRole(1, UserRole.ADMIN);
     } else {
-      createUser("Admin", "", UserRole.ADMIN);
+      createUser({
+        username: "Admin",
+        email: "admin@local",
+        password: "admin",
+        avatar: "",
+        role: UserRole.ADMIN,
+      });
     }
   }
 }
