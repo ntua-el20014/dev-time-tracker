@@ -32,9 +32,10 @@ export interface ModalOptions {
   fields: {
     name: string;
     label: string;
-    type: "text" | "textarea";
+    type: "text" | "textarea" | "password" | "custom";
     value?: string;
     required?: boolean;
+    render?: () => HTMLElement; // For custom field types
   }[];
   submitText?: string;
   cancelText?: string;
@@ -86,35 +87,65 @@ export function showModal(options: ModalOptions) {
   const form = content.querySelector("form") as HTMLFormElement;
 
   h2.textContent = options.title;
-  form.innerHTML =
-    options.fields
-      .map(
-        (f) => `
-    <label for="modal-${f.name}">${f.label}</label><br>
-    ${
-      f.type === "textarea"
-        ? `<textarea id="modal-${f.name}" name="${f.name}" ${
-            f.required ? "required" : ""
-          }>${f.value || ""}</textarea><br>`
-        : `<input id="modal-${f.name}" name="${f.name}" type="text" value="${
-            f.value || ""
-          }" ${f.required ? "required" : ""}><br>`
+
+  // Clear form and build it programmatically to support custom fields
+  form.innerHTML = "";
+
+  // Add each field
+  options.fields.forEach((f) => {
+    if (f.type === "custom" && f.render) {
+      // For custom fields, use the provided render function
+      const customElement = f.render();
+      form.appendChild(customElement);
+    } else {
+      // For standard fields (text, textarea, password), create label and input
+      const label = document.createElement("label");
+      label.setAttribute("for", `modal-${f.name}`);
+      label.textContent = f.label;
+      form.appendChild(label);
+      form.appendChild(document.createElement("br"));
+
+      if (f.type === "textarea") {
+        const textarea = document.createElement("textarea");
+        textarea.id = `modal-${f.name}`;
+        textarea.name = f.name;
+        if (f.required) textarea.required = true;
+        textarea.value = f.value || "";
+        form.appendChild(textarea);
+      } else {
+        // text or password
+        const input = document.createElement("input");
+        input.id = `modal-${f.name}`;
+        input.name = f.name;
+        input.type = f.type === "password" ? "password" : "text";
+        input.value = f.value || "";
+        if (f.required) input.required = true;
+        form.appendChild(input);
+      }
+      form.appendChild(document.createElement("br"));
     }
-  `
-      )
-      .join("") +
-    `
-  <div class="session-modal-actions">
-    <button type="button" id="customModalCancelBtn" class="btn-cancel ${
-      options.cancelClass || ""
-    }">${options.cancelText || "Cancel"}</button>
-    ${
-      options.submitText
-        ? `<button type="submit" class="btn-confirm">${options.submitText}</button>`
-        : ""
-    }
-  </div>
-`;
+  });
+
+  // Add action buttons
+  const actionsDiv = document.createElement("div");
+  actionsDiv.className = "session-modal-actions";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.id = "customModalCancelBtn";
+  cancelBtn.className = `btn-cancel ${options.cancelClass || ""}`;
+  cancelBtn.textContent = options.cancelText || "Cancel";
+  actionsDiv.appendChild(cancelBtn);
+
+  if (options.submitText) {
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "submit";
+    submitBtn.className = "btn-confirm";
+    submitBtn.textContent = options.submitText;
+    actionsDiv.appendChild(submitBtn);
+  }
+
+  form.appendChild(actionsDiv);
 
   modal.classList.add("active");
   overlay.classList.add("active");
@@ -127,23 +158,20 @@ export function showModal(options: ModalOptions) {
     }
   }, 50);
 
-  // Remove previous listeners
-  form.onsubmit = null;
-  const cancelBtn = form.querySelector(
-    "#customModalCancelBtn"
-  ) as HTMLButtonElement;
-  if (cancelBtn) cancelBtn.onclick = null;
-
   // Submit handler
   form.onsubmit = (e) => {
     e.preventDefault();
     if (!options.onSubmit) return;
     const values: Record<string, string> = {};
     options.fields.forEach((f) => {
+      // Skip custom fields that don't have form inputs
+      if (f.type === "custom") return;
       const el = form.querySelector(`[name="${f.name}"]`) as
         | HTMLInputElement
         | HTMLTextAreaElement;
-      values[f.name] = el.value.trim();
+      if (el) {
+        values[f.name] = el.value.trim();
+      }
     });
     modal!.classList.remove("active");
     modal.remove();
@@ -151,15 +179,13 @@ export function showModal(options: ModalOptions) {
     options.onSubmit(values);
   };
 
-  // Cancel handler
-  if (cancelBtn) {
-    cancelBtn.onclick = () => {
-      modal!.classList.remove("active");
-      modal.remove();
-      overlay?.remove();
-      if (options.onCancel) options.onCancel();
-    };
-  }
+  // Cancel handler (using the cancelBtn reference we created earlier)
+  cancelBtn.onclick = () => {
+    modal!.classList.remove("active");
+    modal.remove();
+    overlay?.remove();
+    if (options.onCancel) options.onCancel();
+  };
 
   // Close button handler
   const closeBtn = modal.querySelector(".modal-close-btn") as HTMLButtonElement;

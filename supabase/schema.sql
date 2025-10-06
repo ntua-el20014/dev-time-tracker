@@ -39,9 +39,10 @@ EXECUTE FUNCTION trigger_set_timestamp();
 
 -- Users table (extends Supabase auth.users)
 CREATE TABLE user_profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users,
+    id UUID PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
     local_id TEXT,
-    username TEXT NOT NULL,
+    username TEXT UNIQUE NOT NULL,
+    email TEXT,
     avatar TEXT,
     role TEXT DEFAULT 'employee' CHECK (role IN ('admin', 'manager', 'employee')),
     org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
@@ -95,7 +96,7 @@ CREATE TABLE project_members (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
     user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
-    role TEXT DEFAULT 'employee' CHECK (role IN ('manager', 'employee')),
+    role TEXT DEFAULT 'member' CHECK (role IN ('manager', 'member')),
     joined_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(project_id, user_id)
 );
@@ -260,6 +261,7 @@ CREATE TABLE scheduled_sessions (
     recurrence_data JSONB, -- JSON for recurrence settings
     status TEXT CHECK(status IN ('pending', 'notified', 'completed', 'missed', 'cancelled')) DEFAULT 'pending',
     last_notification_sent TIMESTAMPTZ,
+    actual_session_id UUID REFERENCES sessions(id) ON DELETE SET NULL, -- Links to sessions table when completed
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -317,3 +319,108 @@ USING (user_id = auth.uid());
 CREATE POLICY "Users can manage their own scheduled sessions"
 ON scheduled_sessions FOR ALL
 USING (user_id = auth.uid());
+
+-- =========================
+-- AUTO-CREATE USER PROFILE
+-- =========================
+
+-- Trigger to automatically create user profile when a new user signs up
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.user_profiles (id, username, email, org_id)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)),
+    NEW.email,
+    NULL
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- =========================
+-- ORGANIZATION HELPERS
+-- =========================
+
+-- Function to create a personal organization for a user
+CREATE OR REPLACE FUNCTION public.create_personal_organization(user_id UUID, org_name TEXT)
+RETURNS UUID AS $$
+DECLARE
+  new_org_id UUID;
+BEGIN
+  INSERT INTO organizations (name)
+  VALUES (org_name)
+  RETURNING id INTO new_org_id;
+  
+  UPDATE user_profiles
+  SET org_id = new_org_id
+  WHERE id = user_id;
+  
+  RETURN new_org_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =========================
+-- UPDATED RLS POLICIES
+-- =========================
+
+-- Allow users to insert their own profile
+CREATE POLICY "Users can insert their own profile"
+ON user_profiles FOR INSERT
+WITH CHECK (id = auth.uid());
+
+-- Allow users to view their own profile even without org
+DROP POLICY IF EXISTS "Users can view profiles in their organization" ON user_profiles;
+CREATE POLICY "Users can view their own or org profiles"
+ON user_profiles FOR SELECT
+USING (
+  id = auth.uid() 
+  OR org_id IN (SELECT org_id FROM user_profiles WHERE id = auth.uid())
+);
+
+-- Admins can manage organizations
+CREATE POLICY "Admins can create organizations"
+ON organizations FOR INSERT
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM user_profiles 
+        WHERE id = auth.uid() 
+        AND role = 'admin'
+    )
+);
+
+CREATE POLICY "Admins can update their organization"
+ON organizations FOR UPDATE
+USING (
+    id IN (
+        SELECT org_id FROM user_profiles 
+        WHERE id = auth.uid() 
+        AND role = 'admin'
+    )
+);
+
+-- =========================
+-- PERFORMANCE INDEXES
+-- =========================
+
+CREATE INDEX IF NOT EXISTS idx_user_profiles_org_id ON user_profiles(org_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_local_id ON user_profiles(local_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_username ON user_profiles(username);
+CREATE INDEX IF NOT EXISTS idx_projects_org_id ON projects(org_id);
+CREATE INDEX IF NOT EXISTS idx_projects_manager_id ON projects(manager_id);
+CREATE INDEX IF NOT EXISTS idx_usage_tracking_user_id ON usage_tracking(user_id);
+CREATE INDEX IF NOT EXISTS idx_usage_tracking_timestamp ON usage_tracking(timestamp);
+CREATE INDEX IF NOT EXISTS idx_usage_summary_user_date ON usage_summary(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_project_id ON sessions(project_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_start_time ON sessions(start_time);
+CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id);
+CREATE INDEX IF NOT EXISTS idx_daily_goals_user_date ON daily_goals(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_scheduled_sessions_user_id ON scheduled_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_sessions_datetime ON scheduled_sessions(scheduled_datetime);
+CREATE INDEX IF NOT EXISTS idx_scheduled_sessions_actual_session ON scheduled_sessions(actual_session_id);

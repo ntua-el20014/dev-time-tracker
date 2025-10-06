@@ -1,6 +1,7 @@
 // Supabase configuration
 export const SUPABASE_CONFIG = {
-  URL: "https://wzztlcwwuwadketoafna.supabase.co", // Replace with your Supabase project URL
+  URL: process.env.SUPABASE_URL || "https://aziclaffcixwdyjkaups.supabase.co",
   ANON_KEY:
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6enRsY3d3dXdhZGtldG9hZm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNDI2OTUsImV4cCI6MjA3NDcxODY5NX0.DBV1yV9YP2bLqRGo2TUMrhc3mhLs948FKxMdQUQLJ1w", // Replace with your Supabase anon key
+    process.env.SUPABASE_ANON_KEY ||
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6aWNsYWZmY2l4d2R5amthdXBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NzA4NzYsImV4cCI6MjA3NTM0Njg3Nn0.Nd9maaZjy2hREkjbWL-tjfN2hWzhG9St9A0qrK1pLVU",
 };

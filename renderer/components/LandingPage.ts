@@ -3,9 +3,18 @@ import { showInAppNotification } from "./Notifications";
 import {
   signInWithEmail,
   signUpWithEmail,
-  createUserProfile,
   getCurrentSession,
+  resetPasswordForEmail,
 } from "../../src/supabase/api";
+import {
+  validatePassword,
+  getPasswordStrengthColor,
+  getPasswordStrengthText,
+} from "../utils/passwordValidator";
+import {
+  signInWithGitHubElectron,
+  initializeOAuthListener,
+} from "../utils/oauthHandler";
 
 interface AuthFormData {
   email: string;
@@ -20,6 +29,11 @@ export async function renderLandingPage(
   container: HTMLElement,
   onAuthSuccess?: (session: any) => void
 ) {
+  // Initialize OAuth listener for callback handling
+  if (onAuthSuccess) {
+    initializeOAuthListener(onAuthSuccess);
+  }
+
   // Check for existing session
   try {
     const session = await getCurrentSession();
@@ -116,6 +130,66 @@ export async function renderLandingPage(
       border-radius: 4px;
       background: #ff6b6b20;
     }
+
+    .oauth-section {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .oauth-button {
+      width: 100%;
+      padding: 12px 20px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-light);
+      color: var(--fg);
+      font-size: 1em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      transition: all 0.2s;
+      margin-bottom: 12px;
+    }
+
+    .oauth-button:hover {
+      background: var(--bg);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .oauth-button:active {
+      transform: translateY(0);
+    }
+
+    .oauth-button .icon {
+      font-size: 1.3em;
+      display: flex;
+      align-items: center;
+    }
+
+    .oauth-divider {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      margin: 20px 0;
+      color: var(--fg-muted);
+      font-size: 0.9em;
+    }
+
+    .oauth-divider::before,
+    .oauth-divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .oauth-divider span {
+      padding: 0 12px;
+    }
   `;
   document.head.appendChild(style);
 
@@ -194,7 +268,7 @@ async function showAuthModal(
   onError?: (message: string) => void
 ) {
   const title = type === "login" ? "Login" : "Sign Up";
-  const fields = [
+  const fields: any[] = [
     {
       name: "email",
       label: "Email",
@@ -204,7 +278,7 @@ async function showAuthModal(
     {
       name: "password",
       label: "Password",
-      type: "text" as const,
+      type: "password" as const,
       required: true,
     },
   ];
@@ -216,7 +290,102 @@ async function showAuthModal(
       type: "text" as const,
       required: true,
     });
+
+    // Add password strength indicator for signup
+    fields.push({
+      name: "passwordStrength",
+      label: "",
+      type: "custom" as const,
+      render: () => {
+        const container = document.createElement("div");
+        container.id = "passwordStrengthIndicator";
+        container.style.cssText =
+          "margin-top: -10px; margin-bottom: 10px; font-size: 0.85em;";
+        return container;
+      },
+    });
+  } else {
+    // Add forgot password link for login
+    fields.push({
+      name: "forgotPassword",
+      label: "",
+      type: "custom" as const,
+      render: () => {
+        const container = document.createElement("div");
+        container.style.cssText =
+          "margin-top: 8px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); text-align: right;";
+
+        const link = document.createElement("a");
+        link.href = "#";
+        link.textContent = "Forgot password?";
+        link.style.cssText =
+          "color: var(--accent); font-size: 0.9em; text-decoration: none; cursor: pointer;";
+
+        link.onmouseenter = () => {
+          link.style.textDecoration = "underline";
+        };
+        link.onmouseleave = () => {
+          link.style.textDecoration = "none";
+        };
+
+        link.onclick = (e) => {
+          e.preventDefault();
+          showPasswordResetModal();
+        };
+
+        container.appendChild(link);
+        return container;
+      },
+    });
   }
+
+  // Add OAuth section for both login and signup
+  fields.push({
+    name: "oauthSection",
+    label: "",
+    type: "custom" as const,
+    render: () => {
+      const container = document.createElement("div");
+      container.className = "oauth-section";
+
+      // Add divider
+      const divider = document.createElement("div");
+      divider.className = "oauth-divider";
+      divider.innerHTML = "<span>or continue with</span>";
+      container.appendChild(divider);
+
+      // Add GitHub button
+      const githubBtn = document.createElement("button");
+      githubBtn.type = "button";
+      githubBtn.className = "oauth-button";
+      githubBtn.innerHTML = `
+        <span class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+        </span>
+        <span>Continue with GitHub</span>
+      `;
+
+      githubBtn.onclick = async (e) => {
+        e.preventDefault();
+        try {
+          await signInWithGitHubElectron();
+          // The OAuth listener will handle the callback
+        } catch (error: any) {
+          const errorMessage = getAuthErrorMessage(error);
+          if (onError) {
+            onError(errorMessage);
+          } else {
+            showInAppNotification(errorMessage);
+          }
+        }
+      };
+
+      container.appendChild(githubBtn);
+      return container;
+    },
+  });
 
   showModal({
     title,
@@ -226,11 +395,24 @@ async function showAuthModal(
       try {
         const authData = values as unknown as AuthFormData;
 
+        // Validate password for signup
+        if (type === "signup") {
+          const validation = validatePassword(authData.password);
+          if (!validation.isValid) {
+            throw new Error(validation.errors.join(". "));
+          }
+        }
+
         if (type === "login") {
           const result = await signInWithEmail(
             authData.email,
             authData.password
           );
+
+          // Store user ID in localStorage
+          if (result.session?.user?.id) {
+            localStorage.setItem("currentUserId", result.session.user.id);
+          }
 
           if (onSuccess) {
             onSuccess(result.session);
@@ -244,18 +426,10 @@ async function showAuthModal(
             authData.username!
           );
 
-          // Create user profile after successful signup
-          if (result.user) {
-            try {
-              await createUserProfile({
-                id: result.user.id,
-                username: authData.username!,
-                // org_id will be handled by the database trigger
-              });
-            } catch (profileError) {
-              // Don't throw here - the user account was created successfully
-              // Profile creation will be handled by database trigger if this fails
-            }
+          // User profile is automatically created by database trigger
+          // Store user ID if session exists
+          if (result.session?.user?.id) {
+            localStorage.setItem("currentUserId", result.session.user.id);
           }
 
           if (onSuccess && result.session) {
@@ -275,6 +449,80 @@ async function showAuthModal(
         } else {
           showInAppNotification(errorMessage);
         }
+      }
+    },
+  });
+
+  // Add real-time password validation for signup
+  if (type === "signup") {
+    setTimeout(() => {
+      const passwordInput = document.querySelector(
+        'input[name="password"]'
+      ) as HTMLInputElement;
+      const strengthIndicator = document.getElementById(
+        "passwordStrengthIndicator"
+      );
+
+      if (passwordInput && strengthIndicator) {
+        passwordInput.addEventListener("input", () => {
+          const password = passwordInput.value;
+          if (password) {
+            const validation = validatePassword(password);
+            const color = getPasswordStrengthColor(validation.strength);
+            const text = getPasswordStrengthText(validation.strength);
+
+            strengthIndicator.innerHTML = `
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="flex: 1; height: 4px; background: #e0e0e0; border-radius: 2px; overflow: hidden;">
+                  <div style="height: 100%; width: ${
+                    validation.strength === "weak"
+                      ? "33%"
+                      : validation.strength === "medium"
+                      ? "66%"
+                      : "100%"
+                  }; background: ${color}; transition: all 0.3s;"></div>
+                </div>
+                <span style="color: ${color}; font-weight: 600;">${text}</span>
+              </div>
+              ${
+                validation.errors.length > 0
+                  ? `<div style="color: #ff6b6b; margin-top: 4px; font-size: 0.8em;">${validation.errors.join(
+                      "<br>"
+                    )}</div>`
+                  : ""
+              }
+            `;
+          } else {
+            strengthIndicator.innerHTML = "";
+          }
+        });
+      }
+    }, 100);
+  }
+}
+
+async function showPasswordResetModal() {
+  showModal({
+    title: "Reset Password",
+    fields: [
+      {
+        name: "email",
+        label: "Email",
+        type: "text" as const,
+        required: true,
+      },
+    ],
+    submitText: "Send Reset Link",
+    onSubmit: async (values) => {
+      try {
+        await resetPasswordForEmail(values.email as string);
+        showInAppNotification(
+          "Password reset link sent! Please check your email."
+        );
+      } catch (error: any) {
+        showInAppNotification(
+          `Error: ${error.message || "Failed to send reset email"}`
+        );
       }
     },
   });

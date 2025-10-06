@@ -109,10 +109,12 @@ db.prepare(
     color TEXT,
     is_active INTEGER DEFAULT 1,
     manager_id INTEGER NOT NULL,
+    org_id INTEGER,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     synced INTEGER DEFAULT 0,
     last_modified TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
   )
 `
 ).run();
@@ -124,7 +126,7 @@ db.prepare(
     local_id TEXT UNIQUE,
     project_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
-    role TEXT DEFAULT 'employee' CHECK(role IN ('manager', 'employee')),
+    role TEXT DEFAULT 'member' CHECK(role IN ('manager', 'member')),
     joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
     synced INTEGER DEFAULT 0,
     last_modified TEXT DEFAULT CURRENT_TIMESTAMP,

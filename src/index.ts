@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, powerMonitor } from "electron";
 import { activeWindow } from "@miniben90/x-win";
 import os from "os";
+import path from "path";
 import "./utils/langMap";
 import { getEditorByExecutable } from "./utils/editors";
 import { getLanguageDataFromTitle } from "./utils/extractData";
@@ -29,6 +30,17 @@ let sessionActiveDuration = 0; // in seconds
 let lastActiveTimestamp: Date | null = null;
 let isPaused = false;
 const idleTimeoutSeconds = getIdleTimeoutSeconds();
+
+// Register custom protocol handler for OAuth
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient("dev-time-tracker", process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
+  }
+} else {
+  app.setAsDefaultProtocolClient("dev-time-tracker");
+}
 
 app.whenReady().then(() => {
   createWindow();
@@ -181,9 +193,27 @@ function createWindow() {
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
-      webSecurity: false, // Allow external API calls (needed for Supabase)
+      webSecurity: true, // Re-enable web security to allow CSP
     },
   });
+
+  // Set CSP via session headers (more reliable than meta tag in Electron)
+  mainWindow.webContents.session.webRequest.onHeadersReceived(
+    (details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          "Content-Security-Policy": [
+            "default-src 'self'; " +
+              "script-src 'self' 'unsafe-eval' http://localhost:3000; " +
+              "style-src 'self' 'unsafe-inline'; " +
+              "img-src 'self' data:; " +
+              "connect-src 'self' https://aziclaffcixwdyjkaups.supabase.co http://localhost:3000;",
+          ],
+        },
+      });
+    }
+  );
 
   /*
   // Open DevTools in development mode
@@ -341,6 +371,54 @@ ipcMain.handle("check-notifications", async () => {
   await checkScheduledSessionNotifications();
 });
 
+// Handle OAuth redirect to open external browser
+ipcMain.handle("open-oauth-url", async (_event, url: string) => {
+  const { shell } = require("electron");
+  await shell.openExternal(url);
+});
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+// Handle OAuth callback URLs (for deep linking)
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, commandLine, _workingDirectory) => {
+    // Someone tried to run a second instance, focus our window instead
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+
+      // Handle OAuth callback URL
+      const url = commandLine.find((arg) =>
+        arg.startsWith("dev-time-tracker://")
+      );
+      if (url) {
+        handleOAuthCallback(url);
+      }
+    }
+  });
+
+  // Handle OAuth callback on macOS
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    handleOAuthCallback(url);
+  });
+}
+
+// Function to handle OAuth callback
+function handleOAuthCallback(url: string) {
+  // Extract the hash fragment which contains the auth tokens
+  const hashIndex = url.indexOf("#");
+  if (hashIndex !== -1) {
+    const hash = url.substring(hashIndex + 1);
+    // Send to renderer process to handle auth
+    if (mainWindow) {
+      mainWindow.webContents.send("oauth-callback", hash);
+    }
+  }
+}

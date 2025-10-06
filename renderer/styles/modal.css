@@ -163,6 +163,7 @@
 }
 
 #customModalForm input[type="text"],
+#customModalForm input[type="password"],
 #customModalForm textarea,
 #customModalForm select {
   width: 100%;

@@ -164,25 +164,25 @@ INSERT INTO projects (name, description, color, manager_id) VALUES
 ('Documentation Site', 'Company documentation portal', '#8b5cf6', 2);
 
 -- Project memberships
--- Note: Only users with 'admin' or 'manager' roles can have 'manager' role in projects
+-- Note: project_members.role is for PROJECT roles (manager/member), separate from users.role (admin/manager/employee)
 INSERT INTO project_members (project_id, user_id, role) VALUES 
 -- Project 1: E-commerce Platform
-(1, 1, 'manager'),  -- Admin User (admin role)
-(1, 3, 'member'),   -- Developer Alice (employee role)
-(1, 4, 'member'),   -- Designer Charlie (employee role)
+(1, 1, 'manager'),  -- Admin User is project manager
+(1, 3, 'member'),   -- Developer Alice is project member
+(1, 4, 'member'),   -- Designer Charlie is project member
 -- Project 2: Mobile App
-(2, 1, 'manager'),  -- Admin User (admin role)
-(2, 3, 'member'),   -- Developer Alice (employee role)
+(2, 1, 'manager'),  -- Admin User is project manager
+(2, 3, 'member'),   -- Developer Alice is project member
 -- Project 3: Admin Dashboard
-(3, 2, 'manager'),  -- Manager Bob (manager role)
-(3, 3, 'member'),   -- Developer Alice (employee role)
-(3, 4, 'member'),   -- Designer Charlie (employee role)
+(3, 2, 'manager'),  -- Manager Bob is project manager
+(3, 3, 'member'),   -- Developer Alice is project member
+(3, 4, 'member'),   -- Designer Charlie is project member
 -- Project 4: API Microservices
-(4, 2, 'manager'),  -- Manager Bob (manager role)
-(4, 3, 'member'),   -- Developer Alice (employee role)
+(4, 2, 'manager'),  -- Manager Bob is project manager
+(4, 3, 'member'),   -- Developer Alice is project member
 -- Project 5: Documentation Site
-(5, 2, 'manager'),  -- Manager Bob (manager role)
-(5, 4, 'member');   -- Designer Charlie (employee role)
+(5, 2, 'manager'),  -- Manager Bob is project manager
+(5, 4, 'member');   -- Designer Charlie is project member
 
 -- Tags for each user
 INSERT INTO tags (name, user_id, color) VALUES 

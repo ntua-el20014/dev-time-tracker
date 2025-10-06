@@ -686,7 +686,15 @@ export async function refreshProfile() {
       "linear-gradient(90deg, #ff5858 0%, #f09819 100%)";
     logoutBtn.style.boxShadow = "0 2px 8px #0002";
   };
-  logoutBtn.onclick = () => {
+  logoutBtn.onclick = async () => {
+    // Sign out from Supabase first
+    try {
+      const { signOut } = await import("../src/supabase/api");
+      await signOut();
+    } catch (error) {
+      // Continue with local logout even if Supabase signout fails
+    }
+
     localStorage.removeItem("currentUserId");
     document.body.classList.remove("light");
     document.documentElement.style.setProperty("--accent", "#f0db4f");

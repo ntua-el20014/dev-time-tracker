@@ -117,6 +117,7 @@ export interface Project {
   color?: string;
   is_active: number;
   manager_id: number;
+  org_id?: number;
   created_at: string;
 }
 

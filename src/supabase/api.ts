@@ -60,11 +60,48 @@ export async function signUpWithEmail(
   return data;
 }
 
-export async function resetPassword(email: string) {
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
+export async function signInWithGitHub() {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "github",
+    options: {
+      // Use custom protocol for Electron app
+      redirectTo: "dev-time-tracker://oauth-callback",
+      skipBrowserRedirect: false, // Let Supabase handle the redirect
+    },
+  });
   if (error) {
     throw error;
   }
+
+  // Open OAuth URL in external browser
+  if (data.url) {
+    // Use Electron's shell to open in default browser
+    const { shell } = require("electron");
+    await shell.openExternal(data.url);
+  }
+
+  return data;
+}
+
+export async function resetPasswordForEmail(email: string) {
+  // Note: Supabase will send reset link to the email
+  // The link will redirect user to handle password reset
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin, // Redirects back to the app
+  });
+  if (error) {
+    throw error;
+  }
+}
+
+export async function updatePassword(newPassword: string) {
+  const { data, error } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+  if (error) {
+    throw error;
+  }
+  return data;
 }
 
 // User profile management
