@@ -24,14 +24,14 @@
   - [x] Auto-create user profile trigger
   - [x] CSP configured for Supabase connection
   - [x] Set up email templates (NEXT STEP)
-  - [ ] Configure OAuth providers (optional)
+  - [x] Configure OAuth providers (optional)
 
 ## Phase 2: Authentication Implementation
 ### UI Development
 - [x] Create login screen
 - [x] Create signup screen
 - [x] Add auth error handling
-- [ ] Add password reset flow (NEXT)
+- [x] Add password reset flow
 - [ ] Create organization setup wizard
 - [ ] Add profile management page
 
@@ -96,4 +96,4 @@
     - [ ] Calendar integration
 
 ## Production
-- [ ] Update github auth url callback
+- [ ] Google OAuth

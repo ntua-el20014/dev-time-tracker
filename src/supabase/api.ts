@@ -52,6 +52,7 @@ export async function signUpWithEmail(
       data: {
         username,
       },
+      emailRedirectTo: "dev-time-tracker://oauth-callback",
     },
   });
   if (error) {
@@ -87,7 +88,7 @@ export async function resetPasswordForEmail(email: string) {
   // Note: Supabase will send reset link to the email
   // The link will redirect user to handle password reset
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin, // Redirects back to the app
+    redirectTo: "dev-time-tracker://oauth-callback", // Redirects back to the app
   });
   if (error) {
     throw error;

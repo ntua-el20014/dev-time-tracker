@@ -43,6 +43,7 @@ export interface ModalOptions {
   onSubmit?: (values: Record<string, string>) => void;
   onCancel?: () => void;
   show?: boolean;
+  dismissible?: boolean; // If false, modal cannot be closed except by submitting
 }
 
 export function showModal(options: ModalOptions) {
@@ -181,16 +182,32 @@ export function showModal(options: ModalOptions) {
 
   // Cancel handler (using the cancelBtn reference we created earlier)
   cancelBtn.onclick = () => {
+    // Only allow cancel if modal is dismissible
+    if (options.dismissible === false) return;
+
     modal!.classList.remove("active");
     modal.remove();
     overlay?.remove();
     if (options.onCancel) options.onCancel();
   };
 
+  // Hide cancel button if modal is not dismissible
+  if (options.dismissible === false) {
+    cancelBtn.style.display = "none";
+  }
+
   // Close button handler
   const closeBtn = modal.querySelector(".modal-close-btn") as HTMLButtonElement;
   if (closeBtn) {
+    // Hide close button if modal is not dismissible
+    if (options.dismissible === false) {
+      closeBtn.style.display = "none";
+    }
+
     closeBtn.onclick = () => {
+      // Only allow closing if modal is dismissible
+      if (options.dismissible === false) return;
+
       modal!.classList.remove("active");
       modal.remove();
       overlay?.remove();
@@ -200,6 +217,9 @@ export function showModal(options: ModalOptions) {
 
   // Overlay click handler
   modal.addEventListener("click", (e) => {
+    // Only allow closing if modal is dismissible
+    if (options.dismissible === false) return;
+
     if (e.target === modal) {
       modal!.classList.remove("active");
       modal.remove();

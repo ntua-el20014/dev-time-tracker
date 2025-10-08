@@ -110,3 +110,57 @@ export function getPasswordStrengthText(
       return "Strong";
   }
 }
+
+/**
+ * Attaches a real-time password strength indicator to a password input field
+ * @param passwordInputSelector - CSS selector for the password input field
+ * @param strengthIndicatorId - ID of the element where the strength indicator will be displayed
+ * @param delay - Optional delay in ms before attaching (useful for modal rendering)
+ */
+export function attachPasswordStrengthIndicator(
+  passwordInputSelector: string,
+  strengthIndicatorId: string,
+  delay: number = 100
+): void {
+  setTimeout(() => {
+    const passwordInput = document.querySelector(
+      passwordInputSelector
+    ) as HTMLInputElement;
+    const strengthIndicator = document.getElementById(strengthIndicatorId);
+
+    if (passwordInput && strengthIndicator) {
+      passwordInput.addEventListener("input", () => {
+        const password = passwordInput.value;
+        if (password) {
+          const validation = validatePassword(password);
+          const color = getPasswordStrengthColor(validation.strength);
+          const text = getPasswordStrengthText(validation.strength);
+
+          strengthIndicator.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="flex: 1; height: 4px; background: #e0e0e0; border-radius: 2px; overflow: hidden;">
+                <div style="height: 100%; width: ${
+                  validation.strength === "weak"
+                    ? "33%"
+                    : validation.strength === "medium"
+                    ? "66%"
+                    : "100%"
+                }; background: ${color}; transition: all 0.3s;"></div>
+              </div>
+              <span style="color: ${color}; font-weight: 600;">${text}</span>
+            </div>
+            ${
+              validation.errors.length > 0
+                ? `<div style="color: #ff6b6b; margin-top: 4px; font-size: 0.8em;">${validation.errors.join(
+                    "<br>"
+                  )}</div>`
+                : ""
+            }
+          `;
+        } else {
+          strengthIndicator.innerHTML = "";
+        }
+      });
+    }
+  }, delay);
+}

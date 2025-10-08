@@ -701,22 +701,14 @@ export async function refreshProfile() {
     document.body.style.setProperty("--accent", "#f0db4f");
     (window as any).isRecording = false;
     (window as any).isPaused = false;
-    const landing = document.getElementById("userLanding");
     const mainUI = document.getElementById("mainUI");
     if (mainUI) mainUI.style.display = "none";
-    if (landing) {
-      landing.style.display = "";
-      const summaryDiv = document.getElementById("summaryContent");
-      if (summaryDiv) summaryDiv.innerHTML = "";
-      // Reset summaryTab state
-      if (window) {
-        (window as any).__resetSummaryTabState = true;
-      }
-      import("./components/LandingPage").then((mod) => {
-        mod.renderLandingPage(landing, (userId: number) => {
-          (window as any).showMainUIForUser(userId);
-        });
-      });
+
+    // Reset summaryTab state
+    const summaryDiv = document.getElementById("summaryContent");
+    if (summaryDiv) summaryDiv.innerHTML = "";
+    if (window) {
+      (window as any).__resetSummaryTabState = true;
     }
   };
 }

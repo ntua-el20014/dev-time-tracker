@@ -22,6 +22,7 @@ import {
   onAuthStateChange,
   getCurrentUser,
 } from "../src/supabase/api";
+import { initializeOAuthListener } from "./utils/oauthHandler";
 import { loadUserLangMap } from "../src/utils/extractData";
 import { showOnboarding, shouldShowOnboarding } from "./components";
 import "./styles/base.css";
@@ -552,9 +553,28 @@ document.addEventListener("DOMContentLoaded", async () => {
   const landing = document.getElementById("userLanding") as HTMLDivElement;
   const mainUI = document.getElementById("mainUI");
 
+  // Initialize OAuth listener globally to handle password resets and email confirmations
+  initializeOAuthListener((session: any) => {
+    // This callback will be triggered when auth events (password reset, email confirmation, etc.) occur
+    if (session?.user?.id) {
+      showMainUIForUser(session.user.id);
+      if (landing) landing.style.display = "none";
+      if (mainUI) mainUI.style.display = "";
+    }
+  });
+
   // Initialize automatic text color updates for accent backgrounds
 
+  // Flag to prevent double initialization
+  let isMainUIInitialized = false;
+
   function showMainUIForUser(userId: string | number) {
+    // Prevent duplicate initialization
+    if (isMainUIInitialized) {
+      return;
+    }
+    isMainUIInitialized = true;
+
     localStorage.setItem("currentUserId", String(userId));
     if (mainUI) {
       mainUI.style.display = "";
@@ -640,7 +660,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       showMainUIForUser(session.user.id);
       if (landing) landing.style.display = "none";
     } else {
-      // User signed out
+      // User signed out - reset the initialization flag
+      isMainUIInitialized = false;
       localStorage.removeItem("currentUserId");
       if (mainUI) mainUI.style.display = "none";
       if (landing) {

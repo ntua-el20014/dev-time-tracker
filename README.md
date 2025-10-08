@@ -36,6 +36,8 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 
 ### **User Experience**
 
+- **Authentication & Cloud Sync:**  
+  Sign in with email/password or GitHub OAuth to sync your data across devices. Uses Supabase for secure authentication and cloud storage.
 - **Global Hotkeys:**  
   Control tracking (start, pause, stop) from anywhere and switch between tabs using keyboard shortcuts.
 - **Customizable Themes:**  
@@ -160,9 +162,10 @@ View the [CSS organization](./renderer/styles/styles.md) for details on how styl
 - **Frontend:** HTML, TypeScript, CSS
 - **Backend:** Node.js, SQLite3
 - **Desktop Framework:** Electron
+- **Authentication & Cloud Sync:** Supabase
 - **Charts:** Chart.js
 - **Build System:** Electron Forge with Webpack
-- **Database:** SQLite (local storage)
+- **Database:** SQLite (local storage) + PostgreSQL (cloud via Supabase)
 - **Styling:** CSS Custom Properties (CSS Variables) for theming
 
 ---

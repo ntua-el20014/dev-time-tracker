@@ -45,6 +45,19 @@ if (process.defaultApp) {
 app.whenReady().then(() => {
   createWindow();
 
+  // Handle OAuth callback URL if app was launched via protocol URL (Windows)
+  if (process.platform === "win32") {
+    const url = process.argv.find((arg) =>
+      arg.startsWith("dev-time-tracker://")
+    );
+    if (url) {
+      // Wait a bit for window to be ready
+      setTimeout(() => {
+        handleOAuthCallback(url);
+      }, 1000);
+    }
+  }
+
   // Initialize admin user on startup
   users.ensureAdminExists();
 
@@ -215,12 +228,10 @@ function createWindow() {
     }
   );
 
-  /*
   // Open DevTools in development mode
   if (process.env.NODE_ENV === "development") {
     mainWindow.webContents.openDevTools();
   }
-  */
 
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.send("os-info", { os: os.platform() });
@@ -412,13 +423,31 @@ if (!gotTheLock) {
 
 // Function to handle OAuth callback
 function handleOAuthCallback(url: string) {
-  // Extract the hash fragment which contains the auth tokens
+  // eslint-disable-next-line no-console
+  console.log("OAuth callback URL received:", url);
+
+  // Extract hash fragment (#) or query params (?)
   const hashIndex = url.indexOf("#");
+  const queryIndex = url.indexOf("?");
+
+  let params = "";
   if (hashIndex !== -1) {
-    const hash = url.substring(hashIndex + 1);
-    // Send to renderer process to handle auth
-    if (mainWindow) {
-      mainWindow.webContents.send("oauth-callback", hash);
-    }
+    params = url.substring(hashIndex + 1);
+    // eslint-disable-next-line no-console
+    console.log("Extracted hash params:", params);
+  } else if (queryIndex !== -1) {
+    params = url.substring(queryIndex + 1);
+    // eslint-disable-next-line no-console
+    console.log("Extracted query params:", params);
+  }
+
+  // Send to renderer process to handle auth
+  if (mainWindow && params) {
+    // eslint-disable-next-line no-console
+    console.log("Sending oauth-callback to renderer");
+    mainWindow.webContents.send("oauth-callback", params);
+  } else {
+    // eslint-disable-next-line no-console
+    console.error("No params found or mainWindow not available");
   }
 }
