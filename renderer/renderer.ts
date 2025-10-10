@@ -6,6 +6,7 @@ import { renderSummary } from "./summaryTab";
 import { renderDashboard } from "./dashboardTab";
 import { renderCalendar } from "./calendarTab";
 import { renderProjects } from "./projectsTab";
+import { renderOrganizationTab } from "./organizationTab";
 import { initTheme, updateRecordBtn, updatePauseBtn } from "./theme";
 import {
   displayOSInfo,
@@ -44,6 +45,7 @@ import "./styles/timeline.css";
 import "./styles/users.css";
 import "./styles/userRoleManager.css";
 import "./styles/auth.css";
+import "./styles/organization.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
 function setupTabs() {
@@ -88,6 +90,7 @@ function setupTabs() {
       }
       if (tabId === "calendar") renderCalendar();
       if (tabId === "projects") renderProjects();
+      if (tabId === "organization") renderOrganizationTab();
     });
   });
 }

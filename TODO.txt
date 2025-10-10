@@ -1,3 +1,8 @@
+# Sprints context:
+ (keep the in mind when moving to the next sprints):
+for starters lets clarify something. organizations exist in order to be able to have certain projects on each one, seperate users by user role (not project role) that means admin manager and employee and assign members to projects and keep track of all the projects of an organization. i dont know if there are modifications needed in the database in order to have this kind of data available or the existing schema and referencing is enough to get this information.
+ i need to make sure you understand what i want. there is already big part of the code implemented. what i want to happen is the time tracking can take place even offline and be added to the local database. then sent to the supabase after certain intervals. i dont want to implement that yet just clarifying how the flow works. this means certain handlers communicate with supabase immediately others with the sqlite datbase.
+
 # Dev Time Tracker - Migration & Enhancement TODO List
 
 ## Phase 1: Database Schema Preparation
@@ -58,7 +63,52 @@
 - [ ] Implement data validation
 
 ## Phase 4: Organization Management
-### Organization Features
+
+### Sprint 1: Database Foundation
+- [x] Create org_join_requests table
+- [x] Add helper SQL functions for role checks
+- [x] Update RLS policies for role-based access
+- [x] Auto-create personal organization on signup
+- [x] Add approve/reject join request functions
+
+### Sprint 2: Backend API + IPC Handlers ✅ COMPLETE
+- [x] Create src/supabase/organizations.ts
+- [x] Create src/supabase/orgRequests.ts
+- [x] Create src/supabase/cloudProjects.ts
+- [x] Create src/types/organization.types.ts
+- [x] Add organization IPC handlers (organizationHandlers.ts)
+- [x] Add renderer API wrapper (organizationApi.ts)
+- [x] Fix all TypeScript errors
+- [x] Register handlers in src/index.ts
+
+### Sprint 3: Frontend - Organization Tab UI (IN PROGRESS)
+- [x] Create renderer/organizationTab.ts (main tab file)
+- [x] Display current organization info
+- [x] Show member list with roles
+- [x] Create/Join organization UI
+- [x] Join request management (admin view)
+- [x] Member role management (admin/manager)
+- [x] Add Organization tab to navigation
+- [x] Create organization.css styles
+- [ ] Test all flows end-to-end
+- [ ] Polish UI and error handling
+
+### Sprint 4: Frontend - Project Assignment UI
+- [ ] List organization cloud projects
+- [ ] Link local projects to cloud projects
+- [ ] Assign members to projects UI
+- [ ] Project member management
+
+### Sprint 5: Frontend - Profile Integration
+- [ ] Add Organization chapter to Profile tab
+- [ ] Create permission helper utilities
+- [ ] Update Dashboard tab with role-based views
+
+### Sprint 6: Testing & Polish
+- [ ] End-to-end testing of all flows
+- [ ] Polish UI and error handling
+
+### Organization Features (Future)
 - [ ] Create organization settings page
 - [ ] Add team management interface
 - [ ] Implement role management system
@@ -66,8 +116,8 @@
 - [ ] Add organization switching
 
 ### Access Control
-- [ ] Implement role-based access control
-- [ ] Set up data visibility rules
+- [x] Implement role-based access control (Sprint 1)
+- [x] Set up data visibility rules (Sprint 1)
 - [ ] Add audit logging system
 - [ ] Create user restriction system
 
@@ -94,6 +144,7 @@
     - [ ] Team performance metrics
 - [ ] Integrations
     - [ ] Calendar integration
+    - [ ] Google OAuth
 
 ## Production
-- [ ] Google OAuth
+- [ ] keyboard shortcuts

@@ -18,6 +18,7 @@ import "./ipc/userHandlers";
 import "./ipc/projectHandlers";
 import "./ipc/dbHandler";
 import "./ipc/appHandlers";
+import "./ipc/organizationHandlers";
 import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
 
 let mainWindow: BrowserWindow;
