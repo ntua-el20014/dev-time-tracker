@@ -73,14 +73,41 @@
   color: var(--text-primary);
 }
 
+.org-uuid-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-secondary);
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
 .org-uuid {
   font-family: monospace;
   font-size: 0.9rem;
   word-break: break-all;
-  background: var(--bg-tertiary, #f5f5f5);
-  padding: 0.5rem;
-  border-radius: 4px;
+}
+
+.copy-icon-btn {
+  background: none;
+  border: none;
   cursor: pointer;
+  font-size: 1rem;
+  padding: 0.25rem;
+  opacity: 0.7;
+  transition: opacity 0.2s, transform 0.1s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-icon-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.copy-icon-btn:active {
+  transform: scale(0.95);
 }
 
 /* Actions */
@@ -114,7 +141,7 @@
 
 .btn-primary {
   background: var(--accent);
-  color: white;
+  color: var(--accent-text, white); /* Use dynamic text color based on accent */
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -123,12 +150,12 @@
 }
 
 .btn-secondary {
-  background: var(--bg-tertiary, #e0e0e0);
+  background: var(--bg-secondary);
   color: var(--text-primary);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--bg-quaternary, #d0d0d0);
+  background: color-mix(in srgb, var(--bg-secondary), #000 10%);
 }
 
 .btn-success {
@@ -173,9 +200,8 @@
 
 .org-members-table th,
 .org-requests-table th {
-  background: var(--bg-tertiary, #f5f5f5);
+  background: var(--bg-secondary);
   font-weight: 600;
-  color: var(--text-secondary);
 }
 
 .org-members-table tr:hover,
@@ -337,20 +363,354 @@
 
 /* Dark Mode Support */
 @media (prefers-color-scheme: dark) {
-  .org-uuid {
-    background: var(--bg-tertiary, #2a2a2a);
-  }
-
-  .btn-secondary {
-    background: var(--bg-tertiary, #3a3a3a);
-  }
-
-  .org-members-table th,
-  .org-requests-table th {
-    background: var(--bg-tertiary, #2a2a2a);
-  }
-
   .role-select {
     background: var(--bg-secondary);
+  }
+}
+
+/* ============================================
+   CLOUD PROJECTS SECTION
+   ============================================ */
+
+.org-projects-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.projects-stats-inline {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.stat-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stat-inline .stat-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.stat-inline .stat-label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+/* Projects Tabs */
+.projects-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.projects-tab-btn {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: -2px;
+}
+
+.projects-tab-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.02));
+}
+
+.projects-tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Projects List */
+.projects-list {
+  margin-top: 1rem;
+}
+
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+}
+
+/* Project Card */
+.project-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.project-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.project-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.project-color {
+  width: 4px;
+  height: 40px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.project-name {
+  flex: 1;
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.project-action-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.project-action-btn:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+  transform: scale(1.1);
+}
+
+/* Project Card Content */
+.project-card-content {
+  padding: 1rem;
+}
+
+.project-description {
+  margin: 0 0 1rem 0;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.project-description.empty {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.project-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+}
+
+.project-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.meta-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.meta-value {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.meta-value.status-active {
+  color: #4caf50;
+}
+
+.meta-value.status-archived {
+  color: #ff9800;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.empty-state p {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+}
+
+/* Members Modal Content */
+.members-modal-content {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.members-section {
+  margin-bottom: 2rem;
+}
+
+.members-section h3 {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.member-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.member-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.member-info small {
+  color: var(--text-secondary);
+  font-weight: normal;
+}
+
+.member-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.role-select-container {
+  min-width: 120px;
+}
+
+.btn-remove-member {
+  padding: 0.4rem 0.8rem;
+  background: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-remove-member:hover {
+  background: #da190b;
+}
+
+.manager-label {
+  padding: 0.4rem 0.8rem;
+  background: var(--accent);
+  color: var(--accent-text, white);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Add Member Section */
+.add-member-section {
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.add-member-form {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.add-member-form > div {
+  flex: 1;
+  min-width: 150px;
+}
+
+.info-note {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Responsive Design for Cloud Projects */
+@media (max-width: 768px) {
+  .projects-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .org-projects-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .projects-stats-inline {
+    justify-content: space-around;
+  }
+
+  .projects-tab-btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .project-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .add-member-form {
+    flex-direction: column;
+  }
+
+  .add-member-form > div {
+    width: 100%;
+  }
+
+  .member-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .member-actions {
+    justify-content: space-between;
   }
 }

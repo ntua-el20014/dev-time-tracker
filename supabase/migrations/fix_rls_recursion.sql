@@ -104,6 +104,7 @@ CREATE POLICY "Managers can create projects"
 ON projects FOR INSERT
 WITH CHECK (
   public.get_current_user_role() IN ('manager', 'admin')
+  AND org_id = public.get_current_user_org_id()  -- Ensure org_id matches user's org
 );
 
 DROP POLICY IF EXISTS "Project managers can update their projects" ON projects;

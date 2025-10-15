@@ -138,8 +138,8 @@ ipcMain.handle(
 /**
  * Get organization projects from cloud
  */
-ipcMain.handle("org:get-projects", async () =>
-  cloudProjectsApi.getOrganizationProjects()
+ipcMain.handle("org:get-projects", async (_event, userId?: string) =>
+  cloudProjectsApi.getOrganizationProjects(userId)
 );
 
 /**
@@ -161,8 +161,8 @@ ipcMain.handle("org:get-project-by-local-id", async (_event, localId: string) =>
  */
 ipcMain.handle(
   "org:create-project",
-  async (_event, data: CreateCloudProjectData) =>
-    cloudProjectsApi.createCloudProject(data)
+  async (_event, data: CreateCloudProjectData, userId?: string) =>
+    cloudProjectsApi.createCloudProject(data, userId)
 );
 
 /**

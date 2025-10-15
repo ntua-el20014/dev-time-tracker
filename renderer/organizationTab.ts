@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { showNotification, showConfirmationModal } from "./components";
+import {
+  showNotification,
+  showConfirmationModal,
+  showModal,
+} from "./components";
 import {
   getCurrentOrganization,
   getOrganizationMembers,
@@ -12,18 +16,29 @@ import {
   removeUserFromOrganization,
   getCurrentUserProfile,
   getOrganizationById,
+  getOrganizationProjects,
+  createCloudProject,
+  updateCloudProject,
+  getProjectMembers,
+  assignMemberToProject,
+  removeMemberFromProject,
+  updateProjectMemberRole,
 } from "./utils/organizationApi";
 import type {
   Organization,
   UserProfile,
   OrgJoinRequestWithUser,
+  CloudProjectWithManager,
+  ProjectMemberWithUser,
 } from "../src/types/organization.types";
 
 let currentOrg: Organization | null = null;
 let currentUserProfile: UserProfile | null = null;
 let orgMembers: UserProfile[] = [];
 let pendingRequests: OrgJoinRequestWithUser[] = [];
+let cloudProjects: CloudProjectWithManager[] = [];
 let cleanupFunctions: (() => void)[] = [];
+let isMemberModalOpen = false;
 
 /**
  * Main render function for Organization Tab
@@ -48,32 +63,10 @@ export async function renderOrganizationTab() {
     currentUserProfile = await getCurrentUserProfile();
     currentOrg = await getCurrentOrganization();
 
-    // Debug logging
-    // eslint-disable-next-line no-console
-    console.log("Organization Tab Debug:");
-    // eslint-disable-next-line no-console
-    console.log("- currentUserProfile:", currentUserProfile);
-    // eslint-disable-next-line no-console
-    console.log("- currentOrg:", currentOrg);
-    // eslint-disable-next-line no-console
-    console.log(
-      "- localStorage userId:",
-      localStorage.getItem("currentUserId")
-    );
-
     if (!currentOrg || !currentUserProfile) {
       container.innerHTML = `
         <div class="org-error">
           <h3>No organization found</h3>
-          <p><strong>Debug Info:</strong></p>
-          <ul style="text-align: left; margin: 10px 20px;">
-            <li>User Profile: ${currentUserProfile ? "Found" : "Not Found"}</li>
-            <li>Organization: ${currentOrg ? "Found" : "Not Found"}</li>
-            <li>User ID in localStorage: ${
-              localStorage.getItem("currentUserId") || "Not Set"
-            }</li>
-          </ul>
-          <p>Please check the console for more details.</p>
         </div>
       `;
       return;
@@ -85,12 +78,18 @@ export async function renderOrganizationTab() {
       pendingRequests = await getPendingJoinRequests();
     }
 
+    // Fetch cloud projects if user can manage them
+    if (isAdmin() || isManager()) {
+      cloudProjects = await getOrganizationProjects();
+    }
+
     // Render all sections
     container.innerHTML = `
       <div id="org-inner">
         <h1 class="org-title">Organization Management</h1>
         <div id="org-info-section"></div>
         <div id="org-members-section"></div>
+        <div id="org-projects-section"></div>
         <div id="org-join-section"></div>
         <div id="org-requests-section"></div>
       </div>
@@ -98,6 +97,9 @@ export async function renderOrganizationTab() {
 
     renderOrganizationInfo();
     renderMembersList();
+    if (isAdmin() || isManager()) {
+      renderCloudProjects();
+    }
     renderJoinForm();
     if (isAdmin()) {
       renderJoinRequests();
@@ -146,9 +148,14 @@ function renderOrganizationInfo() {
           </div>
           <div class="org-info-item">
             <label>Organization ID:</label>
-            <span class="org-uuid" title="${currentOrg.id}">${
+            <span class="org-uuid-wrapper">
+              <span class="org-uuid" title="${currentOrg.id}">${
     currentOrg.id
   }</span>
+              <button id="copy-org-id-btn" class="copy-icon-btn" title="Copy Organization ID">
+                📋
+              </button>
+            </span>
           </div>
         </div>
         <div class="org-actions">
@@ -157,7 +164,6 @@ function renderOrganizationInfo() {
               ? '<button id="create-team-org-btn" class="btn btn-primary">Create Team Organization</button>'
               : ""
           }
-          <button id="copy-org-id-btn" class="btn btn-secondary">Copy Organization ID</button>
         </div>
       </div>
     </div>
@@ -411,6 +417,244 @@ function renderJoinRequests() {
   });
 }
 
+/**
+ * Render cloud projects section (admin/manager)
+ */
+function renderCloudProjects() {
+  const container = document.getElementById("org-projects-section");
+  if (!container || !currentOrg) return;
+
+  const canManage = isAdmin() || isManager();
+  if (!canManage) return;
+
+  const activeProjects = cloudProjects.filter((p) => p.is_active);
+  const archivedProjects = cloudProjects.filter((p) => !p.is_active);
+
+  container.innerHTML = `
+    <div class="org-section">
+      <h2>📂 Organization Projects</h2>
+      <div class="org-projects-header">
+        <div class="projects-stats-inline">
+          <div class="stat-inline">
+            <span class="stat-number">${activeProjects.length}</span>
+            <span class="stat-label">Active</span>
+          </div>
+          <div class="stat-inline">
+            <span class="stat-number">${archivedProjects.length}</span>
+            <span class="stat-label">Archived</span>
+          </div>
+          <div class="stat-inline">
+            <span class="stat-number">${cloudProjects.length}</span>
+            <span class="stat-label">Total</span>
+          </div>
+        </div>
+        <button id="new-cloud-project-btn" class="btn btn-primary">+ New Project</button>
+      </div>
+      
+      <div class="projects-tabs">
+        <button class="projects-tab-btn active" data-tab="active">Active Projects (${
+          activeProjects.length
+        })</button>
+        <button class="projects-tab-btn" data-tab="archived">Archived Projects (${
+          archivedProjects.length
+        })</button>
+      </div>
+      
+      <div id="active-cloud-projects" class="projects-list">
+        ${renderProjectsList(activeProjects)}
+      </div>
+      
+      <div id="archived-cloud-projects" class="projects-list" style="display: none;">
+        ${renderProjectsList(archivedProjects)}
+      </div>
+    </div>
+  `;
+
+  // Setup event listeners
+  const newProjectBtn = document.getElementById("new-cloud-project-btn");
+  if (newProjectBtn) {
+    const handleNewProject = () => showCreateCloudProjectModal();
+    newProjectBtn.addEventListener("click", handleNewProject);
+    cleanupFunctions.push(() =>
+      newProjectBtn.removeEventListener("click", handleNewProject)
+    );
+  }
+
+  // Tab switching
+  const tabButtons = container.querySelectorAll(".projects-tab-btn");
+  tabButtons.forEach((btn) => {
+    const handleTabClick = () => {
+      const target = btn as HTMLButtonElement;
+      const tabType = target.dataset.tab;
+
+      tabButtons.forEach((b) => b.classList.remove("active"));
+      target.classList.add("active");
+
+      const activeSection = document.getElementById("active-cloud-projects");
+      const archivedSection = document.getElementById(
+        "archived-cloud-projects"
+      );
+
+      if (tabType === "active") {
+        if (activeSection) activeSection.style.display = "";
+        if (archivedSection) archivedSection.style.display = "none";
+      } else {
+        if (activeSection) activeSection.style.display = "none";
+        if (archivedSection) archivedSection.style.display = "";
+      }
+    };
+    btn.addEventListener("click", handleTabClick);
+    cleanupFunctions.push(() =>
+      btn.removeEventListener("click", handleTabClick)
+    );
+  });
+
+  // Project action buttons
+  const editButtons = container.querySelectorAll(".edit-cloud-project-btn");
+  editButtons.forEach((btn) => {
+    const handleEdit = () => {
+      const projectId = (btn as HTMLElement).getAttribute("data-project-id");
+      if (projectId) showEditCloudProjectModal(projectId);
+    };
+    btn.addEventListener("click", handleEdit);
+    cleanupFunctions.push(() => btn.removeEventListener("click", handleEdit));
+  });
+
+  const manageMembersButtons = container.querySelectorAll(
+    ".manage-cloud-members-btn"
+  );
+  manageMembersButtons.forEach((btn) => {
+    const handleManage = () => {
+      const projectId = (btn as HTMLElement).getAttribute("data-project-id");
+      if (projectId) showManageCloudMembersModal(projectId);
+    };
+    btn.addEventListener("click", handleManage);
+    cleanupFunctions.push(() => btn.removeEventListener("click", handleManage));
+  });
+
+  const archiveButtons = container.querySelectorAll(
+    ".archive-cloud-project-btn"
+  );
+  archiveButtons.forEach((btn) => {
+    const handleArchive = () => {
+      const projectId = (btn as HTMLElement).getAttribute("data-project-id");
+      if (projectId) archiveCloudProject(projectId);
+    };
+    btn.addEventListener("click", handleArchive);
+    cleanupFunctions.push(() =>
+      btn.removeEventListener("click", handleArchive)
+    );
+  });
+
+  const restoreButtons = container.querySelectorAll(
+    ".restore-cloud-project-btn"
+  );
+  restoreButtons.forEach((btn) => {
+    const handleRestore = () => {
+      const projectId = (btn as HTMLElement).getAttribute("data-project-id");
+      if (projectId) restoreCloudProject(projectId);
+    };
+    btn.addEventListener("click", handleRestore);
+    cleanupFunctions.push(() =>
+      btn.removeEventListener("click", handleRestore)
+    );
+  });
+}
+
+/**
+ * Render projects list
+ */
+function renderProjectsList(projects: CloudProjectWithManager[]): string {
+  if (projects.length === 0) {
+    return `
+      <div class="empty-state">
+        <p class="text-muted">No projects found</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="projects-grid">
+      ${projects.map((project) => renderProjectCard(project)).join("")}
+    </div>
+  `;
+}
+
+/**
+ * Render individual project card
+ */
+function renderProjectCard(project: CloudProjectWithManager): string {
+  const createdDate = new Date(project.created_at).toLocaleDateString();
+  const managerName = project.manager?.username || "Unknown";
+
+  return `
+    <div class="project-card" data-project-id="${project.id}">
+      <div class="project-card-header">
+        <div class="project-color" style="background-color: ${
+          project.color || "#3b82f6"
+        }"></div>
+        <h3 class="project-name">${escapeHtml(project.name)}</h3>
+        <div class="project-actions">
+          <button class="project-action-btn edit-cloud-project-btn" data-project-id="${
+            project.id
+          }" title="Edit Project">
+            ✏️
+          </button>
+          <button class="project-action-btn manage-cloud-members-btn" data-project-id="${
+            project.id
+          }" title="Manage Members">
+            👥
+          </button>
+          ${
+            project.is_active
+              ? `<button class="project-action-btn archive-cloud-project-btn" data-project-id="${project.id}" title="Archive Project">📦</button>`
+              : `<button class="project-action-btn restore-cloud-project-btn" data-project-id="${project.id}" title="Restore Project">↩️</button>`
+          }
+        </div>
+      </div>
+      
+      <div class="project-card-content">
+        ${
+          project.description
+            ? `<p class="project-description">${escapeHtml(
+                project.description
+              )}</p>`
+            : `<p class="project-description empty">No description provided</p>`
+        }
+        
+        <div class="project-meta">
+          <div class="project-meta-item">
+            <span class="meta-label">Manager:</span>
+            <span class="meta-value">${escapeHtml(managerName)}</span>
+          </div>
+          <div class="project-meta-item">
+            <span class="meta-label">Created:</span>
+            <span class="meta-value">${createdDate}</span>
+          </div>
+          <div class="project-meta-item">
+            <span class="meta-label">Status:</span>
+            <span class="meta-value status-${
+              project.is_active ? "active" : "archived"
+            }">
+              ${project.is_active ? "Active" : "Archived"}
+            </span>
+          </div>
+          ${
+            project.local_id
+              ? `
+            <div class="project-meta-item">
+              <span class="meta-label">Linked:</span>
+              <span class="meta-value">✓ Local Project</span>
+            </div>
+          `
+              : ""
+          }
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 // =====================================================
 // EVENT HANDLERS
 // =====================================================
@@ -639,6 +883,624 @@ async function handleRejectRequest(requestId: string) {
         error instanceof Error ? error.message : "Unknown error"
       }`
     );
+  }
+}
+
+// =====================================================
+// CLOUD PROJECT EVENT HANDLERS
+// =====================================================
+
+async function showCreateCloudProjectModal() {
+  if (!currentOrg) return;
+
+  // Prevent opening multiple modals
+  if (
+    document.getElementById("customModal") ||
+    document.getElementById("customModalOverlay")
+  ) {
+    return;
+  }
+
+  // Clean up any existing modals first
+  const existingModal = document.getElementById("customModal");
+  const existingOverlay = document.getElementById("customModalOverlay");
+  if (existingModal) existingModal.remove();
+  if (existingOverlay) existingOverlay.remove();
+
+  // Create custom modal with color picker
+  const overlay = document.createElement("div");
+  overlay.id = "customModalOverlay";
+  overlay.className = "custom-modal-overlay";
+  overlay.style.display = "block";
+  document.body.appendChild(overlay);
+
+  const modal = document.createElement("div");
+  modal.id = "customModal";
+  modal.className = "active";
+
+  modal.innerHTML = `
+    <div class="session-modal-content">
+      <button class="modal-close-btn">&times;</button>
+      <h2>Create New Cloud Project</h2>
+      <form id="cloudProjectForm">
+        <div style="margin-bottom: 15px;">
+          <label for="cloud-project-name">Project Name *</label><br>
+          <input id="cloud-project-name" name="name" type="text" required>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+          <label for="cloud-project-description">Description</label><br>
+          <textarea id="cloud-project-description" name="description"></textarea>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+          <label for="cloud-project-color">Project Color</label><br>
+          <div class="color-picker-container">
+            <input id="cloud-project-color" name="color" type="color" value="#3b82f6">
+          </div>
+        </div>
+        
+        <div class="session-modal-actions">
+          <button type="button" id="cloudProjectCancelBtn" class="btn-cancel">Cancel</button>
+          <button type="submit" class="btn-confirm">Create Project</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const form = document.getElementById("cloudProjectForm") as HTMLFormElement;
+  const nameInput = document.getElementById(
+    "cloud-project-name"
+  ) as HTMLInputElement;
+  const cancelBtn = document.getElementById(
+    "cloudProjectCancelBtn"
+  ) as HTMLButtonElement;
+  const closeBtn = modal.querySelector(".modal-close-btn") as HTMLButtonElement;
+
+  // Focus the name input
+  setTimeout(() => nameInput.focus(), 50);
+
+  // Handle form submission
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(form);
+
+    try {
+      await createCloudProject({
+        name: formData.get("name") as string,
+        description: formData.get("description") as string,
+        color: formData.get("color") as string,
+        org_id: currentOrg!.id,
+        manager_id: currentUserProfile!.id,
+      });
+      showNotification("Cloud project created successfully!");
+      modal.remove();
+      overlay.remove();
+      await renderOrganizationTab(); // Refresh
+    } catch (error) {
+      showNotification("Failed to create project");
+      // eslint-disable-next-line no-console
+      console.error("Error creating cloud project:", error);
+    }
+  };
+
+  // Handle cancel and close
+  const closeModal = () => {
+    modal.remove();
+    overlay.remove();
+  };
+
+  cancelBtn.onclick = closeModal;
+  closeBtn.onclick = closeModal;
+
+  // Handle overlay click to close modal
+  overlay.onclick = (e) => {
+    if (e.target === overlay) {
+      closeModal();
+    }
+  };
+
+  // Handle modal background click to close modal
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  };
+
+  // Prevent modal content clicks from closing modal
+  modal
+    .querySelector(".session-modal-content")
+    ?.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+}
+
+async function showEditCloudProjectModal(projectId: string) {
+  const project = cloudProjects.find((p) => p.id === projectId);
+  if (!project) return;
+
+  // Prevent opening multiple modals
+  if (
+    document.getElementById("customModal") ||
+    document.getElementById("customModalOverlay")
+  ) {
+    return;
+  }
+
+  // Clean up any existing modals first
+  const existingModal = document.getElementById("customModal");
+  const existingOverlay = document.getElementById("customModalOverlay");
+  if (existingModal) existingModal.remove();
+  if (existingOverlay) existingOverlay.remove();
+
+  // Create custom modal with color picker
+  const overlay = document.createElement("div");
+  overlay.id = "customModalOverlay";
+  overlay.className = "custom-modal-overlay";
+  overlay.style.display = "block";
+  document.body.appendChild(overlay);
+
+  const modal = document.createElement("div");
+  modal.id = "customModal";
+  modal.className = "active";
+
+  modal.innerHTML = `
+    <div class="session-modal-content">
+      <button class="modal-close-btn">&times;</button>
+      <h2>Edit Cloud Project</h2>
+      <form id="cloudProjectEditForm">
+        <div style="margin-bottom: 15px;">
+          <label for="cloud-project-edit-name">Project Name *</label><br>
+          <input id="cloud-project-edit-name" name="name" type="text" value="${escapeHtml(
+            project.name
+          )}" required>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+          <label for="cloud-project-edit-description">Description</label><br>
+          <textarea id="cloud-project-edit-description" name="description">${escapeHtml(
+            project.description || ""
+          )}</textarea>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+          <label for="cloud-project-edit-color">Project Color</label><br>
+          <div class="color-picker-container">
+            <input id="cloud-project-edit-color" name="color" type="color" value="${
+              project.color || "#3b82f6"
+            }">
+          </div>
+        </div>
+        
+        <div class="session-modal-actions">
+          <button type="button" id="cloudProjectEditCancelBtn" class="btn-cancel">Cancel</button>
+          <button type="submit" class="btn-confirm">Update Project</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const form = document.getElementById(
+    "cloudProjectEditForm"
+  ) as HTMLFormElement;
+  const nameInput = document.getElementById(
+    "cloud-project-edit-name"
+  ) as HTMLInputElement;
+  const cancelBtn = document.getElementById(
+    "cloudProjectEditCancelBtn"
+  ) as HTMLButtonElement;
+  const closeBtn = modal.querySelector(".modal-close-btn") as HTMLButtonElement;
+
+  // Focus the name input
+  setTimeout(() => nameInput.focus(), 50);
+
+  // Handle form submission
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(form);
+
+    try {
+      await updateCloudProject(projectId, {
+        name: formData.get("name") as string,
+        description: formData.get("description") as string,
+        color: formData.get("color") as string,
+      });
+      showNotification("Cloud project updated successfully!");
+      modal.remove();
+      overlay.remove();
+      await renderOrganizationTab(); // Refresh
+    } catch (error) {
+      showNotification("Failed to update project");
+      // eslint-disable-next-line no-console
+      console.error("Error updating cloud project:", error);
+    }
+  };
+
+  // Handle cancel and close
+  const closeModal = () => {
+    modal.remove();
+    overlay.remove();
+  };
+
+  cancelBtn.onclick = closeModal;
+  closeBtn.onclick = closeModal;
+
+  // Handle overlay click to close modal
+  overlay.onclick = (e) => {
+    if (e.target === overlay) {
+      closeModal();
+    }
+  };
+
+  // Handle modal background click to close modal
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  };
+
+  // Prevent modal content clicks from closing modal
+  modal
+    .querySelector(".session-modal-content")
+    ?.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+}
+
+async function archiveCloudProject(projectId: string) {
+  const project = cloudProjects.find((p) => p.id === projectId);
+  if (!project) return;
+
+  showConfirmationModal({
+    title: "Archive Project",
+    message: `Are you sure you want to archive "${project.name}"?`,
+    confirmText: "Archive",
+    onConfirm: async () => {
+      try {
+        await updateCloudProject(projectId, { is_active: false });
+        showNotification("Project archived successfully!");
+        await renderOrganizationTab();
+      } catch (error) {
+        showNotification("Failed to archive project");
+        // eslint-disable-next-line no-console
+        console.error("Error archiving project:", error);
+      }
+    },
+  });
+}
+
+async function restoreCloudProject(projectId: string) {
+  const project = cloudProjects.find((p) => p.id === projectId);
+  if (!project) return;
+
+  showConfirmationModal({
+    title: "Restore Project",
+    message: `Are you sure you want to restore "${project.name}" to active projects?`,
+    confirmText: "Restore",
+    onConfirm: async () => {
+      try {
+        await updateCloudProject(projectId, { is_active: true });
+        showNotification("Project restored successfully!");
+        await renderOrganizationTab();
+      } catch (error) {
+        showNotification("Failed to restore project");
+        // eslint-disable-next-line no-console
+        console.error("Error restoring project:", error);
+      }
+    },
+  });
+}
+
+async function showManageCloudMembersModal(projectId: string) {
+  const project = cloudProjects.find((p) => p.id === projectId);
+  if (!project || isMemberModalOpen) return;
+
+  isMemberModalOpen = true;
+
+  try {
+    const refreshModalContent = async () => {
+      const freshMembers = await getProjectMembers(projectId);
+
+      // Filter org members who aren't already project members
+      const projectMemberIds = freshMembers.map((m) => m.user_id);
+      const availableMembers = orgMembers.filter(
+        (m) => !projectMemberIds.includes(m.id)
+      );
+
+      const membersList = freshMembers
+        .map((member: ProjectMemberWithUser) => {
+          const displayRole = member.role;
+          const roleIcon = displayRole === "manager" ? "👑" : "👤";
+          const username = member.user?.username || "Unknown";
+          const isProjectManager = member.user_id === project.manager_id;
+
+          return `
+            <div class="member-item" data-user-id="${member.user_id}">
+              <span class="member-info">
+                ${roleIcon} ${escapeHtml(username)} 
+                <small>(${displayRole})</small>
+              </span>
+              <div class="member-actions">
+                ${
+                  !isProjectManager
+                    ? `
+                  <div class="role-select-container" data-user-id="${member.user_id}" data-current-role="${displayRole}"></div>
+                  <button class="btn-remove-member" data-user-id="${member.user_id}">Remove</button>
+                `
+                    : '<span class="manager-label">Project Manager</span>'
+                }
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+
+      const userOptions = availableMembers
+        .map(
+          (user) =>
+            `<option value="${user.id}">${escapeHtml(user.username)}</option>`
+        )
+        .join("");
+
+      return {
+        membersList,
+        availableMembers,
+        userOptions,
+        projectMembers: freshMembers,
+      };
+    };
+
+    const setupModalInteractions = (data: {
+      membersList: string;
+      availableMembers: UserProfile[];
+      userOptions: string;
+      projectMembers: ProjectMemberWithUser[];
+    }) => {
+      const modal = document.getElementById("customModal");
+      if (!modal) return;
+
+      // Import CustomDropdown
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createCustomDropdown } = require("./components/CustomDropdown");
+
+      // Create role dropdowns for existing members
+      const roleContainers = modal.querySelectorAll(".role-select-container");
+      roleContainers.forEach((container: Element) => {
+        const userId = (container as HTMLElement).dataset.userId;
+        const currentRole = (container as HTMLElement).dataset.currentRole;
+        const member = orgMembers.find((u) => u.id === userId);
+        const canBeManager =
+          member && (member.role === "admin" || member.role === "manager");
+
+        const options = [{ value: "member", label: "Member" }];
+        if (canBeManager) {
+          options.push({ value: "manager", label: "Manager" });
+        }
+
+        const roleDropdown = createCustomDropdown({
+          id: `role-${userId}`,
+          name: `role-${userId}`,
+          value: currentRole,
+          options: options,
+          onChange: async (newRole: string) => {
+            try {
+              await updateProjectMemberRole(
+                projectId,
+                userId!,
+                newRole as "manager" | "member"
+              );
+              showNotification("Role updated successfully!");
+              setTimeout(async () => {
+                await renderOrganizationTab();
+                modal?.remove();
+                document.getElementById("customModalOverlay")?.remove();
+                isMemberModalOpen = false;
+              }, 500);
+            } catch (error) {
+              showNotification(`Failed to update role: ${error}`);
+              // eslint-disable-next-line no-console
+              console.error("Error updating member role:", error);
+            }
+          },
+        });
+
+        container.appendChild(roleDropdown.getElement());
+      });
+
+      // Create dropdowns for adding new members
+      let userSelectDropdown: any = null;
+      let roleSelectDropdown: any = null;
+
+      if (data.availableMembers.length > 0) {
+        const userContainer = modal.querySelector("#userSelect-container");
+        if (userContainer) {
+          userSelectDropdown = createCustomDropdown({
+            id: "userSelect",
+            name: "userSelect",
+            placeholder: "Select a member...",
+            options: [
+              { value: "", label: "Select a member..." },
+              ...data.availableMembers.map((user) => ({
+                value: user.id.toString(),
+                label: user.username,
+              })),
+            ],
+            onChange: (userId: string) => {
+              if (roleSelectDropdown && userId) {
+                const selectedUser = orgMembers.find((u) => u.id === userId);
+                const canBeManager =
+                  selectedUser &&
+                  (selectedUser.role === "admin" ||
+                    selectedUser.role === "manager");
+
+                const options = [{ value: "member", label: "Member" }];
+                if (canBeManager) {
+                  options.push({ value: "manager", label: "Manager" });
+                }
+
+                roleSelectDropdown.setOptions(options);
+                roleSelectDropdown.setValue("member");
+              }
+            },
+          });
+          userContainer.appendChild(userSelectDropdown.getElement());
+        }
+
+        const roleContainer = modal.querySelector("#roleSelect-container");
+        if (roleContainer) {
+          roleSelectDropdown = createCustomDropdown({
+            id: "roleSelect",
+            name: "roleSelect",
+            value: "member",
+            options: [{ value: "member", label: "Member" }],
+          });
+          roleContainer.appendChild(roleSelectDropdown.getElement());
+        }
+      }
+
+      // Add member button
+      const addMemberBtn = modal.querySelector(
+        "#addMemberBtn"
+      ) as HTMLButtonElement;
+      if (addMemberBtn) {
+        addMemberBtn.onclick = async () => {
+          const userValue = userSelectDropdown?.getValue();
+
+          if (userValue) {
+            try {
+              const frontendRole = roleSelectDropdown?.getValue() || "member";
+              await assignMemberToProject({
+                project_id: projectId,
+                user_id: userValue,
+                role: frontendRole as "manager" | "member",
+              });
+              showNotification("Member added successfully!");
+
+              setTimeout(async () => {
+                await renderOrganizationTab();
+                modal?.remove();
+                document.getElementById("customModalOverlay")?.remove();
+                isMemberModalOpen = false;
+              }, 500);
+            } catch (error) {
+              showNotification("Failed to add member");
+              // eslint-disable-next-line no-console
+              console.error("Error adding member:", error);
+            }
+          }
+        };
+      }
+
+      // Remove member buttons
+      const removeButtons = modal.querySelectorAll(".btn-remove-member");
+      removeButtons.forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const userId = (btn as HTMLButtonElement).dataset.userId!;
+          const memberName =
+            btn
+              .closest(".member-item")
+              ?.querySelector(".member-info")
+              ?.textContent?.split("(")[0]
+              ?.trim() || "this member";
+
+          showConfirmationModal({
+            title: "Remove Member",
+            message: `Are you sure you want to remove ${memberName} from the project?`,
+            confirmText: "Remove",
+            onConfirm: async () => {
+              try {
+                await removeMemberFromProject(projectId, userId);
+                showNotification("Member removed successfully!");
+                modal?.remove();
+                document.getElementById("customModalOverlay")?.remove();
+                isMemberModalOpen = false;
+                await renderOrganizationTab();
+              } catch (error) {
+                showNotification(`Failed to remove member: ${error}`);
+                // eslint-disable-next-line no-console
+                console.error("Error removing member:", error);
+              }
+            },
+          });
+        });
+      });
+    };
+
+    // Create modal using showModal
+    showModal({
+      title: `Manage Members - ${project.name}`,
+      fields: [],
+      cancelText: "Close",
+      onCancel: () => {
+        isMemberModalOpen = false;
+        renderOrganizationTab();
+      },
+    });
+
+    // Replace form content with custom members management UI
+    setTimeout(async () => {
+      const modal = document.getElementById("customModal");
+      const form = modal?.querySelector("form");
+      if (form) {
+        const data = await refreshModalContent();
+
+        form.innerHTML = `
+          <div class="members-modal-content">
+            <div class="members-section">
+              <h3>Current Members</h3>
+              <div class="members-list">
+                ${data.membersList}
+              </div>
+            </div>
+
+            ${
+              data.availableMembers.length > 0
+                ? `
+              <div class="add-member-section">
+                <h3>Add New Member</h3>
+                <div class="add-member-form">
+                  <div id="userSelect-container"></div>
+                  <div id="roleSelect-container"></div>
+                  <button type="button" id="addMemberBtn" class="btn-confirm">Add Member</button>
+                </div>
+                <p class="info-note" style="margin-top: 10px; font-size: 12px; color: var(--fg-muted);">
+                  Note: Only admins and managers can be assigned as project managers.
+                </p>
+              </div>
+            `
+                : "<p><em>All organization members are already assigned to this project.</em></p>"
+            }
+            
+            <div class="session-modal-actions">
+              <button type="button" id="membersCloseBtn" class="btn-cancel">Close</button>
+            </div>
+          </div>
+        `;
+
+        setTimeout(() => {
+          setupModalInteractions(data);
+
+          const closeBtn = form.querySelector("#membersCloseBtn");
+          if (closeBtn) {
+            closeBtn.addEventListener("click", () => {
+              modal?.remove();
+              document.getElementById("customModalOverlay")?.remove();
+              isMemberModalOpen = false;
+              renderOrganizationTab();
+            });
+          }
+        }, 100);
+      }
+    }, 50);
+  } catch (error) {
+    isMemberModalOpen = false;
+    showNotification("Failed to load project members");
+    // eslint-disable-next-line no-console
+    console.error("Error in showManageCloudMembersModal:", error);
   }
 }
 

@@ -18,24 +18,32 @@ import type {
 /**
  * Get all cloud projects for the current user's organization
  */
-export async function getOrganizationProjects(): Promise<
-  CloudProjectWithManager[]
-> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+export async function getOrganizationProjects(
+  userId?: string
+): Promise<CloudProjectWithManager[]> {
+  let currentUserId = userId;
+
+  // If userId not provided, try to get from auth
+  if (!currentUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+    currentUserId = user.id;
+  }
 
   // Get user's org_id
-  const { data: profile } = await supabase
+  const { data: profiles } = await supabase
     .from("user_profiles")
     .select("org_id")
-    .eq("id", user.id)
-    .single();
+    .eq("id", currentUserId)
+    .limit(1);
 
-  if (!(profile as any)?.org_id) {
+  if (!profiles || profiles.length === 0 || !(profiles[0] as any)?.org_id) {
     return [];
   }
+
+  const userOrgId = (profiles[0] as any).org_id;
 
   // Get projects with manager info
   const { data, error } = await supabase
@@ -49,7 +57,7 @@ export async function getOrganizationProjects(): Promise<
       )
     `
     )
-    .eq("org_id", (profile as any).org_id)
+    .eq("org_id", userOrgId)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -115,24 +123,29 @@ export async function getCloudProjectByLocalId(
  * Can optionally link to local project via local_id
  */
 export async function createCloudProject(
-  data: CreateCloudProjectData
+  data: CreateCloudProjectData,
+  userId?: string
 ): Promise<CloudProject> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  let currentUserId = userId;
 
-  // If no manager specified, set current user as manager
-  const projectData = {
-    ...data,
-    manager_id: data.manager_id || user.id,
-  };
+  // If userId not provided, try to get from auth
+  if (!currentUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+    currentUserId = user.id;
+  }
 
-  const { data: project, error } = await supabase
-    .from("projects")
-    .insert(projectData as any)
-    .select()
-    .single();
+  // Use RPC call to create project with proper auth context
+  const { data: project, error } = await supabase.rpc("create_cloud_project", {
+    p_name: data.name,
+    p_description: data.description || "",
+    p_color: data.color,
+    p_org_id: data.org_id,
+    p_manager_id: data.manager_id || currentUserId,
+    p_local_id: data.local_id || null,
+  } as any);
 
   if (error) throw error;
   return project as CloudProject;

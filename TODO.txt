@@ -1,6 +1,6 @@
 # Sprints context:
  (keep the in mind when moving to the next sprints):
-for starters lets clarify something. organizations exist in order to be able to have certain projects on each one, seperate users by user role (not project role) that means admin manager and employee and assign members to projects and keep track of all the projects of an organization. i dont know if there are modifications needed in the database in order to have this kind of data available or the existing schema and referencing is enough to get this information.
+organizations exist in order to be able to have certain projects on each one, seperate users by user role (not project role) that means admin manager and employee and assign members to projects and keep track of all the projects of an organization.
  i need to make sure you understand what i want. there is already big part of the code implemented. what i want to happen is the time tracking can take place even offline and be added to the local database. then sent to the supabase after certain intervals. i dont want to implement that yet just clarifying how the flow works. this means certain handlers communicate with supabase immediately others with the sqlite datbase.
 
 # Dev Time Tracker - Migration & Enhancement TODO List
@@ -90,23 +90,20 @@ for starters lets clarify something. organizations exist in order to be able to 
 - [x] Member role management (admin/manager)
 - [x] Add Organization tab to navigation
 - [x] Create organization.css styles
-- [ ] Test all flows end-to-end
-- [ ] Polish UI and error handling
 
-### Sprint 4: Frontend - Project Assignment UI
-- [ ] List organization cloud projects
-- [ ] Link local projects to cloud projects
-- [ ] Assign members to projects UI
-- [ ] Project member management
+### Sprint 4: Frontend - Project Assignment UI ✅ COMPLETE
+- [x] List organization cloud projects
+- [x] Create/Edit cloud projects UI
+- [x] Project member management UI
+- [x] Assign members to projects UI
+- [x] Update member roles in projects
+- [x] Archive/restore cloud projects
+- [x] Add CSS styles for cloud projects section
 
 ### Sprint 5: Frontend - Profile Integration
 - [ ] Add Organization chapter to Profile tab
 - [ ] Create permission helper utilities
 - [ ] Update Dashboard tab with role-based views
-
-### Sprint 6: Testing & Polish
-- [ ] End-to-end testing of all flows
-- [ ] Polish UI and error handling
 
 ### Organization Features (Future)
 - [ ] Create organization settings page
@@ -142,7 +139,8 @@ for starters lets clarify something. organizations exist in order to be able to 
     - [ ] Badges for milestones
 - [ ] Advanced Analytics
     - [ ] Team performance metrics
-- [ ] Integrations
+    - [ ] Project statistics view 
+    - [ ] Integrations
     - [ ] Calendar integration
     - [ ] Google OAuth
 

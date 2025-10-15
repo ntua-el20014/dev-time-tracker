@@ -180,6 +180,7 @@ WITH CHECK (
         SELECT 1 FROM user_profiles 
         WHERE id = auth.uid() 
         AND role IN ('manager', 'admin')
+        AND org_id = projects.org_id  -- Ensure the project's org_id matches user's org_id
     )
 );
 

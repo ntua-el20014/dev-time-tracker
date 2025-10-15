@@ -4,6 +4,7 @@
  */
 
 import { ipcRenderer } from "electron";
+import { supabase } from "../../src/supabase/client";
 import { getCurrentUserIdSafe } from "./userUtils";
 import type {
   Organization,
@@ -115,7 +116,40 @@ export async function cancelJoinRequest(requestId: string): Promise<void> {
 export async function getOrganizationProjects(): Promise<
   CloudProjectWithManager[]
 > {
-  return await ipcRenderer.invoke("org:get-projects");
+  const userId = getCurrentUserIdSafe();
+  if (!userId) return [];
+
+  // Call Supabase directly from renderer (has auth context)
+  // Get user's org_id
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("org_id")
+    .eq("id", userId)
+    .limit(1);
+
+  if (!profiles || profiles.length === 0 || !(profiles[0] as any)?.org_id) {
+    return [];
+  }
+
+  const userOrgId = (profiles[0] as any).org_id;
+
+  // Get projects with manager info
+  const { data, error } = await supabase
+    .from("projects")
+    .select(
+      `
+      *,
+      manager:user_profiles!manager_id (
+        username,
+        email
+      )
+    `
+    )
+    .eq("org_id", userOrgId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data || []) as CloudProjectWithManager[];
 }
 
 export async function getCloudProjectById(
@@ -133,7 +167,8 @@ export async function getCloudProjectByLocalId(
 export async function createCloudProject(
   data: CreateCloudProjectData
 ): Promise<CloudProject> {
-  return await ipcRenderer.invoke("org:create-project", data);
+  const userId = getCurrentUserIdSafe();
+  return await ipcRenderer.invoke("org:create-project", data, userId);
 }
 
 export async function updateCloudProject(
