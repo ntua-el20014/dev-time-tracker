@@ -89,7 +89,7 @@ export interface Database {
             columns: ["org_id"];
             referencedRelation: "organizations";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       tags: {
@@ -123,7 +123,7 @@ export interface Database {
             columns: ["user_id"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       projects: {
@@ -173,7 +173,7 @@ export interface Database {
             columns: ["org_id"];
             referencedRelation: "organizations";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       project_members: {
@@ -206,10 +206,10 @@ export interface Database {
             columns: ["user_id"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
-      usage_tracking: {
+      usage_logs: {
         Row: {
           id: string;
           local_id: string | null;
@@ -242,14 +242,14 @@ export interface Database {
         };
         Relationships: [
           {
-            foreignKeyName: "usage_tracking_user_id_fkey";
+            foreignKeyName: "usage_logs_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
-      usage_summary: {
+      daily_usage_summary: {
         Row: {
           id: string;
           local_id: string | null;
@@ -287,11 +287,11 @@ export interface Database {
         };
         Relationships: [
           {
-            foreignKeyName: "usage_summary_user_id_fkey";
+            foreignKeyName: "daily_usage_summary_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       sessions: {
@@ -346,7 +346,7 @@ export interface Database {
             columns: ["user_id"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       session_tags: {
@@ -374,7 +374,7 @@ export interface Database {
             columns: ["tag_id"];
             referencedRelation: "tags";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       daily_goals: {
@@ -413,7 +413,7 @@ export interface Database {
             columns: ["user_id"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       scheduled_sessions: {
@@ -475,7 +475,7 @@ export interface Database {
             columns: ["user_id"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       scheduled_session_tags: {
@@ -503,7 +503,7 @@ export interface Database {
             columns: ["tag_id"];
             referencedRelation: "tags";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
     };

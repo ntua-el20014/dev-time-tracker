@@ -1,148 +1,449 @@
-# Sprints context:
- (keep the in mind when moving to the next sprints):
-organizations exist in order to be able to have certain projects on each one, seperate users by user role (not project role) that means admin manager and employee and assign members to projects and keep track of all the projects of an organization.
- i need to make sure you understand what i want. there is already big part of the code implemented. what i want to happen is the time tracking can take place even offline and be added to the local database. then sent to the supabase after certain intervals. i dont want to implement that yet just clarifying how the flow works. this means certain handlers communicate with supabase immediately others with the sqlite datbase.
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 1: SUPABASE SCHEMA DESIGN & SETUP
+## ═══════════════════════════════════════════════════════════════════
 
-# Dev Time Tracker - Migration & Enhancement TODO List
+### Step 1.1: Design Supabase Tables (Map from SQLite)
+- [x] Design time_tracking_sessions table (from sessions)
+      Fields: id, user_id, org_id, project_id, start_time, end_time, 
+              duration, description, created_at, updated_at
+- [x] Design usage_logs table (from usage + usage_summary)
+      Fields: id, user_id, org_id, session_id, app_name, window_title,
+              language, language_extension, icon_url, timestamp, 
+              time_spent_seconds, date, created_at
+- [x] Design user_tags table (from tags)
+      Fields: id, user_id, name, color, created_at
+- [x] Design session_tags table (from session_tags)
+      Fields: id, session_id, tag_id, created_at
+- [x] Design daily_work_goals table (from daily_goals)
+      Fields: id, user_id, date, target_minutes, description,
+              is_completed, completed_at, created_at
+- [x] Design scheduled_work_sessions table (from scheduled_sessions)
+      Fields: id, user_id, org_id, project_id, title, description,
+              scheduled_datetime, estimated_duration_minutes, 
+              recurrence_type, recurrence_data, status, 
+              actual_session_id, last_notification_sent, created_at
+- [x] Design user_preferences table (NEW - for app settings)
+      Fields: id, user_id, theme, accent_color, editor_colors,
+              notification_settings, created_at, updated_at
+- [x] Design local_projects table (merge with cloud_projects or keep separate)
+      Decision: Merge into cloud_projects, add 'scope' field (personal/organization)
+- [x] Review existing user_profiles table - ensure has all needed fields
+- [x] Review existing organizations table - ensure compatibility
+- [x] Review existing cloud_projects table - plan merge with local projects
 
-## Phase 1: Database Schema Preparation
-### Local Database Updates
-- [x] Add new fields to existing tables:
-  - [x] Add 'synced' boolean flag
-  - [x] Add 'org_id' field
-  - [x] Add 'local_id' UUID field
-  - [x] Add 'last_modified' timestamp
-- [x] Update database queries to handle new fields
+### Step 1.2: Create Supabase Migration SQL
+- [x] Create migration file: supabase/schema.sql + functions_and_triggers.sql
+- [x] Add CREATE TABLE statements for all new tables
+- [x] Add foreign key constraints
+- [x] Add indexes for performance (user_id, org_id, date, timestamp)
+- [x] Add triggers for updated_at timestamps
+- [x] Add trigger to auto-create user_preferences on user_profiles insert
 
-### Supabase Setup
-- [x] Create Supabase project
-- [x] Design cloud database schema
-  - [x] Users table with organization links
-  - [x] Organizations table
-  - [x] Time tracking tables
-  - [x] Projects and teams tables
-- [x] Set up Row Level Security (RLS)
-  - [x] Define access policies for each table
-  - [x] Test security rules
-- [x] Configure authentication settings
-  - [x] Basic email/password auth working
-  - [x] Auto-create user profile trigger
-  - [x] CSP configured for Supabase connection
-  - [x] Set up email templates (NEXT STEP)
-  - [x] Configure OAuth providers (optional)
+### Step 1.3: Set Up Row Level Security (RLS)
+- [x] time_tracking_sessions RLS policies
+      Policy: Users can CRUD own sessions + org members can view
+- [x] usage_logs RLS policies
+      Policy: Users can CUD own logs + org members can view aggregates
+- [x] user_tags RLS policies
+      Policy: Users can CRUD own tags
+- [x] session_tags RLS policies
+      Policy: Users can CRUD own session tags
+- [x] daily_work_goals RLS policies
+      Policy: Users can CRUD own goals + org admins can view
+- [x] scheduled_work_sessions RLS policies
+      Policy: Users can CRUD own + org members can view assigned
+- [x] user_preferences RLS policies
+      Policy: Users can CRUD only their own preferences
+- [x] Update cloud_projects RLS for personal projects scope
 
-## Phase 2: Authentication Implementation
-### UI Development
-- [x] Create login screen
-- [x] Create signup screen
-- [x] Add auth error handling
-- [x] Add password reset flow
-- [ ] Create organization setup wizard
-- [ ] Add profile management page
+### Step 1.4: Apply Migration & Test Schema
+- [x] Run migration on Supabase project
+- [x] Test insert/select operations via Supabase dashboard
+- [x] Verify RLS policies work as expected
+- [x] Document any schema decisions/deviations
 
-### Authentication Logic
-- [x] Implement Supabase auth integration
-- [x] Set up secure token storage (handled by Supabase)
-- [x] Add session management
-- [x] Implement login state persistence
-- [x] Add auth error handling
-- [x] Fix logout functionality
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 2: SUPABASE API LAYER
+## ═══════════════════════════════════════════════════════════════════
 
-## Phase 3: Local-Cloud Sync System
-### Sync Infrastructure
-- [ ] Create sync queue system
-- [ ] Implement network status detection
-- [ ] Add sync status indicators in UI
-- [ ] Create sync logging system
+### Step 2.1: Create Time Tracking API
+- [x] Create src/supabase/timeTracking.ts
+      Functions: 
+      - startSession(userId, projectId?, description?)
+      - endSession(sessionId)
+      - getAllSessions(userId, filters?)
+      - getSessionById(sessionId)
+      - updateSession(sessionId, updates)
+      - deleteSession(sessionId)
+      - getSessionsInDateRange(userId, startDate, endDate)
+      - getSmallSessions(userId, maxDurationSeconds) [BONUS for review panel]
+      - deleteSessions(sessionIds[]) [BONUS for batch cleanup]
+- [x] Create src/supabase/usageLogs.ts
+      Functions:
+      - logUsage(userId, appName, windowTitle, language?, languageExtension?, iconUrl?, intervalSeconds?, timestamp?)
+        UPDATED: Added missing params + calls update_daily_usage_summary RPC
+      - getUsageSummary(userId, date)
+      - getUsageLogs(userId, date, filters?)
+      - getDailySummary(userId, filters?)
+      - getEditorUsage(userId)
+      - getLanguageUsage(userId)
+      - getUsageDetailsForAppDate(userId, app, date)
+      - getUsageDetailsForSession(userId, sessionId)
+      - getLoggedDaysOfMonth(userId, year, month)
+- [x] UPDATE src/supabase/timeTracking.ts
+      - Add tag filtering support to getAllSessions(userId, filters?)
+      - Filter should accept tag name and query sessions with that tag
+      DONE: Added tag filter that queries user_tags + session_tags
 
-### Sync Logic
-- [ ] Implement background sync process
-- [ ] Add conflict resolution handling
-- [ ] Create batch processing system
-- [ ] Add retry mechanism for failed syncs
-- [ ] Implement data validation
+### Step 2.2: Create Tags & Goals API
+- [ ] Create src/supabase/tags.ts
+      Functions:
+      - getAllTags(userId)
+      - createTag(userId, name, color)
+      - updateTag(tagId, name, color)
+      - deleteTag(tagId)
+      - getSessionTags(sessionId)
+      - setSessionTags(sessionId, tagIds[])
+- [ ] Create src/supabase/goals.ts
+      Functions:
+      - setDailyGoal(userId, date, targetMinutes, description)
+      - getDailyGoal(userId, date)
+      - completeDailyGoal(userId, date)
+      - deleteDailyGoal(userId, date)
+      - getAllDailyGoals(userId)
+      - getTotalTimeForDay(userId, date)
 
-## Phase 4: Organization Management
+### Step 2.3: Create Scheduled Sessions API
+- [ ] Create src/supabase/scheduledSessions.ts
+      Functions:
+      - createScheduledSession(userId, sessionData)
+      - getScheduledSessions(userId, filters?)
+      - updateScheduledSession(sessionId, updates)
+      - deleteScheduledSession(sessionId)
+      - markScheduledSessionCompleted(sessionId, actualSessionId)
+      - getUpcomingSessionNotifications(userId)
 
-### Sprint 1: Database Foundation
-- [x] Create org_join_requests table
-- [x] Add helper SQL functions for role checks
-- [x] Update RLS policies for role-based access
-- [x] Auto-create personal organization on signup
-- [x] Add approve/reject join request functions
+### Step 2.4: Create User Preferences API
+- [ ] Create src/supabase/userPreferences.ts
+      Functions:
+      - getUserPreferences(userId)
+      - updateUserPreferences(userId, preferences)
+      - getEditorColors(userId)
+      - setEditorColor(userId, editorName, color)
+      - getTheme(userId)
+      - setTheme(userId, theme)
+      - getAccentColor(userId)
+      - setAccentColor(userId, color)
 
-### Sprint 2: Backend API + IPC Handlers ✅ COMPLETE
-- [x] Create src/supabase/organizations.ts
-- [x] Create src/supabase/orgRequests.ts
-- [x] Create src/supabase/cloudProjects.ts
-- [x] Create src/types/organization.types.ts
-- [x] Add organization IPC handlers (organizationHandlers.ts)
-- [x] Add renderer API wrapper (organizationApi.ts)
-- [x] Fix all TypeScript errors
-- [x] Register handlers in src/index.ts
+### Step 2.5: Update Projects API
+- [ ] Update src/supabase/cloudProjects.ts
+      - Add support for 'personal' scope projects
+      - Add getPersonalProjects(userId)
+      - Update createProject to accept scope parameter
+      - Merge functionality with local projects concept
 
-### Sprint 3: Frontend - Organization Tab UI (IN PROGRESS)
-- [x] Create renderer/organizationTab.ts (main tab file)
-- [x] Display current organization info
-- [x] Show member list with roles
-- [x] Create/Join organization UI
-- [x] Join request management (admin view)
-- [x] Member role management (admin/manager)
-- [x] Add Organization tab to navigation
-- [x] Create organization.css styles
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 3: BACKEND MIGRATION (IPC HANDLERS)
+## ═══════════════════════════════════════════════════════════════════
 
-### Sprint 4: Frontend - Project Assignment UI ✅ COMPLETE
-- [x] List organization cloud projects
-- [x] Create/Edit cloud projects UI
-- [x] Project member management UI
-- [x] Assign members to projects UI
-- [x] Update member roles in projects
-- [x] Archive/restore cloud projects
-- [x] Add CSS styles for cloud projects section
+### Step 3.1: Create New Supabase-based IPC Handlers
+- [ ] Create src/ipc/supabase/sessionHandlers.ts
+      Replace: src/ipc/sessionHandlers.ts
+      Migrate all session-related handlers to use Supabase API
+- [ ] Create src/ipc/supabase/usageHandlers.ts
+      Replace: src/ipc/usageHandlers.ts
+      Migrate all usage/logging handlers to use Supabase API
+- [ ] Create src/ipc/supabase/tagHandlers.ts
+      Extract tag handlers from sessionHandlers
+      Use new Supabase tags API
+- [ ] Create src/ipc/supabase/goalHandlers.ts
+      Extract from usageHandlers
+      Use new Supabase goals API
+- [ ] Create src/ipc/supabase/scheduledSessionHandlers.ts
+      Replace: src/ipc/scheduledSessionHandlers.ts
+      Use new Supabase API
+- [ ] Create src/ipc/supabase/preferencesHandlers.ts
+      NEW: Handle user preferences from Supabase
+- [ ] Update src/ipc/projectHandlers.ts
+      Transition to cloud_projects only (remove local project logic)
 
-### Sprint 5: Frontend - Profile Integration
-- [ ] Add Organization chapter to Profile tab
-- [ ] Create permission helper utilities
-- [ ] Update Dashboard tab with role-based views
+### Step 3.2: Update User Handlers
+- [ ] Update src/ipc/userHandlers.ts
+      - Remove local SQLite user operations
+      - Use Supabase user_profiles instead
+      - Keep handlers for compatibility but call Supabase
+      - Handle getCurrentUserId from Supabase auth
 
-### Organization Features (Future)
-- [ ] Create organization settings page
-- [ ] Add team management interface
-- [ ] Implement role management system
-- [ ] Create user invitation system
-- [ ] Add organization switching
+### Step 3.3: Register New Handlers
+- [ ] Update src/index.ts
+      - Import new Supabase handler files
+      - Remove old SQLite handler imports
+      - Verify all handlers are registered
 
-### Access Control
-- [x] Implement role-based access control (Sprint 1)
-- [x] Set up data visibility rules (Sprint 1)
-- [ ] Add audit logging system
-- [ ] Create user restriction system
+### Step 3.4: Handle App Close with Active Session
+- [ ] Add app 'before-quit' event handler in src/index.ts
+      - Check if there's an active session (duration = 0)
+      - If active session exists, call endSession() to save it
+      - Ensure session is properly saved before app exits
+      - Handle edge cases (network errors during shutdown)
 
-## Phase 5: Real-time Features
-### Real-time Infrastructure
-- [ ] Set up Supabase real-time channels
-- [ ] Implement live updates for time tracking
-- [ ] Add presence indicators
-- [ ] Create notification system
+### Step 3.5: Handle App Settings
+- [ ] Migrate app settings (theme, accent color, etc.)
+      From: localStorage + SQLite app_settings table
+      To: user_preferences table in Supabase
+- [ ] Update theme.ts to use Supabase preferences
+- [ ] Update renderer.ts preferences loading
 
-### Dashboard Updates
-- [ ] Add real-time team activity feed
-- [ ] Create live project status updates
-- [ ] Implement real-time analytics
-- [ ] Add live collaboration features
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 4: FRONTEND MIGRATION
+## ═══════════════════════════════════════════════════════════════════
 
-## Phase 6: Nice-to-Have Features
-- [ ] Gamification
-    - [ ] Simple rewards for meeting time goals
-    - [ ] Leaderboards for teams
-    - [ ] Basic achievement tracking
-    - [ ] Badges for milestones
-- [ ] Advanced Analytics
-    - [ ] Team performance metrics
-    - [ ] Project statistics view 
-    - [ ] Integrations
-    - [ ] Calendar integration
-    - [ ] Google OAuth
+### Step 4.1: Update Renderer API Calls
+- [ ] Audit all ipcRenderer.invoke() calls in renderer/
+- [ ] Update calls to use new handler names (if changed)
+- [ ] Update error handling for network errors
+- [ ] Add loading states for async operations
 
-## Production
-- [ ] keyboard shortcuts
+### Step 4.2: Add Connection Status Indicator
+- [ ] Create renderer/components/ConnectionStatus.ts
+      - Detect online/offline status
+      - Show indicator in UI
+      - Handle Supabase connection errors gracefully
+- [ ] Add connection status to main UI
+- [ ] Style connection indicator
+
+### Step 4.3: Update User Management
+- [ ] Update renderer/components/UserLanding.ts
+      - Load users from Supabase user_profiles
+      - Remove local user creation (users created via auth)
+      - Handle auth-based user selection
+- [ ] Remove local user switching (single auth user model)
+      Decision: Each auth user = one profile, no multi-user local switching
+- [ ] Update getCurrentUserId() to use Supabase auth user
+
+### Step 4.4: Update Projects Tab
+- [ ] Update renderer/projectsTab.ts
+      - Use cloud_projects for all projects
+      - Add personal projects section
+      - Update to handle scope (personal vs organization)
+- [ ] Update project creation flow
+- [ ] Update project assignment logic
+
+### Step 4.5: Update Profile Tab
+- [ ] Update renderer/profileTab.ts
+      - Load preferences from Supabase
+      - Save preferences to Supabase
+      - Add organization section (Sprint 5)
+      - Update editor colors to use Supabase
+
+### Step 4.6: Update Dashboard
+- [ ] Update renderer/dashboardTab.ts
+      - Load data from Supabase
+      - Add organization-wide stats (if admin/manager)
+      - Update real-time data (use Supabase subscriptions later)
+
+### Step 4.7: Update Calendar & Summary Tabs
+- [ ] Update renderer/calendarTab.ts
+      - Load usage data from Supabase
+- [ ] Update renderer/summaryTab.ts
+      - Load summary from Supabase
+      - Update filters and date range queries
+
+### Step 4.8: Update Logs Tab
+- [ ] Update renderer/logsTab.ts
+      - Load usage logs from Supabase
+      - Update daily goals from Supabase
+
+### Step 4.9: Add Session Review Panel
+- [ ] Create renderer/components/SessionReviewPanel.ts
+      - Add "Review Sessions" button in Sessions/Dashboard tab
+      - Allow user to set duration threshold (e.g., 10s, 30s, 1min, 5min)
+      - Use getSmallSessions(userId, threshold) to fetch sessions
+      - Display list with checkboxes: session title, start time, duration
+      - Add "Delete Selected" button
+      - Call deleteSessions(selectedIds) for batch deletion
+      - Show confirmation dialog before deletion
+      - Refresh sessions list after deletion
+
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 5: REMOVE SQLITE DEPENDENCIES
+## ═══════════════════════════════════════════════════════════════════
+
+### Step 5.1: Remove Backend SQLite Files
+- [ ] Delete src/backend/db.ts (SQLite database setup)
+- [ ] Delete src/backend/users.ts (or convert to Supabase wrapper)
+- [ ] Delete src/backend/sessions.ts
+- [ ] Delete src/backend/usage.ts
+- [ ] Delete src/backend/projects.ts (or convert to cloud wrapper)
+- [ ] Delete src/backend/scheduledSessions.ts
+- [ ] Delete src/ipc/dbHandler.ts (database export/import handlers)
+
+### Step 5.2: Remove Old IPC Handlers
+- [ ] Delete src/ipc/sessionHandlers.ts (replaced by Supabase version)
+- [ ] Delete src/ipc/usageHandlers.ts (replaced by Supabase version)
+- [ ] Delete src/ipc/scheduledSessionHandlers.ts (replaced)
+- [ ] Update src/ipc/projectHandlers.ts (remove SQLite logic)
+- [ ] Clean up src/ipc/userHandlers.ts (Supabase only)
+
+### Step 5.3: Remove Database Utilities
+- [ ] Delete src/utils/fileOps.ts (database export/import utilities)
+- [ ] Remove database backup functionality
+- [ ] Remove CSV/JSON export for full database
+      Note: Keep session-specific export in renderer
+
+### Step 5.4: Remove Admin Panel DB Features
+- [ ] Update renderer/components/AdminPanel.ts
+      - Remove database export buttons
+      - Remove database import buttons
+      - Remove rollback functionality
+      - Keep user role management
+      - Add organization management links
+
+### Step 5.5: Update Package Dependencies
+- [ ] Remove better-sqlite3 from package.json
+- [ ] Remove @types/better-sqlite3 from devDependencies
+- [ ] Run npm uninstall better-sqlite3 @types/better-sqlite3
+- [ ] Run npm install to update lock file
+- [ ] Verify build still works
+
+### Step 5.6: Clean Up Scripts
+- [ ] Delete scripts/populate-database.bat
+- [ ] Delete scripts/populate-database.sql
+- [ ] Delete scripts/test-supabase-connection.js (if not needed)
+
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 6: OPTIMIZATION & POLISH
+## ═══════════════════════════════════════════════════════════════════
+
+### Step 6.1: Add Caching Strategy
+- [ ] Implement in-memory cache for recent sessions
+- [ ] Cache today's usage logs in localStorage
+- [ ] Cache user preferences in localStorage
+- [ ] Add cache invalidation strategy
+- [ ] Reduce redundant Supabase calls
+
+### Step 6.2: Error Handling & Offline Support
+- [ ] Add global error handler for Supabase errors
+- [ ] Show user-friendly error messages
+- [ ] Detect offline status
+- [ ] Queue critical writes when offline (optional)
+      Decision: Start without queue, add if needed
+- [ ] Retry failed requests with exponential backoff
+
+### Step 6.3: Performance Optimization
+- [ ] Add pagination for large data sets
+- [ ] Implement lazy loading for calendar/summary
+- [ ] Optimize Supabase queries (add indexes if needed)
+- [ ] Add loading indicators for slow operations
+- [ ] Profile and optimize render performance
+
+### Step 6.4: Real-time Features (Future)
+- [ ] Set up Supabase Realtime subscriptions
+- [ ] Listen for session updates
+- [ ] Listen for organization changes
+- [ ] Update UI reactively when data changes
+- [ ] Add presence indicators for team members
+
+### Step 6.5: Testing & Validation
+- [ ] Test all CRUD operations for each table
+- [ ] Test RLS policies with different user roles
+- [ ] Test organization-level data access
+- [ ] Test error scenarios (network failures, auth errors)
+- [ ] Test with multiple users in same organization
+- [ ] Verify no data leaks between organizations
+
+### Step 6.6: Documentation Updates
+- [ ] Update README.md with new architecture
+- [ ] Document Supabase setup steps
+- [ ] Document RLS policies
+- [ ] Add API documentation for Supabase functions
+- [ ] Update development setup guide
+
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 7: REMAINING FEATURES & ENHANCEMENTS
+## ═══════════════════════════════════════════════════════════════════
+
+### Step 7.1: Complete Authentication Features
+- [ ] Organization setup wizard (on first login)
+- [ ] Email verification flow
+- [ ] Password reset email templates
+- [ ] OAuth providers (GitHub, Google)
+- [ ] Session timeout handling
+
+### Step 7.2: Complete Profile Integration (Sprint 5)
+- [ ] Add organization section to Profile tab
+- [ ] Show current organization details
+- [ ] Allow organization switching (if member of multiple)
+- [ ] Show permission/role information
+- [ ] Add leave organization option
+
+### Step 7.3: Advanced Features
+- [ ] Team dashboard (organization-wide analytics)
+- [ ] Activity feed (recent team activity)
+- [ ] Notifications system
+- [ ] Gamification (goals, badges, leaderboards)
+- [ ] Advanced analytics and reporting
+- [ ] Export individual reports (PDF, CSV)
+
+### Step 7.4: Production Ready
+- [ ] Set up proper error logging (Sentry?)
+- [ ] Add analytics (usage tracking)
+- [ ] Optimize bundle size
+- [ ] Add keyboard shortcuts
+- [ ] Accessibility improvements
+- [ ] Multi-language support (i18n)
+
+## ═══════════════════════════════════════════════════════════════════
+## MIGRATION DECISIONS LOG
+## ═══════════════════════════════════════════════════════════════════
+
+DECISION 1: User Model
+  OLD: Multiple local users, switch between them
+  NEW: One authenticated Supabase user per app instance
+  IMPACT: Simpler auth flow, remove user switching UI
+
+DECISION 2: Projects
+  OLD: Local projects (SQLite) + Cloud projects (Supabase)
+  NEW: All projects in cloud_projects with scope field (personal/org)
+  IMPACT: Unified project management, simpler codebase
+
+DECISION 3: Offline Support
+  OLD: Full offline with sync queue
+  NEW: Require internet, graceful degradation with caching
+  IMPACT: Simpler architecture, assume devs are online
+
+DECISION 4: Data Export
+  OLD: Full database export/import
+  NEW: Session-level exports, rely on Supabase backups
+  IMPACT: Remove admin backup features, Supabase handles backups
+
+DECISION 5: App Settings
+  OLD: localStorage + SQLite app_settings table
+  NEW: Supabase user_preferences table with localStorage cache
+  IMPACT: Settings sync across devices
+
+## ═══════════════════════════════════════════════════════════════════
+## NOTES & CONSIDERATIONS
+## ═══════════════════════════════════════════════════════════════════
+
+PERFORMANCE:
+- Supabase is fast but not instant like SQLite
+- Use caching aggressively for better UX
+- Batch requests where possible
+- Optimize queries with proper indexes
+
+SECURITY:
+- RLS policies are critical - test thoroughly
+- Never expose Supabase anon key in public repos (use env vars)
+- Validate all inputs server-side
+- Audit organization access carefully
+
+COSTS:
+- Supabase free tier: 500MB database, 2GB bandwidth, 50,000 monthly active users
+- Should be sufficient for MVP and early users
+- Monitor usage as app grows
+
+DATA MIGRATION:
+- For existing users: Create migration script to export SQLite → import to Supabase
+- Not a priority for current development (no production users yet)
+- Keep as future task if needed
