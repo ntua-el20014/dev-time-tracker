@@ -2,6 +2,7 @@ import { ipcRenderer } from "electron";
 import type { SessionRow, DailySummaryRow } from "@shared/types";
 import { showNotification } from "../components";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
+import { safeIpcInvoke } from "./ipcHelpers";
 
 export interface ExportOptions {
   format: "csv" | "json";
@@ -53,10 +54,14 @@ export class SessionExporter {
         filters.endDate = options.dateRange.end;
       }
 
-      let sessions: SessionRow[] = await ipcRenderer.invoke(
+      let sessions: SessionRow[] = await safeIpcInvoke(
         "get-sessions",
-        userId,
-        filters
+        [userId, filters],
+        {
+          fallback: [],
+          rethrow: true,
+          errorMessage: "Failed to fetch sessions for export",
+        },
       );
 
       // Apply additional filters
@@ -64,15 +69,15 @@ export class SessionExporter {
         if (options.filters.tags && options.filters.tags.length > 0) {
           sessions = sessions.filter((session) =>
             session.tags?.some((tag: string) =>
-              options.filters?.tags?.includes(tag)
-            )
+              options.filters?.tags?.includes(tag),
+            ),
           );
         }
 
         if (options.filters.minDuration) {
           sessions = sessions.filter(
             (session) =>
-              (session.duration || 0) >= (options.filters?.minDuration || 0)
+              (session.duration || 0) >= (options.filters?.minDuration || 0),
           );
         }
       }
@@ -91,13 +96,20 @@ export class SessionExporter {
     }
 
     if (options.includeFields.dailySummary) {
-      const dailyData: DailySummaryRow[] = await ipcRenderer.invoke(
+      const dailyData: DailySummaryRow[] = await safeIpcInvoke(
         "get-daily-summary",
-        userId,
+        [
+          userId,
+          {
+            startDate: options.dateRange?.start,
+            endDate: options.dateRange?.end,
+          },
+        ],
         {
-          startDate: options.dateRange?.start,
-          endDate: options.dateRange?.end,
-        }
+          fallback: [],
+          rethrow: true,
+          errorMessage: "Failed to fetch daily summary for export",
+        },
       );
 
       data.dailySummary = dailyData.map((day) => ({
@@ -110,11 +122,19 @@ export class SessionExporter {
     }
 
     if (options.includeFields.tags) {
-      data.tags = await ipcRenderer.invoke("get-all-tags", userId);
+      data.tags = await safeIpcInvoke("get-all-tags", [userId], {
+        fallback: [],
+        rethrow: true,
+        errorMessage: "Failed to fetch tags for export",
+      });
     }
 
     if (options.includeFields.goals) {
-      data.goals = await ipcRenderer.invoke("get-all-daily-goals", userId);
+      data.goals = await safeIpcInvoke("get-all-daily-goals", [userId], {
+        fallback: [],
+        rethrow: true,
+        errorMessage: "Failed to fetch goals for export",
+      });
     }
 
     return data;
@@ -136,7 +156,7 @@ export class SessionExporter {
   }
 
   private async exportAsJSON(
-    data: Record<string, unknown[]>
+    data: Record<string, unknown[]>,
   ): Promise<boolean> {
     const { filePath } = await ipcRenderer.invoke("show-save-dialog", {
       title: "Export as JSON",
@@ -241,13 +261,13 @@ export function createExportModal(userId: number): void {
 
   const form = modal.querySelector("#exportForm") as HTMLFormElement;
   const submitBtn = modal.querySelector(
-    ".chart-modal-submit"
+    ".chart-modal-submit",
   ) as HTMLButtonElement;
   const cancelBtn = modal.querySelector(
-    ".chart-modal-cancel"
+    ".chart-modal-cancel",
   ) as HTMLButtonElement;
   const closeBtn = modal.querySelector(
-    ".chart-modal-close"
+    ".chart-modal-close",
   ) as HTMLButtonElement;
 
   // Handle form submission

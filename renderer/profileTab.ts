@@ -18,6 +18,7 @@ import {
   addCustomAvatar,
   removeCustomAvatar,
   isCurrentUserAdmin,
+  safeIpcInvoke,
 } from "./utils";
 import { getLangIconUrl } from "../src/utils/extractData";
 import type { Tag } from "@shared/types";
@@ -31,9 +32,10 @@ function escapeHtml(text: string) {
 
 async function renderEditorUsage(container: HTMLElement) {
   type EditorUsageRow = { app: string; total_time: number };
-  const usage: EditorUsageRow[] = await ipcRenderer.invoke(
+  const usage: EditorUsageRow[] = await safeIpcInvoke(
     "get-editor-usage",
-    getCurrentUserId(),
+    [getCurrentUserId()],
+    { fallback: [] },
   );
   if (!usage || usage.length === 0) {
     container.innerHTML = "<p>No data available.</p>";
@@ -94,9 +96,10 @@ async function renderEditorUsage(container: HTMLElement) {
 
 async function renderLanguageUsage(container: HTMLElement) {
   type LanguageUsageRow = { language: string; total_time: number };
-  const usage: LanguageUsageRow[] = await ipcRenderer.invoke(
+  const usage: LanguageUsageRow[] = await safeIpcInvoke(
     "get-language-usage",
-    getCurrentUserId(),
+    [getCurrentUserId()],
+    { fallback: [] },
   );
   if (!usage || usage.length === 0) {
     container.innerHTML = "<p>No data available.</p>";
@@ -203,9 +206,10 @@ async function renderSettings(container: HTMLElement) {
   const customAvatars = getCustomAvatars(userId);
 
   // --- Tag management ---
-  const tags: Tag[] = await ipcRenderer.invoke(
+  const tags: Tag[] = await safeIpcInvoke(
     "get-all-tags",
-    getCurrentUserId(),
+    [getCurrentUserId()],
+    { fallback: [] },
   );
 
   // --- Accent color management ---
@@ -544,7 +548,7 @@ async function renderDailyGoalHistory(container: HTMLElement) {
     time: number;
     description: string;
     isCompleted: number;
-  }[] = await ipcRenderer.invoke("get-all-daily-goals", userId);
+  }[] = await safeIpcInvoke("get-all-daily-goals", [userId], { fallback: [] });
 
   container.innerHTML = `
     <h2>Daily Goal History</h2>
@@ -622,6 +626,8 @@ export async function refreshProfile() {
   const buttons = profileDiv.querySelectorAll(".profile-chapter-btn");
 
   async function showChapter(chapter: string) {
+    contentDiv.innerHTML =
+      '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading…</span></div>';
     if (chapter === "editor") {
       await renderEditorUsage(contentDiv);
     } else if (chapter === "language") {

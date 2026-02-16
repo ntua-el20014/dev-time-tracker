@@ -5,7 +5,7 @@ import stopBtn from "../assets/stop-button.png";
 import pauseIconImg from "../assets/pause-button.png";
 import playIconImg from "../assets/play-button.png";
 import { applyAccentColor } from "./renderer";
-import { ipcRenderer } from "electron";
+import { safeIpcInvoke } from "./utils/ipcHelpers";
 
 // --- User Theme Preference Helpers ---
 
@@ -17,16 +17,19 @@ export async function initTheme() {
     toggleBtn.addEventListener("click", async () => {
       const isLight = !document.body.classList.contains("light");
       document.body.classList.toggle("light", isLight);
-      await ipcRenderer.invoke("set-user-theme", isLight ? "light" : "dark");
+      await safeIpcInvoke("set-user-theme", [isLight ? "light" : "dark"], {
+        showNotification: false,
+      });
       updateThemeIcon(themeIcon);
       await applyAccentColor();
       window.dispatchEvent(new Event("theme-changed"));
     });
 
     // Load theme from Supabase preferences
-    const savedTheme = (await ipcRenderer.invoke("get-user-theme")) as
-      | "light"
-      | "dark";
+    const savedTheme = (await safeIpcInvoke("get-user-theme", [], {
+      fallback: "dark",
+      showNotification: false,
+    })) as "light" | "dark";
     if (savedTheme === "light") {
       document.body.classList.add("light");
     } else {
@@ -38,7 +41,7 @@ export async function initTheme() {
 }
 
 export async function setUserTheme(theme: "light" | "dark") {
-  await ipcRenderer.invoke("set-user-theme", theme);
+  await safeIpcInvoke("set-user-theme", [theme], { showNotification: false });
 }
 
 export function updateThemeIcon(themeIcon: HTMLImageElement) {

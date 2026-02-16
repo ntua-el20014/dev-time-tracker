@@ -211,18 +211,18 @@
 ## ═══════════════════════════════════════════════════════════════════
 
 ### Step 4.1: Update Renderer API Calls
-- [ ] Audit all ipcRenderer.invoke() calls in renderer/
-- [ ] Update calls to use new handler names (if changed)
-- [ ] Update error handling for network errors
-- [ ] Add loading states for async operations
+- [x] Audit all ipcRenderer.invoke() calls in renderer/
+- [x] Update calls to use new handler names (if changed) — all channel names preserved 1:1
+- [x] Update error handling for network errors — created safeIpcInvoke() wrapper
+- [x] Add loading states for async operations — spinner CSS + withLoading() utility
 
 ### Step 4.2: Add Connection Status Indicator
-- [ ] Create renderer/components/ConnectionStatus.ts
-      - Detect online/offline status
-      - Show indicator in UI
-      - Handle Supabase connection errors gracefully
-- [ ] Add connection status to main UI
-- [ ] Style connection indicator
+- [x] Create renderer/components/ConnectionStatus.ts
+      - Detect online/offline status (browser events + Supabase ping)
+      - Show indicator in UI (pill with dot: Online / Offline / Limited)
+      - Handle Supabase connection errors gracefully (degraded state)
+- [x] Add connection status to main UI (initConnectionStatus in renderMainUI, destroy on sign-out)
+- [x] Style connection indicator (renderer/styles/connection-status.css)
 
 ### Step 4.3: Update User Management
 - [ ] Update renderer/components/UserLanding.ts

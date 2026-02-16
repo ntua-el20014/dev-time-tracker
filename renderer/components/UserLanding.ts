@@ -1,6 +1,6 @@
-import { ipcRenderer } from "electron";
 import { showModal, showConfirmationModal } from "./Modals";
 import { UserRole } from "../../shared/types";
+import { safeIpcInvoke } from "../utils/ipcHelpers";
 
 /**
  * User Landing Page UI
@@ -8,7 +8,7 @@ import { UserRole } from "../../shared/types";
  */
 export async function renderUserLanding(
   container: HTMLElement,
-  onUserSelected?: (userId: number) => void
+  onUserSelected?: (userId: number) => void,
 ) {
   interface User {
     id: number;
@@ -18,7 +18,10 @@ export async function renderUserLanding(
   }
 
   // Load users from the database
-  const users: User[] = await ipcRenderer.invoke("get-all-users");
+  const users: User[] = await safeIpcInvoke("get-all-users", [], {
+    fallback: [],
+    errorMessage: "Failed to load users",
+  });
 
   // Simple avatar fallback (initials)
   function getAvatar(user: User) {
@@ -58,7 +61,7 @@ export async function renderUserLanding(
                 ${getRoleBadge(user.role)}
               </div>
             </div>
-          `
+          `,
           )
           .join("")}
         <div id="addUserRect" tabindex="0">
@@ -116,19 +119,25 @@ export async function renderUserLanding(
         onSubmit: async (values) => {
           const { username, email, password } = values;
           if (username?.trim() && email?.trim() && password) {
-            await ipcRenderer.invoke("create-user", {
-              username: username.trim(),
-              email: email.trim(),
-              password: password,
-              avatar: "",
-            });
+            await safeIpcInvoke(
+              "create-user",
+              [
+                {
+                  username: username.trim(),
+                  email: email.trim(),
+                  password: password,
+                  avatar: "",
+                },
+              ],
+              { errorMessage: "Failed to create user" },
+            );
           }
           setTimeout(() => {
             renderUserLanding(container, onUserSelected);
             setTimeout(() => {
               // Try to focus the Add User input if it exists
               const modalInput = document.querySelector(
-                '#customModal input[name="username"]'
+                '#customModal input[name="username"]',
               ) as HTMLInputElement;
               if (modalInput) {
                 modalInput.blur();
@@ -145,7 +154,9 @@ export async function renderUserLanding(
   const deleteUserRect = container.querySelector("#deleteUserRect");
   if (deleteUserRect) {
     deleteUserRect.addEventListener("click", async () => {
-      const users: User[] = await ipcRenderer.invoke("get-all-users");
+      const users: User[] = await safeIpcInvoke("get-all-users", [], {
+        fallback: [],
+      });
       const deletableUsers = users.filter((u) => u.id !== 1);
       if (deletableUsers.length === 0) {
         alert("No users to delete (default user cannot be deleted).");
@@ -188,7 +199,7 @@ export async function renderUserLanding(
               ">
                 <span style="font-weight:bold;">${u.username}</span>
               </div>
-            `
+            `,
               )
               .join("")}
           </div>
@@ -210,14 +221,16 @@ export async function renderUserLanding(
               confirmText: "Delete",
               confirmClass: "btn-delete",
               onConfirm: async () => {
-                await ipcRenderer.invoke("delete-user", userId);
+                await safeIpcInvoke("delete-user", [userId], {
+                  errorMessage: "Failed to delete user",
+                });
                 if (localStorage.getItem("currentUserId") === String(userId)) {
                   localStorage.removeItem("currentUserId");
                 }
                 // Close the modal using the close button (which will trigger onCancel)
                 const modal = document.getElementById("customModal");
                 const closeBtn = modal?.querySelector(
-                  ".modal-close-btn"
+                  ".modal-close-btn",
                 ) as HTMLButtonElement;
                 closeBtn?.click();
                 renderUserLanding(container, onUserSelected);
@@ -227,14 +240,14 @@ export async function renderUserLanding(
         });
 
         const cancelBtn = form.querySelector(
-          "#customModalCancelBtn"
+          "#customModalCancelBtn",
         ) as HTMLButtonElement;
         if (cancelBtn) {
           cancelBtn.addEventListener("click", () => {
             // Close the modal using the close button (which will trigger onCancel)
             const modal = document.getElementById("customModal");
             const closeBtn = modal?.querySelector(
-              ".modal-close-btn"
+              ".modal-close-btn",
             ) as HTMLButtonElement;
             closeBtn?.click();
             renderUserLanding(container, onUserSelected);

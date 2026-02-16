@@ -1,6 +1,10 @@
 import { ipcRenderer } from "electron";
 import { ProjectWithMembers } from "@shared/types";
-import { getCurrentUserId, isCurrentUserManagerOrAdmin } from "./utils";
+import {
+  getCurrentUserId,
+  isCurrentUserManagerOrAdmin,
+  safeIpcInvoke,
+} from "./utils";
 import {
   showInAppNotification,
   showConfirmationModal,
@@ -27,6 +31,10 @@ export async function renderProjects() {
     `;
     return;
   }
+
+  // Show loading while projects load
+  projectsContainer.innerHTML =
+    '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading projects…</span></div>';
 
   // Load projects data
   await loadProjects();
@@ -83,17 +91,22 @@ async function loadProjects() {
   try {
     // Get projects based on user role - admins see all, managers see only their projects
     const currentUserId = getCurrentUserId();
-    const userRole = await ipcRenderer.invoke("get-user-role", currentUserId);
+    const userRole = await safeIpcInvoke("get-user-role", [currentUserId], {
+      fallback: "member",
+    });
 
     if (userRole === "admin") {
-      currentProjects = await ipcRenderer.invoke(
-        "get-all-projects-with-members"
+      currentProjects = await safeIpcInvoke(
+        "get-all-projects-with-members",
+        [],
+        { fallback: [] },
       );
     } else {
       // Managers only see projects they are members or managers of
-      currentProjects = await ipcRenderer.invoke(
+      currentProjects = await safeIpcInvoke(
         "get-user-projects-with-members",
-        currentUserId
+        [currentUserId],
+        { fallback: [] },
       );
     }
   } catch (error) {
@@ -152,7 +165,7 @@ function renderProjectCard(project: ProjectWithMembers): string {
         ${
           project.description
             ? `<p class="project-description">${escapeHtml(
-                project.description
+                project.description,
               )}</p>`
             : `<p class="project-description empty">No description provided</p>`
         }
@@ -161,14 +174,14 @@ function renderProjectCard(project: ProjectWithMembers): string {
           <div class="project-meta-item">
             <span class="meta-label">Manager:</span>
             <span class="meta-value">${escapeHtml(
-              project.manager_name || "Unknown"
+              project.manager_name || "Unknown",
             )}</span>
           </div>
           <div class="project-meta-item">
             <span class="meta-label">Members:</span>
             <span class="meta-value">${memberCount} ${
-    memberCount === 1 ? "member" : "members"
-  }</span>
+              memberCount === 1 ? "member" : "members"
+            }</span>
           </div>
           <div class="project-meta-item">
             <span class="meta-label">Created:</span>
@@ -210,7 +223,7 @@ function setupProjectsEventListeners() {
       // Show/hide sections
       const activeSection = document.getElementById("activeProjectsSection");
       const archivedSection = document.getElementById(
-        "archivedProjectsSection"
+        "archivedProjectsSection",
       );
 
       if (tabType === "active") {
@@ -322,7 +335,7 @@ function showCreateProjectModal() {
   const form = document.getElementById("projectForm") as HTMLFormElement;
   const nameInput = document.getElementById("project-name") as HTMLInputElement;
   const cancelBtn = document.getElementById(
-    "projectCancelBtn"
+    "projectCancelBtn",
   ) as HTMLButtonElement;
   const closeBtn = modal.querySelector(".modal-close-btn") as HTMLButtonElement;
 
@@ -341,7 +354,7 @@ function showCreateProjectModal() {
         formData.get("name") as string,
         formData.get("description") as string,
         formData.get("color") as string,
-        userId
+        userId,
       );
       showInAppNotification("Project created successfully!", 3000);
       renderProjects(); // Refresh the projects list
@@ -419,12 +432,12 @@ function showEditProjectModal(projectId: number) {
       <form id="projectEditForm">
         <label for="project-edit-name">Project Name *</label><br>
         <input id="project-edit-name" name="name" type="text" value="${escapeHtml(
-          project.name
+          project.name,
         )}" required>
         
         <label for="project-edit-description">Description</label><br>
         <textarea id="project-edit-description" name="description">${escapeHtml(
-          project.description || ""
+          project.description || "",
         )}</textarea>
         
         <label for="project-edit-color">Project Color</label><br>
@@ -446,10 +459,10 @@ function showEditProjectModal(projectId: number) {
 
   const form = document.getElementById("projectEditForm") as HTMLFormElement;
   const nameInput = document.getElementById(
-    "project-edit-name"
+    "project-edit-name",
   ) as HTMLInputElement;
   const cancelBtn = document.getElementById(
-    "projectEditCancelBtn"
+    "projectEditCancelBtn",
   ) as HTMLButtonElement;
   const closeBtn = modal.querySelector(".modal-close-btn") as HTMLButtonElement;
 
@@ -467,7 +480,7 @@ function showEditProjectModal(projectId: number) {
         projectId,
         formData.get("name") as string,
         formData.get("description") as string,
-        formData.get("color") as string
+        formData.get("color") as string,
       );
       showInAppNotification("Project updated successfully!", 3000);
       renderProjects(); // Refresh the projects list
@@ -605,12 +618,12 @@ async function showProjectStats(projectId: number) {
               <div class="stats-timeline">
                 <div class="timeline-item">
                   <strong>First Session:</strong> ${new Date(
-                    stats.firstSession
+                    stats.firstSession,
                   ).toLocaleDateString()}
                 </div>
                 <div class="timeline-item">
                   <strong>Last Session:</strong> ${new Date(
-                    stats.lastSession
+                    stats.lastSession,
                   ).toLocaleDateString()}
                 </div>
               </div>
@@ -667,7 +680,7 @@ async function showManageMembersModal(projectId: number) {
       const freshUsers = await ipcRenderer.invoke("get-all-users");
       const freshMembers = await ipcRenderer.invoke(
         "get-project-members",
-        projectId
+        projectId,
       );
 
       const membersList = freshMembers
@@ -700,13 +713,13 @@ async function showManageMembersModal(projectId: number) {
 
       const availableUsers = freshUsers.filter(
         (user: any) =>
-          !freshMembers.some((member: any) => member.user_id === user.id)
+          !freshMembers.some((member: any) => member.user_id === user.id),
       );
 
       const userOptions = availableUsers
         .map(
           (user: any) =>
-            `<option value="${user.id}">${escapeHtml(user.username)}</option>`
+            `<option value="${user.id}">${escapeHtml(user.username)}</option>`,
         )
         .join("");
 
@@ -757,14 +770,14 @@ async function showManageMembersModal(projectId: number) {
                 await ipcRenderer.invoke(
                   "transfer-project-management",
                   projectId,
-                  parseInt(userId)
+                  parseInt(userId),
                 );
               } else {
                 await ipcRenderer.invoke(
                   "update-project-member-role",
                   projectId,
                   parseInt(userId),
-                  dbRole
+                  dbRole,
                 );
               }
               showInAppNotification("Role updated successfully!", 3000);
@@ -810,7 +823,7 @@ async function showManageMembersModal(projectId: number) {
             onChange: (userId: string) => {
               if (roleSelectDropdown && userId) {
                 const selectedUser = data.allUsers.find(
-                  (u: any) => u.id === parseInt(userId)
+                  (u: any) => u.id === parseInt(userId),
                 );
                 const canBeManager =
                   selectedUser &&
@@ -845,7 +858,7 @@ async function showManageMembersModal(projectId: number) {
 
       // Add member functionality
       const addMemberBtn = modal.querySelector(
-        "#addMemberBtn"
+        "#addMemberBtn",
       ) as HTMLButtonElement;
       if (addMemberBtn) {
         addMemberBtn.onclick = async () => {
@@ -861,7 +874,7 @@ async function showManageMembersModal(projectId: number) {
                 "add-project-member",
                 projectId,
                 parseInt(userValue),
-                dbRole
+                dbRole,
               );
               showInAppNotification("Member added successfully!", 3000);
 
@@ -944,7 +957,7 @@ async function showManageMembersModal(projectId: number) {
           removeButtons?.forEach((btn) => {
             btn.addEventListener("click", async () => {
               const userId = parseInt(
-                (btn as HTMLButtonElement).dataset.userId!
+                (btn as HTMLButtonElement).dataset.userId!,
               );
               const memberName =
                 btn
@@ -962,7 +975,7 @@ async function showManageMembersModal(projectId: number) {
                     await ipcRenderer.invoke(
                       "remove-project-member",
                       projectId,
-                      userId
+                      userId,
                     );
                     showInAppNotification("Member removed successfully!", 3000);
                     // Close modal and refresh projects
@@ -975,7 +988,7 @@ async function showManageMembersModal(projectId: number) {
                   } catch (error) {
                     showInAppNotification(
                       `Failed to remove member: ${error}`,
-                      5000
+                      5000,
                     );
                   }
                 },
@@ -1001,14 +1014,14 @@ async function showManageMembersModal(projectId: number) {
                   await ipcRenderer.invoke(
                     "transfer-project-management",
                     projectId,
-                    userId
+                    userId,
                   );
                 } else {
                   await ipcRenderer.invoke(
                     "update-project-member-role",
                     projectId,
                     userId,
-                    dbRole
+                    dbRole,
                   );
                 }
                 showInAppNotification("Role updated successfully!", 3000);

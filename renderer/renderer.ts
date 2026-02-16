@@ -16,7 +16,7 @@ import {
 } from "./components";
 import { renderLandingPage } from "./components";
 // import { renderUserLanding } from "./components";
-import { getCurrentUserId } from "./utils";
+import { getCurrentUserId, safeIpcInvoke } from "./utils";
 import { isCurrentUserManagerOrAdmin } from "./utils";
 import {
   checkAuthStatus,
@@ -26,6 +26,10 @@ import {
 import { initializeOAuthListener } from "./utils/oauthHandler";
 import { loadUserLangMap } from "../src/utils/extractData";
 import { showOnboarding, shouldShowOnboarding } from "./components";
+import {
+  initConnectionStatus,
+  destroyConnectionStatus,
+} from "./components/ConnectionStatus";
 import "./styles/base.css";
 import "./styles/accent-text.css";
 import "./styles/calendar.css";
@@ -46,6 +50,7 @@ import "./styles/users.css";
 import "./styles/userRoleManager.css";
 import "./styles/auth.css";
 import "./styles/organization.css";
+import "./styles/connection-status.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
 function setupTabs() {
@@ -301,10 +306,13 @@ ipcRenderer.on("get-session-info", async () => {
   // Add a small delay to ensure any previous modals are fully closed
   setTimeout(async () => {
     // Load available projects for selection
-    let projects = [];
+    let projects: any[] = [];
     try {
       const userId = await ipcRenderer.invoke("get-current-user-id");
-      projects = await ipcRenderer.invoke("get-user-projects", userId);
+      projects = await safeIpcInvoke("get-user-projects", [userId], {
+        fallback: [],
+        showNotification: false,
+      });
     } catch (error) {
       // Failed to load projects, continue without them
     }
@@ -659,6 +667,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     } else {
       // User signed out - reset the initialization flag
       isMainUIInitialized = false;
+      destroyConnectionStatus();
       localStorage.removeItem("currentUserId");
       if (mainUI) mainUI.style.display = "none";
       if (landing) {
@@ -676,6 +685,7 @@ function renderMainUI() {
   initUI();
   applyAccentColor();
   setupHotkeys();
+  initConnectionStatus();
 }
 
 let dailyGoalCheckInterval: NodeJS.Timeout | null = null;
@@ -684,13 +694,19 @@ async function checkDailyGoalProgress() {
   try {
     const userId = getCurrentUserId();
     const today = new Date().toLocaleDateString("en-CA");
-    const dailyGoal = await ipcRenderer.invoke("get-daily-goal", userId, today);
+    const dailyGoal = await safeIpcInvoke<{
+      time: number;
+      isCompleted: boolean;
+    } | null>("get-daily-goal", [userId, today], {
+      fallback: null,
+      showNotification: false,
+    });
     if (!dailyGoal) return;
 
-    const totalMins = await ipcRenderer.invoke(
+    const totalMins = await safeIpcInvoke<number>(
       "get-total-time-for-day",
-      userId,
-      today,
+      [userId, today],
+      { fallback: 0, showNotification: false },
     );
 
     if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {

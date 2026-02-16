@@ -1,0 +1,85 @@
+/* =====================================================
+   Connection Status Indicator
+   ===================================================== */
+
+.connection-status {
+  position: fixed;
+  top: 8px;
+  right: 12px;
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background 0.25s,
+    box-shadow 0.25s,
+    opacity 0.25s;
+  background: var(--card-bg, #2b2b3c);
+  border: 1px solid var(--border, #444);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.connection-status:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* Dot */
+.conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.conn-dot[data-state="online"] {
+  background: #4caf50;
+  box-shadow: 0 0 4px #4caf5080;
+}
+
+.conn-dot[data-state="offline"] {
+  background: #f44336;
+  box-shadow: 0 0 4px #f4433680;
+}
+
+.conn-dot[data-state="degraded"] {
+  background: #ff9800;
+  box-shadow: 0 0 4px #ff980080;
+}
+
+/* Label */
+.conn-label {
+  color: var(--fg, #fff);
+  white-space: nowrap;
+}
+
+/* Pulse animation while checking */
+.conn-checking .conn-dot {
+  animation: conn-pulse 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes conn-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.3;
+  }
+}
+
+/* Light-theme overrides */
+body.light .connection-status {
+  background: var(--card-bg, #ffffff);
+  border-color: var(--border, #ddd);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+body.light .connection-status:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}

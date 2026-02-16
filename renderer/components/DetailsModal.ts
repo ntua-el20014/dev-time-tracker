@@ -1,6 +1,12 @@
 import { ipcRenderer } from "electron";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
-import { escapeHtml, getCurrentUserId, prettyDate, prettyTime } from "../utils";
+import {
+  escapeHtml,
+  getCurrentUserId,
+  prettyDate,
+  prettyTime,
+  safeIpcInvoke,
+} from "../utils";
 
 export interface DetailsModalConfig {
   type: "app-date" | "session";
@@ -39,7 +45,7 @@ export function showDetailsModal(config: DetailsModalConfig) {
   const title = document.createElement("h2");
   if (config.type === "app-date") {
     title.textContent = `${config.data.app} - ${prettyDate(
-      config.data.date || ""
+      config.data.date || "",
     )}`;
   } else {
     title.textContent = `Session: ${config.data.title || "Untitled"}`;
@@ -92,23 +98,22 @@ export function showDetailsModal(config: DetailsModalConfig) {
 async function loadDetailsData(
   config: DetailsModalConfig,
   modalContent: HTMLElement,
-  loading: HTMLElement
+  loading: HTMLElement,
 ) {
   try {
     let detailsData: any = null;
 
     if (config.type === "app-date") {
-      detailsData = await ipcRenderer.invoke(
+      detailsData = await safeIpcInvoke(
         "get-usage-details-for-app-date",
-        getCurrentUserId(),
-        config.data.app,
-        config.data.date
+        [getCurrentUserId(), config.data.app, config.data.date],
+        { fallback: null, errorMessage: "Failed to load app details" },
       );
     } else if (config.type === "session") {
-      detailsData = await ipcRenderer.invoke(
+      detailsData = await safeIpcInvoke(
         "get-usage-details-for-session",
-        getCurrentUserId(),
-        config.data.sessionId
+        [getCurrentUserId(), config.data.sessionId],
+        { fallback: null, errorMessage: "Failed to load session details" },
       );
     }
 
@@ -124,7 +129,7 @@ async function loadDetailsData(
         details,
         detailsData,
         config.data.app || "",
-        config.data.date || ""
+        config.data.date || "",
       );
     } else if (config.type === "session" && detailsData) {
       renderSessionDetails(details, detailsData);
@@ -143,11 +148,11 @@ function renderAppDateDetails(
   container: HTMLElement,
   data: any[],
   app: string,
-  date: string
+  date: string,
 ) {
   if (!data || data.length === 0) {
     container.innerHTML = `<p>No activity recorded for ${app} on ${prettyDate(
-      date
+      date,
     )}.</p>`;
     return;
   }
@@ -169,8 +174,8 @@ function renderAppDateDetails(
     <p><strong>Total activities:</strong> ${data.length}</p>
     <p><strong>Languages used:</strong> ${Object.keys(grouped).join(", ")}</p>
     <p><strong>Time range:</strong> ${data[0]?.time} - ${
-    data[data.length - 1]?.time
-  }</p>
+      data[data.length - 1]?.time
+    }</p>
   `;
   content.appendChild(summary);
 
@@ -234,7 +239,7 @@ function renderSessionDetails(container: HTMLElement, data: any) {
     <h3>Session Information</h3>
     <p><strong>Title:</strong> ${escapeHtml(session.title)}</p>
     <p><strong>Description:</strong> ${escapeHtml(
-      session.description || "No description"
+      session.description || "No description",
     )}</p>
     <p><strong>Start Time:</strong> ${prettyTime(session.start_time)}</p>
     <p><strong>Duration:</strong> ${formatTimeSpent(session.duration)}</p>
@@ -263,7 +268,7 @@ function renderSessionDetails(container: HTMLElement, data: any) {
     summary.innerHTML = `
       <p><strong>Total activities:</strong> ${usage.length}</p>
       <p><strong>Applications used:</strong> ${Object.keys(grouped).join(
-        ", "
+        ", ",
       )}</p>
     `;
     usageSection.appendChild(summary);

@@ -1,4 +1,5 @@
 import { ipcRenderer } from "electron";
+import { safeIpcInvoke } from "./ipcHelpers";
 
 export function getCurrentUserId(): string {
   const stored = localStorage.getItem("currentUserId");
@@ -29,33 +30,48 @@ export function getCurrentUserIdLegacy(): number {
 export async function isCurrentUserAdmin(): Promise<boolean> {
   try {
     const userId = getCurrentUserId();
-    return await ipcRenderer.invoke("is-user-admin", userId);
+    return await safeIpcInvoke("is-user-admin", [userId], {
+      fallback: false,
+      showNotification: false,
+    });
   } catch (error) {
-    // Fallback for legacy numeric IDs
     const legacyId = getCurrentUserIdLegacy();
-    return await ipcRenderer.invoke("is-user-admin", legacyId);
+    return await safeIpcInvoke("is-user-admin", [legacyId], {
+      fallback: false,
+      showNotification: false,
+    });
   }
 }
 
 export async function isCurrentUserManagerOrAdmin(): Promise<boolean> {
   try {
     const userId = getCurrentUserId();
-    return await ipcRenderer.invoke("is-user-manager-or-admin", userId);
+    return await safeIpcInvoke("is-user-manager-or-admin", [userId], {
+      fallback: false,
+      showNotification: false,
+    });
   } catch (error) {
-    // Fallback for legacy numeric IDs
     const legacyId = getCurrentUserIdLegacy();
-    return await ipcRenderer.invoke("is-user-manager-or-admin", legacyId);
+    return await safeIpcInvoke("is-user-manager-or-admin", [legacyId], {
+      fallback: false,
+      showNotification: false,
+    });
   }
 }
 
 export async function getCurrentUserInfo() {
   try {
     const userId = getCurrentUserId();
-    return await ipcRenderer.invoke("get-user-info", userId);
+    return await safeIpcInvoke("get-user-info", [userId], {
+      fallback: null,
+      showNotification: false,
+    });
   } catch (error) {
-    // Fallback for legacy numeric IDs
     const legacyId = getCurrentUserIdLegacy();
-    return await ipcRenderer.invoke("get-user-info", legacyId);
+    return await safeIpcInvoke("get-user-info", [legacyId], {
+      fallback: null,
+      showNotification: false,
+    });
   }
 }
 
@@ -68,7 +84,7 @@ export function getCustomAvatars(userId: string | number): string[] {
 
 export function addCustomAvatar(
   userId: string | number,
-  dataUrl: string
+  dataUrl: string,
 ): void {
   const customAvatars = getCustomAvatars(userId);
   // Avoid duplicates
@@ -81,7 +97,7 @@ export function addCustomAvatar(
 
 export function removeCustomAvatar(
   userId: string | number,
-  dataUrl: string
+  dataUrl: string,
 ): void {
   const customAvatars = getCustomAvatars(userId);
   const filtered = customAvatars.filter((avatar) => avatar !== dataUrl);

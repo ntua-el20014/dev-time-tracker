@@ -22,6 +22,7 @@ import "./ipc/supabase/preferencesHandlers";
 import "./ipc/projectHandlers";
 import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";
+import "./ipc/exportHandlers";
 import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
 
 let mainWindow: BrowserWindow;

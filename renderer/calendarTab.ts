@@ -1,6 +1,6 @@
 import { ipcRenderer } from "electron";
 import { ScheduledSession } from "@shared/types";
-import { getCurrentUserId } from "./utils";
+import { getCurrentUserId, safeIpcInvoke } from "./utils";
 import { showInAppNotification, showConfirmationModal } from "./components";
 
 // eslint-disable-next-line prefer-const
@@ -14,6 +14,10 @@ export async function renderCalendar() {
 
   const userId = getCurrentUserId();
   if (!userId) return;
+
+  // Show loading while scheduled sessions load
+  calendarContainer.innerHTML =
+    '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading calendar…</span></div>';
 
   // Load scheduled sessions for current month
   await loadScheduledSessions(userId);
@@ -109,8 +113,11 @@ function renderCalendarGrid(): string {
             day.isCurrentMonth ? "current-month" : "other-month"
           } ${day.isToday ? "today" : ""}" 
                data-date="${day.date.getFullYear()}-${String(
-              day.date.getMonth() + 1
-            ).padStart(2, "0")}-${String(day.date.getDate()).padStart(2, "0")}">
+                 day.date.getMonth() + 1,
+               ).padStart(
+                 2,
+                 "0",
+               )}-${String(day.date.getDate()).padStart(2, "0")}">
             <div class="day-number">${day.date.getDate()}</div>
             <div class="day-sessions">
               ${day.sessions
@@ -120,23 +127,23 @@ function renderCalendarGrid(): string {
                      data-session-id="${session.id}" 
                      title="${session.title}">
                   <span class="session-time">${new Date(
-                    session.scheduled_datetime
+                    session.scheduled_datetime,
                   ).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}</span>
                   <span class="session-title">${session.title}</span>
                 </div>
-              `
+              `,
                 )
                 .join("")}
             </div>
           </div>
-        `
+        `,
           )
           .join("")}
       </div>
-    `
+    `,
       )
       .join("")}
   `;
@@ -155,7 +162,7 @@ function renderUpcomingSessions(): string {
     .sort(
       (a, b) =>
         new Date(a.scheduled_datetime).getTime() -
-        new Date(b.scheduled_datetime).getTime()
+        new Date(b.scheduled_datetime).getTime(),
     )
     .slice(0, 5);
 
@@ -171,7 +178,7 @@ function renderUpcomingSessions(): string {
         <div class="session-title">${session.title}</div>
         <div class="session-datetime">
           ${new Date(session.scheduled_datetime).toLocaleDateString(
-            "en-GB"
+            "en-GB",
           )} at 
           ${new Date(session.scheduled_datetime).toLocaleTimeString([], {
             hour: "2-digit",
@@ -211,7 +218,7 @@ function renderUpcomingSessions(): string {
           : ""
       }
     </div>
-  `
+  `,
     )
     .join("");
 }
@@ -220,7 +227,7 @@ function getSessionsForDate(date: Date): ScheduledSession[] {
   // Use local date format to avoid timezone issues
   const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
     2,
-    "0"
+    "0",
   )}-${String(date.getDate()).padStart(2, "0")}`;
 
   return scheduledSessions.filter((session) => {
@@ -232,7 +239,7 @@ function getSessionsForDate(date: Date): ScheduledSession[] {
       // ISO format with Z (UTC) - convert to local date
       const sessionDateObj = new Date(sessionDatetime);
       sessionDate = `${sessionDateObj.getFullYear()}-${String(
-        sessionDateObj.getMonth() + 1
+        sessionDateObj.getMonth() + 1,
       ).padStart(2, "0")}-${String(sessionDateObj.getDate()).padStart(2, "0")}`;
     } else if (sessionDatetime.includes("T")) {
       // Local datetime format (YYYY-MM-DDTHH:mm:ss)
@@ -241,7 +248,7 @@ function getSessionsForDate(date: Date): ScheduledSession[] {
       // Fallback to local date conversion
       const sessionDateObj = new Date(sessionDatetime);
       sessionDate = `${sessionDateObj.getFullYear()}-${String(
-        sessionDateObj.getMonth() + 1
+        sessionDateObj.getMonth() + 1,
       ).padStart(2, "0")}-${String(sessionDateObj.getDate()).padStart(2, "0")}`;
     }
 
@@ -254,21 +261,24 @@ async function loadScheduledSessions(userId: number) {
     const startOfMonth = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth(),
-      1
+      1,
     );
     const endOfMonth = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth() + 1,
-      0
+      0,
     );
 
-    scheduledSessions = await ipcRenderer.invoke(
+    scheduledSessions = await safeIpcInvoke<ScheduledSession[]>(
       "get-scheduled-sessions",
-      userId,
-      {
-        startDate: startOfMonth.toISOString().split("T")[0],
-        endDate: endOfMonth.toISOString().split("T")[0],
-      }
+      [
+        userId,
+        {
+          startDate: startOfMonth.toISOString().split("T")[0],
+          endDate: endOfMonth.toISOString().split("T")[0],
+        },
+      ],
+      { fallback: [] },
     );
   } catch (err) {
     showInAppNotification("Error loading scheduled sessions");
@@ -415,7 +425,7 @@ function showScheduleSessionModal(selectedDate?: Date) {
   // Focus the title input after a short delay to ensure it's ready
   setTimeout(() => {
     const titleInput = document.getElementById(
-      "session-title"
+      "session-title",
     ) as HTMLInputElement;
     if (titleInput) {
       titleInput.blur();
@@ -427,7 +437,7 @@ function showScheduleSessionModal(selectedDate?: Date) {
 function setupScheduleModalEventListeners() {
   // Handle recurring checkbox
   const recurringCheckbox = document.getElementById(
-    "recurring-weekly"
+    "recurring-weekly",
   ) as HTMLInputElement;
   const recurrenceOptions = document.getElementById("recurrence-options");
 
@@ -550,7 +560,7 @@ async function handleScheduleSessionSubmit() {
   try {
     const sessionId = await ipcRenderer.invoke(
       "create-scheduled-session",
-      scheduledSession
+      scheduledSession,
     );
     if (sessionId) {
       closeModal();
@@ -583,11 +593,11 @@ async function showSessionDetailsModal(sessionId: number) {
               : ""
           }
           <p><strong>Date & Time:</strong> ${sessionDate.toLocaleDateString(
-            "en-GB"
+            "en-GB",
           )} at ${sessionDate.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}</p>
+            hour: "2-digit",
+            minute: "2-digit",
+          })}</p>
           ${
             session.estimated_duration
               ? `<p><strong>Estimated Duration:</strong> ${session.estimated_duration} minutes</p>`
@@ -699,7 +709,7 @@ async function startScheduledSessionHandler(sessionId: number) {
 async function startSession(
   userId: number,
   sessionId: number,
-  session: ScheduledSession
+  session: ScheduledSession,
 ) {
   // Close modal and refresh calendar to ensure clean state
   closeModal();
@@ -717,7 +727,7 @@ async function startSession(
     // Wait for button setup, then trigger the record button
     setTimeout(() => {
       const recordBtn = document.getElementById(
-        "recordBtn"
+        "recordBtn",
       ) as HTMLButtonElement;
       if (recordBtn) {
         recordBtn.click();
@@ -732,7 +742,7 @@ async function startSession(
               sessionId,
               {
                 status: "completed",
-              }
+              },
             );
             // Re-render calendar after status update to show changes
             await renderCalendar();
@@ -784,7 +794,7 @@ async function deleteScheduledSessionHandler(sessionId: number) {
           const success = await ipcRenderer.invoke(
             "delete-scheduled-session",
             userId,
-            sessionId
+            sessionId,
           );
           if (success) {
             showInAppNotification("Session deleted successfully");
@@ -803,7 +813,7 @@ async function deleteScheduledSessionHandler(sessionId: number) {
 
 function closeModal() {
   const modals = document.querySelectorAll(
-    "#calendarModal, #calendarDetailsModal, #confirmationModal"
+    "#calendarModal, #calendarDetailsModal, #confirmationModal",
   );
   modals.forEach((modal) => {
     modal.remove();

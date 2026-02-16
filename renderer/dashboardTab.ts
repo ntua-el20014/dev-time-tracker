@@ -1,11 +1,13 @@
 import { ipcRenderer } from "electron";
-import { renderPercentBar } from "./components";
+import { renderPercentBar, showInAppNotification } from "./components";
 import {
   getMonday,
   getWeekDates,
   getLocalDateString,
   filterDailyDataForWeek,
   getCurrentUserId,
+  safeIpcInvoke,
+  withLoading,
 } from "./utils";
 import { getLangIconUrl } from "../src/utils/extractData";
 import type { DailySummaryRow, SessionRow } from "@shared/types";
@@ -23,14 +25,24 @@ export async function renderDashboard() {
     </div>
   `;
 
+  // Show loading state in the quickstats area while data loads
+  const quickstatsDiv = document.getElementById("dashboard-quickstats");
+  if (quickstatsDiv) {
+    quickstatsDiv.innerHTML =
+      '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading dashboard…</span></div>';
+  }
+
   // --- Daily Goal Progress Bar ---
   const userId = getCurrentUserId();
   const today = new Date().toLocaleDateString("en-CA");
-  const dailyGoal = await ipcRenderer.invoke("get-daily-goal", userId, today);
-  const totalMins = await ipcRenderer.invoke(
+  const dailyGoal = await safeIpcInvoke("get-daily-goal", [userId, today], {
+    fallback: null,
+    showNotification: false,
+  });
+  const totalMins = await safeIpcInvoke<number>(
     "get-total-time-for-day",
-    userId,
-    today
+    [userId, today],
+    { fallback: 0, showNotification: false },
   );
 
   const goalDiv = document.getElementById("dashboard-goal-progress");
@@ -39,8 +51,8 @@ export async function renderDashboard() {
     goalDiv.innerHTML = `
       <div style="margin-bottom:8px;">
         <b>Daily Goal:</b> ${totalMins.toFixed(0)} / ${
-      dailyGoal.time
-    } mins (${percent.toFixed(0)}%)
+          dailyGoal.time
+        } mins (${percent.toFixed(0)}%)
       </div>
       ${renderPercentBar(
         [
@@ -52,7 +64,7 @@ export async function renderDashboard() {
           { label: "", percent: 100 - percent, color: "#eee" },
         ],
         18,
-        8
+        8,
       )}
     `;
   } else if (goalDiv) {
@@ -119,14 +131,13 @@ async function renderCalendarWidget(): Promise<HTMLDivElement> {
   const daysInMonth = new Date(year, month, 0).getDate();
 
   // Pass userId as first argument
-  const loggedDaysRaw = (await ipcRenderer.invoke(
+  const loggedDaysRaw = await safeIpcInvoke<LoggedDay[]>(
     "get-logged-days-of-month",
-    getCurrentUserId(),
-    year,
-    month
-  )) as LoggedDay[];
+    [getCurrentUserId(), year, month],
+    { fallback: [] },
+  );
   const loggedDaysSet = new Set(
-    loggedDaysRaw.map((row) => Number(row.date.split("-")[2]))
+    loggedDaysRaw.map((row) => Number(row.date.split("-")[2])),
   );
 
   // Build calendar grid
@@ -170,10 +181,10 @@ async function renderCalendarWidget(): Promise<HTMLDivElement> {
   // Add navigation handlers
   setTimeout(() => {
     const prevBtn = calendar.querySelector(
-      "#cal-prev-btn"
+      "#cal-prev-btn",
     ) as HTMLButtonElement;
     const nextBtn = calendar.querySelector(
-      "#cal-next-btn"
+      "#cal-next-btn",
     ) as HTMLButtonElement;
     if (prevBtn) {
       prevBtn.onclick = async () => {
@@ -221,13 +232,15 @@ async function renderRecentActivity() {
   if (!statsDiv) return;
 
   // Pass userId as first argument
-  const dailySummary: DailySummaryRow[] = await ipcRenderer.invoke(
+  const dailySummary: DailySummaryRow[] = await safeIpcInvoke(
     "get-daily-summary",
-    getCurrentUserId()
+    [getCurrentUserId()],
+    { fallback: [] },
   );
-  const sessions: SessionRow[] = await ipcRenderer.invoke(
+  const sessions: SessionRow[] = await safeIpcInvoke(
     "get-sessions",
-    getCurrentUserId()
+    [getCurrentUserId()],
+    { fallback: [] },
   );
 
   // Get current week dates
@@ -241,11 +254,10 @@ async function renderRecentActivity() {
   // Top language of the week
   const startDate = getLocalDateString(weekDate[0]);
   const endDate = getLocalDateString(weekDate[6]);
-  const weeklyLangSummary = await ipcRenderer.invoke(
+  const weeklyLangSummary = await safeIpcInvoke<any[]>(
     "get-language-summary-by-date-range",
-    getCurrentUserId(),
-    startDate,
-    endDate
+    [getCurrentUserId(), startDate, endDate],
+    { fallback: [] },
   );
   // weeklyLangSummary: Array<{ language: string, total_time: number }>
   const topLang = weeklyLangSummary[0];
@@ -273,7 +285,7 @@ async function renderRecentActivity() {
 
   // 3 largest sessions of the week
   const weekSessions = sessions.filter((s: SessionRow) =>
-    weekDates.includes(getLocalDateString(new Date(s.timestamp)))
+    weekDates.includes(getLocalDateString(new Date(s.timestamp))),
   );
   const topSessions = weekSessions
     .sort((a: SessionRow, b: SessionRow) => b.duration - a.duration)
@@ -324,7 +336,7 @@ async function renderRecentActivity() {
               ? `<span class="bubble-main">${topLang.language}</span>
                  ${topLangIconHtml}
                  <br><span class="bubble-sub">${Math.round(
-                   topLang.total_time / 60
+                   topLang.total_time / 60,
                  )} min</span>`
               : "—"
           }
@@ -337,7 +349,7 @@ async function renderRecentActivity() {
             topEditor && topEditorIcon
               ? `<img src="${topEditorIcon}" alt="${topEditorName}" class="editor-icon" title="${topEditorName}" style="width:36px;height:36px;vertical-align:middle;border-radius:8px;margin-bottom:6px;"><br>
                 <span class="bubble-sub">${Math.round(
-                  topEditor[1] / 60
+                  topEditor[1] / 60,
                 )} min</span>`
               : "—"
           }
@@ -355,10 +367,10 @@ async function renderRecentActivity() {
               <span class="bubble-main">
                 ${s.title}
                 <span class="bubble-duration">${Math.floor(s.duration / 60)}m ${
-                        s.duration % 60
-                      }s</span>
+                  s.duration % 60
+                }s</span>
               </span>
-            </div>`
+            </div>`,
                   )
                   .join("")
               : "—"
@@ -368,8 +380,8 @@ async function renderRecentActivity() {
       <div class="dashboard-bubble bubble-streak">
         <div class="bubble-label">Longest Streak</div>
         <div class="bubble-value"><span class="bubble-main">${maxStreak}</span><br><span class="bubble-sub">day${
-    maxStreak === 1 ? "" : "s"
-  }</span></div>
+          maxStreak === 1 ? "" : "s"
+        }</span></div>
       </div>
     </div>
   `;

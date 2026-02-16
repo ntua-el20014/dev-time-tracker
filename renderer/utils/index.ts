@@ -15,3 +15,6 @@ export * from "./sessionExporter";
 
 // Performance utilities
 export * from "./performance";
+
+// IPC error handling utilities
+export * from "./ipcHelpers";
