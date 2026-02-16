@@ -26,7 +26,7 @@ interface AuthFormData {
  */
 export async function renderLandingPage(
   container: HTMLElement,
-  onAuthSuccess?: (session: any) => void
+  onAuthSuccess?: (session: any) => void,
 ) {
   // Initialize OAuth listener for callback handling
   if (onAuthSuccess) {
@@ -45,7 +45,7 @@ export async function renderLandingPage(
     // If it's a fetch error, show a warning
     if (error.message && error.message.includes("fetch")) {
       showInAppNotification(
-        "Warning: Unable to connect to authentication service. Using offline mode."
+        "Warning: Unable to connect to authentication service. Using offline mode.",
       );
     }
   }
@@ -63,11 +63,6 @@ export async function renderLandingPage(
           <div class="icon">✨</div>
           <div class="label">Sign Up</div>
           <div class="description">Create a new account to start tracking your coding sessions</div>
-        </div>
-        <div class="auth-option" id="testUserLandingOption" style="border: 2px dashed #ff6b6b; opacity: 0.8;">
-          <div class="icon">🧪</div>
-          <div class="label">Test Users</div>
-          <div class="description">Testing only - Go to user landing page</div>
         </div>
       </div>
       <div id="authError" class="error-message" style="display: none;"></div>
@@ -95,33 +90,12 @@ export async function renderLandingPage(
   signupOption?.addEventListener("click", () => {
     showAuthModal("signup", onAuthSuccess, showError);
   });
-
-  // Handle test user landing option click (temporary testing button)
-  const testUserLandingOption = container.querySelector(
-    "#testUserLandingOption"
-  );
-  testUserLandingOption?.addEventListener("click", async () => {
-    // Import UserLanding component dynamically
-    const { renderUserLanding } = await import("./UserLanding");
-    container.innerHTML = "";
-    renderUserLanding(container, (userId) => {
-      if (onAuthSuccess) {
-        const fakeSession = {
-          user: {
-            id: userId,
-            email: "test@local.dev",
-          },
-        };
-        onAuthSuccess(fakeSession);
-      }
-    });
-  });
 }
 
 async function showAuthModal(
   type: "login" | "signup",
   onSuccess?: (session: any) => void,
-  onError?: (message: string) => void
+  onError?: (message: string) => void,
 ) {
   const title = type === "login" ? "Login" : "Sign Up";
   const fields: any[] = [
@@ -276,7 +250,7 @@ async function showAuthModal(
         if (type === "login") {
           const result = await signInWithEmail(
             authData.email,
-            authData.password
+            authData.password,
           );
 
           // Store user ID in localStorage
@@ -293,7 +267,7 @@ async function showAuthModal(
           const result = await signUpWithEmail(
             authData.email,
             authData.password,
-            authData.username!
+            authData.username!,
           );
 
           // User profile is automatically created by database trigger
@@ -309,7 +283,7 @@ async function showAuthModal(
           showInAppNotification(
             result.session
               ? "Account created successfully!"
-              : "Account created! Please check your email for verification."
+              : "Account created! Please check your email for verification.",
           );
         }
       } catch (error: any) {
@@ -327,7 +301,7 @@ async function showAuthModal(
   if (type === "signup") {
     attachPasswordStrengthIndicator(
       'input[name="password"]',
-      "passwordStrengthIndicator"
+      "passwordStrengthIndicator",
     );
   }
 }
@@ -348,11 +322,11 @@ async function showPasswordResetModal() {
       try {
         await resetPasswordForEmail(values.email as string);
         showInAppNotification(
-          "Password reset link sent! Please check your email."
+          "Password reset link sent! Please check your email.",
         );
       } catch (error: any) {
         showInAppNotification(
-          `Error: ${error.message || "Failed to send reset email"}`
+          `Error: ${error.message || "Failed to send reset email"}`,
         );
       }
     },

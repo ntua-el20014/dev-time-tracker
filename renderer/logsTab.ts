@@ -1,7 +1,6 @@
-import { ipcRenderer } from "electron";
 import { formatTimeSpent } from "../src/utils/timeFormat";
 import type { LogEntry } from "@shared/types";
-import { getCurrentUserId } from "./utils";
+import { safeIpcInvoke } from "./utils";
 import { getLangIconUrl } from "../src/utils/extractData";
 import { showModal, showInAppNotification } from "./components";
 
@@ -17,7 +16,7 @@ export async function renderLogs(date?: string) {
 
   // --- Daily Goal UI ---
   let dailyGoalDiv = container.querySelector(
-    ".daily-goal-div"
+    ".daily-goal-div",
   ) as HTMLDivElement | null;
   if (!dailyGoalDiv) {
     dailyGoalDiv = document.createElement("div");
@@ -26,9 +25,11 @@ export async function renderLogs(date?: string) {
     container.insertBefore(dailyGoalDiv, container.firstChild);
   }
 
-  const userId = getCurrentUserId();
   const today = date || new Date().toLocaleDateString("en-CA");
-  const dailyGoal = await ipcRenderer.invoke("get-daily-goal", userId, today);
+  const dailyGoal = await safeIpcInvoke("get-daily-goal", [today], {
+    fallback: null,
+    showNotification: false,
+  });
 
   dailyGoalDiv.innerHTML = "";
 
@@ -39,8 +40,8 @@ export async function renderLogs(date?: string) {
       <span class="daily-goal-info${completed ? " completed" : ""}">
         <span class="goal-label">🎯 Daily goal</span>
         <b>${dailyGoal.time}</b> mins${
-      dailyGoal.description ? ": " + escapeHtml(dailyGoal.description) : ""
-    }
+          dailyGoal.description ? ": " + escapeHtml(dailyGoal.description) : ""
+        }
         ${completed ? '<span class="goal-completed">(Completed)</span>' : ""}
       </span>
       <button id="deleteDailyGoalBtn" class="btn-delete">Delete</button>
@@ -48,7 +49,7 @@ export async function renderLogs(date?: string) {
     dailyGoalDiv
       .querySelector("#deleteDailyGoalBtn")
       ?.addEventListener("click", async () => {
-        await ipcRenderer.invoke("delete-daily-goal", userId, today);
+        await safeIpcInvoke("delete-daily-goal", [today], { fallback: null });
         showInAppNotification("Daily goal deleted.");
         renderLogs(date);
       });
@@ -76,11 +77,11 @@ export async function renderLogs(date?: string) {
           const endOfDay = new Date(now);
           endOfDay.setHours(23, 59, 59, 999);
           const maxMins = Math.floor(
-            (endOfDay.getTime() - now.getTime()) / 60000
+            (endOfDay.getTime() - now.getTime()) / 60000,
           );
           if (isNaN(mins) || mins < 5 || mins > maxMins) {
             showInAppNotification(
-              `Goal must be between 5 and ${maxMins} minutes.`
+              `Goal must be between 5 and ${maxMins} minutes.`,
             );
             return;
           } else if (maxMins <= 5) {
@@ -88,12 +89,10 @@ export async function renderLogs(date?: string) {
             return;
           }
 
-          await ipcRenderer.invoke(
+          await safeIpcInvoke(
             "set-daily-goal",
-            userId,
-            today,
-            mins,
-            values.description || ""
+            [today, mins, values.description || ""],
+            { fallback: null },
           );
           showInAppNotification("Daily goal set!");
           renderLogs(date);
@@ -119,13 +118,15 @@ export async function renderLogs(date?: string) {
   todayTitle.style.color = "var(--accent)";
   container.insertBefore(todayTitle, container.firstChild);
 
-  const logs = (await ipcRenderer.invoke(
-    "get-logs",
-    getCurrentUserId(),
-    date
-  )) as LogEntry[];
+  // Show loading while fetching logs
   const tbody = document.querySelector("#logTable tbody");
   if (!tbody) return;
+  tbody.innerHTML =
+    '<tr><td colspan="5"><div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading logs…</span></div></td></tr>';
+
+  const logs = await safeIpcInvoke<LogEntry[]>("get-logs", [date], {
+    fallback: [],
+  });
 
   tbody.innerHTML = "";
   logs.forEach((log) => {
@@ -134,13 +135,13 @@ export async function renderLogs(date?: string) {
     const row = document.createElement("tr");
     row.innerHTML = `
       <td><img src="${log.icon}" alt="${escapeHtml(
-      log.app
-    )} icon" class="icon" /></td>
+        log.app,
+      )} icon" class="icon" /></td>
       <td>${escapeHtml(log.app)}</td>
       <td>${
         langIcon
           ? `<img src="${langIcon}" alt="${escapeHtml(
-              log.language
+              log.language,
             )}" class="lang-icon" />`
           : ""
       }</td>

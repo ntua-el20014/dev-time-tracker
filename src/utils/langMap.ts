@@ -1,37 +1,50 @@
 // utils/langMap.ts (attaches handlers)
-import { shell, app, ipcMain } from 'electron';
-import fs from 'fs';
-import path from 'path';
+import { shell, app, ipcMain } from "electron";
+import fs from "fs";
+import path from "path";
+import { getCurrentUser } from "../supabase/api";
 
-function getUserLangPath(userId: number) {
-  return path.join(app.getPath('userData'), `lang-${userId}.json`);
+function getUserLangPath(userId: string) {
+  return path.join(app.getPath("userData"), `lang-${userId}.json`);
 }
 
-function ensureLangJson(userId: number) {
+function ensureLangJson(userId: string) {
   const userLangPath = getUserLangPath(userId);
   if (!fs.existsSync(userLangPath)) {
-    fs.writeFileSync(userLangPath, '{}', 'utf-8');
+    fs.writeFileSync(userLangPath, "{}", "utf-8");
   }
 }
 
-function loadUserLangMap(userId: number) {
+function loadUserLangMap(userId: string) {
   ensureLangJson(userId);
   try {
-    const raw = fs.readFileSync(getUserLangPath(userId), 'utf-8');
+    const raw = fs.readFileSync(getUserLangPath(userId), "utf-8");
     return JSON.parse(raw);
   } catch {
     return {};
   }
 }
 
-ipcMain.handle('get-user-lang-map', (_event, userId: number) => {
-  return loadUserLangMap(userId);
+ipcMain.handle("get-user-lang-map", async (_event, userId?: string) => {
+  let uid = userId;
+  if (!uid) {
+    const user = await getCurrentUser();
+    if (!user) return {};
+    uid = user.id;
+  }
+  return loadUserLangMap(uid);
 });
 
-ipcMain.handle('open-lang-json', (_event, userId: number) => {
-  const userLangPath = getUserLangPath(userId);
+ipcMain.handle("open-lang-json", async (_event, userId?: string) => {
+  let uid = userId;
+  if (!uid) {
+    const user = await getCurrentUser();
+    if (!user) return;
+    uid = user.id;
+  }
+  const userLangPath = getUserLangPath(uid);
   if (!fs.existsSync(userLangPath)) {
-    fs.writeFileSync(userLangPath, '{}', 'utf-8');
+    fs.writeFileSync(userLangPath, "{}", "utf-8");
   }
   shell.openPath(userLangPath);
 });

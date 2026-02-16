@@ -26,51 +26,49 @@ import type {
 // =====================================================
 
 export async function getCurrentOrganization(): Promise<Organization | null> {
-  const userId = getCurrentUserIdSafe();
-  return await ipcRenderer.invoke("org:get-current", userId);
+  return await ipcRenderer.invoke("org:get-current");
 }
 
 export async function getOrganizationById(
-  orgId: string
+  orgId: string,
 ): Promise<OrganizationWithStats | null> {
   return await ipcRenderer.invoke("org:get-by-id", orgId);
 }
 
 export async function getOrganizationMembers(
-  orgId: string
+  orgId: string,
 ): Promise<UserProfile[]> {
   return await ipcRenderer.invoke("org:get-members", orgId);
 }
 
 export async function createTeamOrganization(
-  data: CreateOrganizationData
+  data: CreateOrganizationData,
 ): Promise<Organization> {
   return await ipcRenderer.invoke("org:create-team", data);
 }
 
 export async function updateOrganization(
   orgId: string,
-  updates: Partial<CreateOrganizationData>
+  updates: Partial<CreateOrganizationData>,
 ): Promise<Organization> {
   return await ipcRenderer.invoke("org:update", orgId, updates);
 }
 
 export async function updateUserRole(
   userId: string,
-  role: "admin" | "manager" | "employee"
+  role: "admin" | "manager" | "employee",
 ): Promise<UserProfile> {
   return await ipcRenderer.invoke("org:update-user-role", userId, role);
 }
 
 export async function removeUserFromOrganization(
-  userId: string
+  userId: string,
 ): Promise<void> {
   return await ipcRenderer.invoke("org:remove-user", userId);
 }
 
 export async function getCurrentUserProfile(): Promise<UserProfile | null> {
-  const userId = getCurrentUserIdSafe();
-  return await ipcRenderer.invoke("org:get-current-user-profile", userId);
+  return await ipcRenderer.invoke("org:get-current-user-profile");
 }
 
 // =====================================================
@@ -78,22 +76,19 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
 // =====================================================
 
 export async function requestToJoinOrganization(
-  orgId: string
+  orgId: string,
 ): Promise<OrgJoinRequest> {
-  const userId = getCurrentUserIdSafe();
-  return await ipcRenderer.invoke("org:request-join", orgId, userId);
+  return await ipcRenderer.invoke("org:request-join", orgId);
 }
 
 export async function getMyJoinRequests(): Promise<OrgJoinRequestWithUser[]> {
-  const userId = getCurrentUserIdSafe();
-  return await ipcRenderer.invoke("org:get-my-requests", userId);
+  return await ipcRenderer.invoke("org:get-my-requests");
 }
 
 export async function getPendingJoinRequests(): Promise<
   OrgJoinRequestWithUser[]
 > {
-  const userId = getCurrentUserIdSafe();
-  return await ipcRenderer.invoke("org:get-pending-requests", userId);
+  return await ipcRenderer.invoke("org:get-pending-requests");
 }
 
 export async function approveJoinRequest(requestId: string): Promise<void> {
@@ -105,8 +100,7 @@ export async function rejectJoinRequest(requestId: string): Promise<void> {
 }
 
 export async function cancelJoinRequest(requestId: string): Promise<void> {
-  const userId = getCurrentUserIdSafe();
-  return await ipcRenderer.invoke("org:cancel-request", requestId, userId);
+  return await ipcRenderer.invoke("org:cancel-request", requestId);
 }
 
 // =====================================================
@@ -143,7 +137,7 @@ export async function getOrganizationProjects(): Promise<
         username,
         email
       )
-    `
+    `,
     )
     .eq("org_id", userOrgId)
     .order("created_at", { ascending: false });
@@ -153,74 +147,73 @@ export async function getOrganizationProjects(): Promise<
 }
 
 export async function getCloudProjectById(
-  projectId: string
+  projectId: string,
 ): Promise<CloudProjectWithManager | null> {
   return await ipcRenderer.invoke("org:get-project-by-id", projectId);
 }
 
 export async function getCloudProjectByLocalId(
-  localId: string
+  localId: string,
 ): Promise<CloudProject | null> {
   return await ipcRenderer.invoke("org:get-project-by-local-id", localId);
 }
 
 export async function createCloudProject(
-  data: CreateCloudProjectData
+  data: CreateCloudProjectData,
 ): Promise<CloudProject> {
-  const userId = getCurrentUserIdSafe();
-  return await ipcRenderer.invoke("org:create-project", data, userId);
+  return await ipcRenderer.invoke("org:create-project", data);
 }
 
 export async function updateCloudProject(
   projectId: string,
-  updates: UpdateCloudProjectData
+  updates: UpdateCloudProjectData,
 ): Promise<CloudProject> {
   return await ipcRenderer.invoke("org:update-project", projectId, updates);
 }
 
 export async function linkLocalProject(
   cloudProjectId: string,
-  localId: string
+  localId: string,
 ): Promise<CloudProject> {
   return await ipcRenderer.invoke(
     "org:link-local-project",
     cloudProjectId,
-    localId
+    localId,
   );
 }
 
 export async function getProjectMembers(
-  projectId: string
+  projectId: string,
 ): Promise<ProjectMember[]> {
   return await ipcRenderer.invoke("org:get-project-members", projectId);
 }
 
 export async function assignMemberToProject(
-  data: AssignProjectMemberData
+  data: AssignProjectMemberData,
 ): Promise<ProjectMember> {
   return await ipcRenderer.invoke("org:assign-project-member", data);
 }
 
 export async function removeMemberFromProject(
   projectId: string,
-  userId: string
+  userId: string,
 ): Promise<void> {
   return await ipcRenderer.invoke(
     "org:remove-project-member",
     projectId,
-    userId
+    userId,
   );
 }
 
 export async function updateProjectMemberRole(
   projectId: string,
   userId: string,
-  role: "manager" | "member"
+  role: "manager" | "member",
 ): Promise<ProjectMember> {
   return await ipcRenderer.invoke(
     "org:update-project-member-role",
     projectId,
     userId,
-    role
+    role,
   );
 }

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { ipcRenderer } from "electron";
-import { getMonday, filterDailyDataForWeek, getCurrentUserId } from "./utils";
+import { getMonday, filterDailyDataForWeek, safeIpcInvoke } from "./utils";
 import {
   renderTimelineChart,
   renderCustomChartsSection,
@@ -28,10 +28,16 @@ export async function renderSummary() {
   if (!summaryDiv) return;
   summaryDiv.innerHTML = "";
 
-  summaryState.allDailyData = await ipcRenderer.invoke(
-    "get-daily-summary",
-    getCurrentUserId()
-  );
+  // Show loading spinner
+  summaryDiv.innerHTML =
+    '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading summary…</span></div>';
+
+  summaryState.allDailyData = await safeIpcInvoke("get-daily-summary", [], {
+    fallback: [],
+  });
+
+  summaryDiv.innerHTML = "";
+
   if (!summaryState.allDailyData || summaryState.allDailyData.length === 0) {
     summaryDiv.innerHTML = "<p>No summary data available.</p>";
     return;
@@ -45,10 +51,10 @@ export async function renderSummary() {
     weeklySummaryContainer.innerHTML = "";
     const weekData = filterDailyDataForWeek(
       summaryState.allDailyData,
-      summaryState.currentWeekMonday
+      summaryState.currentWeekMonday,
     );
     weeklySummaryContainer.appendChild(
-      renderTimelineChart(weekData, summaryState.currentWeekMonday)
+      renderTimelineChart(weekData, summaryState.currentWeekMonday),
     );
     attachWeekNavHandlers();
   }
@@ -56,16 +62,16 @@ export async function renderSummary() {
   // Attach navigation button handlers
   function attachWeekNavHandlers() {
     const prevBtn = weeklySummaryContainer.querySelector(
-      "#week-prev-btn"
+      "#week-prev-btn",
     ) as HTMLButtonElement;
     const nextBtn = weeklySummaryContainer.querySelector(
-      "#week-next-btn"
+      "#week-next-btn",
     ) as HTMLButtonElement;
     if (prevBtn) {
       prevBtn.onclick = () => {
         // Go to previous week
         summaryState.currentWeekMonday.setDate(
-          summaryState.currentWeekMonday.getDate() - 7
+          summaryState.currentWeekMonday.getDate() - 7,
         );
         updateWeeklySummary();
       };
@@ -112,7 +118,7 @@ export async function renderSummary() {
   await renderByDateView(
     byDateContainer,
     summaryState.allDailyData,
-    summaryState.byDateView
+    summaryState.byDateView,
   );
   summaryDiv.appendChild(byDateContainer);
   summaryDiv.appendChild(bySessionContainer);
@@ -137,7 +143,7 @@ export async function renderSummary() {
     await renderByDateView(
       byDateContainer,
       summaryState.allDailyData,
-      summaryState.byDateView
+      summaryState.byDateView,
     );
   };
   bySessionBtn.onclick = async () => {

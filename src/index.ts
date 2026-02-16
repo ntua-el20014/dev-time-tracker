@@ -13,16 +13,44 @@ import {
   markNotificationSent,
 } from "./supabase/scheduledSessions";
 import { getCurrentUser } from "./supabase/api";
-import "./ipc/supabase/sessionHandlers";
-import "./ipc/supabase/usageHandlers";
-import "./ipc/supabase/tagHandlers";
-import "./ipc/supabase/goalHandlers";
-import "./ipc/supabase/scheduledSessionHandlers";
-import "./ipc/supabase/preferencesHandlers";
+import { supabase } from "./supabase/config";
+import "./ipc/sessionHandlers";
+import "./ipc/usageHandlers";
+import "./ipc/tagHandlers";
+import "./ipc/goalHandlers";
+import "./ipc/scheduledSessionHandlers";
+import "./ipc/preferencesHandlers";
 import "./ipc/projectHandlers";
 import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";
+import "./ipc/exportHandlers";
 import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
+
+// Sync auth session from renderer to main process
+// The renderer has localStorage and holds the Supabase session;
+// the main process needs the tokens to make authenticated API calls.
+ipcMain.handle(
+  "sync-auth-session",
+  async (
+    _event,
+    tokens: { access_token: string; refresh_token: string } | null,
+  ) => {
+    if (tokens) {
+      const { error } = await supabase.auth.setSession({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+      });
+      if (error) {
+        return false;
+      }
+      return true;
+    } else {
+      // Sign out in main process
+      await supabase.auth.signOut();
+      return true;
+    }
+  },
+);
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -96,8 +124,11 @@ app.whenReady().then(() => {
   }, 60 * 1000); // Every minute
 });
 
-async function trackActiveWindow(userId: string) {
+async function trackActiveWindow() {
   try {
+    const user = await getCurrentUser();
+    if (!user) return;
+
     const window = activeWindow(); // Synchronous
     const icon = window.getIcon().data;
     const execName = window?.info?.execName?.toLowerCase();
@@ -113,7 +144,7 @@ async function trackActiveWindow(userId: string) {
 
     // Pass langExt to logUsage (Supabase version)
     await logUsage(
-      userId,
+      user.id,
       editor.name || "Unknown",
       title,
       language,
@@ -248,10 +279,10 @@ function createWindow() {
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 }
 
-ipcMain.handle("start-tracking", (_event, userId: number | string) => {
+ipcMain.handle("start-tracking", (_event) => {
   if (!trackingInterval) {
     trackingInterval = setInterval(
-      () => trackActiveWindow(String(userId)),
+      () => trackActiveWindow(),
       intervalSeconds * 1000,
     );
   }
@@ -275,18 +306,18 @@ ipcMain.handle("pause-tracking", () => {
   }
 });
 
-ipcMain.handle("resume-tracking", (_event, userId: number | string) => {
+ipcMain.handle("resume-tracking", (_event) => {
   if (isPaused) {
     lastActiveTimestamp = new Date();
     trackingInterval = setInterval(
-      () => trackActiveWindow(String(userId)),
+      () => trackActiveWindow(),
       intervalSeconds * 1000,
     );
     isPaused = false;
   }
 });
 
-ipcMain.handle("stop-tracking", async (_event, userId: number | string) => {
+ipcMain.handle("stop-tracking", async (_event) => {
   if (trackingInterval) {
     clearInterval(trackingInterval);
     trackingInterval = null;
@@ -310,6 +341,9 @@ ipcMain.handle("stop-tracking", async (_event, userId: number | string) => {
   if (sessionStart && sessionEnd) {
     if (duration >= 10) {
       // Only record if >= 10 seconds
+      const user = await getCurrentUser();
+      if (!user) return;
+
       // Ask renderer for session title/description
       const getSessionInfo = () =>
         new Promise<{
@@ -329,7 +363,7 @@ ipcMain.handle("stop-tracking", async (_event, userId: number | string) => {
       if (title && title.trim() !== "") {
         const start_time = sessionStart.toISOString();
         await addSession(
-          String(userId),
+          user.id,
           start_time,
           duration,
           title,
@@ -362,11 +396,11 @@ ipcMain.on("auto-pause", () => {
   }
 });
 
-ipcMain.on("auto-resume", (_event, userId: number | string) => {
+ipcMain.on("auto-resume", (_event) => {
   if (isPaused) {
     lastActiveTimestamp = new Date();
     trackingInterval = setInterval(
-      () => trackActiveWindow(String(userId)),
+      () => trackActiveWindow(),
       intervalSeconds * 1000,
     );
     isPaused = false;

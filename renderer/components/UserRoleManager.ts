@@ -2,6 +2,7 @@ import { ipcRenderer } from "electron";
 import { UserRole } from "../../shared/types";
 import { showConfirmationModal } from "./Modals";
 import { showInAppNotification } from "./Notifications";
+import { safeIpcInvoke } from "../utils/ipcHelpers";
 
 interface User {
   id: number;
@@ -11,7 +12,10 @@ interface User {
 }
 
 export async function renderUserRoleManager(container: HTMLElement) {
-  const users: User[] = await ipcRenderer.invoke("get-all-users");
+  const users: User[] = await safeIpcInvoke("get-all-users", [], {
+    fallback: [],
+    errorMessage: "Failed to load users",
+  });
 
   container.innerHTML = `
     <div class="user-role-manager">
@@ -57,14 +61,14 @@ export async function renderUserRoleManager(container: HTMLElement) {
                       user.id
                     }" data-current-role="${user.role}"></div>
                     <button class="update-role-btn" data-user-id="${user.id}" ${
-                  user.id === 1 ? "disabled" : ""
-                }>
+                      user.id === 1 ? "disabled" : ""
+                    }>
                       Update
                     </button>
                   </div>
                 </td>
               </tr>
-            `
+            `,
               )
               .join("")}
           </tbody>
@@ -136,12 +140,12 @@ export async function renderUserRoleManager(container: HTMLElement) {
       // Prevent removing the last admin
       if (currentRole === UserRole.ADMIN && newRole !== UserRole.ADMIN) {
         const adminCount = users.filter(
-          (u) => u.role === UserRole.ADMIN
+          (u) => u.role === UserRole.ADMIN,
         ).length;
         if (adminCount <= 1) {
           showInAppNotification(
             "Cannot remove the last admin. There must be at least one admin user.",
-            5000
+            5000,
           );
           roleDropdown.setValue(currentRole); // Reset the dropdown
           return;
@@ -153,7 +157,7 @@ export async function renderUserRoleManager(container: HTMLElement) {
         message: `Are you sure you want to change ${
           user.username
         }'s role from ${getRoleDisplayName(
-          currentRole
+          currentRole,
         )} to ${getRoleDisplayName(newRole)}?`,
         confirmText: "Update Role",
         cancelText: "Cancel",
@@ -163,7 +167,7 @@ export async function renderUserRoleManager(container: HTMLElement) {
 
             // Update the UI
             const roleBadge = container.querySelector(
-              `tr[data-user-id="${userId}"] .role-badge`
+              `tr[data-user-id="${userId}"] .role-badge`,
             );
             if (roleBadge) {
               roleBadge.className = `role-badge role-${newRole}`;
@@ -176,12 +180,12 @@ export async function renderUserRoleManager(container: HTMLElement) {
               `Successfully updated ${
                 user.username
               }'s role to ${getRoleDisplayName(newRole)}.`,
-              3000
+              3000,
             );
           } catch (error) {
             showInAppNotification(
               "Failed to update user role. Please try again.",
-              5000
+              5000,
             );
             roleDropdown.setValue(currentRole); // Reset the dropdown on error
           }

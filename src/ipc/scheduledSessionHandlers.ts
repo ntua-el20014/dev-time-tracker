@@ -1,101 +1,193 @@
 import { ipcMain } from "electron";
-import * as scheduledSessions from "../backend/scheduledSessions";
-import { ScheduledSession } from "@shared/types";
+import * as scheduledSessions from "../supabase/scheduledSessions";
+import { getCurrentUser } from "../supabase/api";
+import type { ScheduledSessionData } from "../supabase/scheduledSessions";
 
+/**
+ * Create a new scheduled session
+ */
 ipcMain.handle(
   "create-scheduled-session",
-  async (
-    _event,
-    scheduledSession: Omit<ScheduledSession, "id" | "created_at">
-  ) => {
+  async (_event, scheduledSession: ScheduledSessionData) => {
     try {
-      return scheduledSessions.createScheduledSession(scheduledSession);
+      // Get current authenticated user
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      return await scheduledSessions.createScheduledSession(
+        user.id,
+        scheduledSession,
+      );
     } catch (err) {
+      // Error creating scheduled session
       return null;
     }
-  }
+  },
 );
 
+/**
+ * Get scheduled sessions with optional filters
+ */
 ipcMain.handle(
   "get-scheduled-sessions",
   async (
     _event,
-    userId: number,
     filters?: {
       startDate?: string;
       endDate?: string;
-      status?: ScheduledSession["status"][];
+      status?: Array<
+        "pending" | "notified" | "completed" | "missed" | "cancelled"
+      >;
+      projectId?: number | string;
       includeRecurring?: boolean;
-    }
+    },
   ) => {
     try {
-      return scheduledSessions.getScheduledSessions(userId, filters);
+      // Get current authenticated user
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      // Convert filters to Supabase format
+      const supabaseFilters: any = {};
+
+      if (filters) {
+        if (filters.startDate) supabaseFilters.startDate = filters.startDate;
+        if (filters.endDate) supabaseFilters.endDate = filters.endDate;
+        if (filters.status) supabaseFilters.status = filters.status;
+        if (filters.projectId) {
+          supabaseFilters.projectId = String(filters.projectId);
+        }
+        // Note: includeRecurring is not yet implemented in Supabase API
+      }
+
+      return await scheduledSessions.getScheduledSessions(
+        user.id,
+        supabaseFilters,
+      );
     } catch (err) {
+      // Error getting scheduled sessions
       return [];
     }
-  }
+  },
 );
 
+/**
+ * Update a scheduled session
+ */
 ipcMain.handle(
   "update-scheduled-session",
   async (
     _event,
-    userId: number,
-    id: number,
-    updates: Partial<Omit<ScheduledSession, "id" | "user_id" | "created_at">>
+    id: number | string,
+    updates: Partial<ScheduledSessionData>,
   ) => {
     try {
-      return scheduledSessions.updateScheduledSession(userId, id, updates);
+      // Get current authenticated user
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      const sessionId = String(id);
+      await scheduledSessions.updateScheduledSession(sessionId, updates);
+      return true;
     } catch (err) {
+      // Error updating scheduled session
       return false;
     }
-  }
+  },
 );
 
+/**
+ * Delete a scheduled session
+ */
 ipcMain.handle(
   "delete-scheduled-session",
-  async (_event, userId: number, id: number) => {
+  async (_event, id: number | string) => {
     try {
-      return scheduledSessions.deleteScheduledSession(userId, id);
+      // Get current authenticated user
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      const sessionId = String(id);
+      await scheduledSessions.deleteScheduledSession(sessionId);
+      return true;
     } catch (err) {
+      // Error deleting scheduled session
       return false;
     }
-  }
+  },
 );
 
+/**
+ * Mark a scheduled session as completed
+ */
 ipcMain.handle(
   "mark-scheduled-session-completed",
   async (
     _event,
-    userId: number,
-    scheduledSessionId: number,
-    actualSessionId: number
+    scheduledSessionId: number | string,
+    actualSessionId: number | string,
   ) => {
     try {
-      return scheduledSessions.markScheduledSessionCompleted(
-        userId,
-        scheduledSessionId,
-        actualSessionId
+      // Get current authenticated user
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      const scheduledId = String(scheduledSessionId);
+      const actualId = String(actualSessionId);
+
+      await scheduledSessions.markScheduledSessionCompleted(
+        scheduledId,
+        actualId,
       );
+      return true;
     } catch (err) {
+      // Error marking session as completed
       return false;
     }
-  }
+  },
 );
 
+/**
+ * Get upcoming sessions that need notifications
+ */
 ipcMain.handle("get-upcoming-session-notifications", async (_event) => {
   try {
-    return scheduledSessions.getUpcomingSessionsForNotification();
+    // Get current authenticated user
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    return await scheduledSessions.getUpcomingSessionNotifications(user.id);
   } catch (err) {
+    // Error getting notifications
     return [];
   }
 });
 
-ipcMain.handle("mark-notification-sent", async (_event, sessionId: number) => {
-  try {
-    scheduledSessions.markNotificationSent(sessionId);
-    return true;
-  } catch (err) {
-    return false;
-  }
-});
+/**
+ * Mark that a notification has been sent for a scheduled session
+ */
+ipcMain.handle(
+  "mark-notification-sent",
+  async (_event, sessionId: number | string) => {
+    try {
+      const sessionIdStr = String(sessionId);
+      await scheduledSessions.markNotificationSent(sessionIdStr);
+      return true;
+    } catch (err) {
+      // Error marking notification as sent
+      return false;
+    }
+  },
+);

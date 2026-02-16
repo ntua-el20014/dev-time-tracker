@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ipcRenderer } from "electron";
 import { applyAccentColor } from "./renderer";
 import {
   renderPercentBar,
@@ -18,6 +17,7 @@ import {
   addCustomAvatar,
   removeCustomAvatar,
   isCurrentUserAdmin,
+  safeIpcInvoke,
 } from "./utils";
 import { getLangIconUrl } from "../src/utils/extractData";
 import type { Tag } from "@shared/types";
@@ -31,15 +31,18 @@ function escapeHtml(text: string) {
 
 async function renderEditorUsage(container: HTMLElement) {
   type EditorUsageRow = { app: string; total_time: number };
-  const usage: EditorUsageRow[] = await ipcRenderer.invoke(
-    "get-editor-usage",
-    getCurrentUserId(),
-  );
+  const usage: EditorUsageRow[] = await safeIpcInvoke("get-editor-usage", [], {
+    fallback: [],
+  });
   if (!usage || usage.length === 0) {
     container.innerHTML = "<p>No data available.</p>";
     return;
   }
-  const config = await ipcRenderer.invoke("get-editor-colors");
+  const config: Record<string, string> = await safeIpcInvoke(
+    "get-editor-colors",
+    [],
+    { fallback: {} as Record<string, string> },
+  );
   const defaultColors = ["#4f8cff", "#ffb347", "#7ed957", "#ff6961", "#b19cd9"];
   const colorMap: { [key: string]: string } = {};
   usage.forEach((row: EditorUsageRow, i: number) => {
@@ -86,7 +89,7 @@ async function renderEditorUsage(container: HTMLElement) {
       const target = e.target as HTMLInputElement;
       const app = target.dataset.app;
       const color = target.value;
-      ipcRenderer.invoke("set-editor-color", app, color);
+      safeIpcInvoke("set-editor-color", [app, color], { fallback: null });
       refreshProfile();
     });
   });
@@ -94,9 +97,10 @@ async function renderEditorUsage(container: HTMLElement) {
 
 async function renderLanguageUsage(container: HTMLElement) {
   type LanguageUsageRow = { language: string; total_time: number };
-  const usage: LanguageUsageRow[] = await ipcRenderer.invoke(
+  const usage: LanguageUsageRow[] = await safeIpcInvoke(
     "get-language-usage",
-    getCurrentUserId(),
+    [],
+    { fallback: [] },
   );
   if (!usage || usage.length === 0) {
     container.innerHTML = "<p>No data available.</p>";
@@ -163,13 +167,15 @@ async function renderLanguageUsage(container: HTMLElement) {
   const openBtn = container.querySelector("#openLangJsonBtn");
   if (openBtn) {
     openBtn.addEventListener("click", () => {
-      ipcRenderer.invoke("open-lang-json", getCurrentUserId());
+      safeIpcInvoke("open-lang-json", [], { fallback: null });
     });
   }
 }
 
 async function renderSettings(container: HTMLElement) {
-  let idleTimeout = await ipcRenderer.invoke("get-idle-timeout");
+  let idleTimeout = await safeIpcInvoke("get-idle-timeout", [], {
+    fallback: 60,
+  });
   if (!idleTimeout || typeof idleTimeout !== "number") idleTimeout = 60;
 
   // Get current theme
@@ -179,17 +185,21 @@ async function renderSettings(container: HTMLElement) {
 
   // Get current user info
   const userId = getCurrentUserId();
-  const user = await ipcRenderer.invoke("get-user-info", userId);
+  const user: any = await safeIpcInvoke("get-user-info", [userId], {
+    fallback: null,
+  });
   const avatar = user?.avatar || "";
 
   // --- Avatar Picker Logic ---
-  const editors: { app: string; icon: string }[] = await ipcRenderer.invoke(
+  const editors: { app: string; icon: string }[] = await safeIpcInvoke(
     "get-user-editors",
-    userId,
+    [],
+    { fallback: [] },
   );
-  const langs: { lang_ext: string | null }[] = await ipcRenderer.invoke(
+  const langs: { lang_ext: string | null }[] = await safeIpcInvoke(
     "get-user-lang-exts",
-    userId,
+    [],
+    { fallback: [] },
   );
   const langIcons: string[] = [];
   for (const l of langs) {
@@ -203,19 +213,15 @@ async function renderSettings(container: HTMLElement) {
   const customAvatars = getCustomAvatars(userId);
 
   // --- Tag management ---
-  const tags: Tag[] = await ipcRenderer.invoke(
-    "get-all-tags",
-    getCurrentUserId(),
-  );
+  const tags: Tag[] = await safeIpcInvoke("get-all-tags", [], { fallback: [] });
 
   // --- Accent color management ---
   const theme: "dark" | "light" = document.body.classList.contains("light")
     ? "light"
     : "dark";
-  const accentColor: string = await ipcRenderer.invoke(
-    "get-accent-color",
-    theme,
-  );
+  const accentColor: string = await safeIpcInvoke("get-accent-color", [theme], {
+    fallback: "#f0db4f",
+  });
 
   // Build the complete HTML first, then set it all at once
   container.innerHTML = `
@@ -331,7 +337,7 @@ async function renderSettings(container: HTMLElement) {
     range.addEventListener("input", async () => {
       const seconds = parseInt(range.value, 10);
       valueSpan.textContent = (seconds / 60).toFixed(1) + " min";
-      await ipcRenderer.invoke("set-idle-timeout", seconds);
+      await safeIpcInvoke("set-idle-timeout", [seconds], { fallback: null });
     });
   } else {
     // Idle timeout elements not found - skip event listener setup
@@ -346,7 +352,7 @@ async function renderSettings(container: HTMLElement) {
         confirmText: "Delete",
         confirmClass: "btn-delete",
         onConfirm: async () => {
-          await ipcRenderer.invoke("delete-tag", getCurrentUserId(), tag);
+          await safeIpcInvoke("delete-tag", [tag], { fallback: null });
           renderSettings(container); // Refresh the list
         },
       });
@@ -371,7 +377,9 @@ async function renderSettings(container: HTMLElement) {
       message: `Apply new accent color ${colorToSave} for ${currentTheme} theme?`,
       confirmText: "Apply",
       onConfirm: async () => {
-        await ipcRenderer.invoke("set-accent-color", colorToSave, currentTheme);
+        await safeIpcInvoke("set-accent-color", [colorToSave, currentTheme], {
+          fallback: null,
+        });
         await applyAccentColor();
         window.dispatchEvent(new Event("theme-changed"));
         accentInput.value = colorToSave;
@@ -385,8 +393,12 @@ async function renderSettings(container: HTMLElement) {
       message: "Reset both accent colors to default values?",
       confirmText: "Reset",
       onConfirm: async () => {
-        await ipcRenderer.invoke("set-accent-color", "#f0db4f", "dark");
-        await ipcRenderer.invoke("set-accent-color", "#007acc", "light");
+        await safeIpcInvoke("set-accent-color", ["#f0db4f", "dark"], {
+          fallback: null,
+        });
+        await safeIpcInvoke("set-accent-color", ["#007acc", "light"], {
+          fallback: null,
+        });
         await applyAccentColor();
 
         // Always get the current theme at the moment of reset
@@ -395,9 +407,10 @@ async function renderSettings(container: HTMLElement) {
         )
           ? "light"
           : "dark";
-        const newAccent = await ipcRenderer.invoke(
+        const newAccent = await safeIpcInvoke(
           "get-accent-color",
-          currentTheme,
+          [currentTheme],
+          { fallback: "#f0db4f" },
         );
         accentInput.value = newAccent;
         if (accentInput.parentElement) {
@@ -411,12 +424,14 @@ async function renderSettings(container: HTMLElement) {
     const theme: "dark" | "light" = document.body.classList.contains("light")
       ? "light"
       : "dark";
-    ipcRenderer.invoke("get-accent-color", theme).then((color: string) => {
-      accentInput.value = color;
-      if (accentInput.parentElement) {
-        accentInput.parentElement.style.background = color;
-      }
-    });
+    safeIpcInvoke("get-accent-color", [theme], { fallback: "#f0db4f" }).then(
+      (color: string) => {
+        accentInput.value = color;
+        if (accentInput.parentElement) {
+          accentInput.parentElement.style.background = color;
+        }
+      },
+    );
   }
 
   window.addEventListener("theme-changed", updateAccentPickerForTheme);
@@ -459,12 +474,9 @@ async function renderSettings(container: HTMLElement) {
         selected: (chip as HTMLElement).style.backgroundColor,
         anchorEl: chip as HTMLElement,
         onSelect: async (color) => {
-          await ipcRenderer.invoke(
-            "set-tag-color",
-            getCurrentUserId(),
-            tagName,
-            color,
-          );
+          await safeIpcInvoke("set-tag-color", [tagName, color], {
+            fallback: null,
+          });
           renderSettings(container); // or rerender tag list
         },
       });
@@ -486,7 +498,7 @@ async function renderSettings(container: HTMLElement) {
       icons: Array.from(new Set([...editorIcons, ...langIcons])),
       customAvatars: customAvatars,
       onSelect: async (icon) => {
-        await ipcRenderer.invoke("set-user-avatar", userId, icon);
+        await safeIpcInvoke("set-user-avatar", [icon], { fallback: null });
         renderSettings(container);
       },
       onUpload: () => avatarInput.click(),
@@ -507,7 +519,7 @@ async function renderSettings(container: HTMLElement) {
         // Add to custom avatars collection
         addCustomAvatar(userId, dataUrl);
         // Set as current user avatar
-        await ipcRenderer.invoke("set-user-avatar", userId, dataUrl);
+        await safeIpcInvoke("set-user-avatar", [dataUrl], { fallback: null });
         renderSettings(container);
       };
       reader.readAsDataURL(file);
@@ -519,7 +531,7 @@ async function renderSettings(container: HTMLElement) {
   ) as HTMLButtonElement;
   if (removeAvatarBtn) {
     removeAvatarBtn.onclick = async () => {
-      await ipcRenderer.invoke("set-user-avatar", userId, "");
+      await safeIpcInvoke("set-user-avatar", [""], { fallback: null });
       renderSettings(container);
     };
   }
@@ -537,14 +549,13 @@ async function renderSettings(container: HTMLElement) {
 }
 
 async function renderDailyGoalHistory(container: HTMLElement) {
-  const userId = getCurrentUserId();
   // Fetch all daily goals for the user, newest first
   const goals: {
     date: string;
     time: number;
     description: string;
     isCompleted: number;
-  }[] = await ipcRenderer.invoke("get-all-daily-goals", userId);
+  }[] = await safeIpcInvoke("get-all-daily-goals", [], { fallback: [] });
 
   container.innerHTML = `
     <h2>Daily Goal History</h2>
@@ -622,6 +633,8 @@ export async function refreshProfile() {
   const buttons = profileDiv.querySelectorAll(".profile-chapter-btn");
 
   async function showChapter(chapter: string) {
+    contentDiv.innerHTML =
+      '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading…</span></div>';
     if (chapter === "editor") {
       await renderEditorUsage(contentDiv);
     } else if (chapter === "language") {

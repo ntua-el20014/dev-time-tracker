@@ -1,6 +1,6 @@
 import { ipcRenderer } from "electron";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
-import { escapeHtml, getCurrentUserId, prettyDate } from "../utils";
+import { escapeHtml, prettyDate, safeIpcInvoke } from "../utils";
 import { showChartConfigModal, showDetailsModal } from "../components";
 import { DateBasedPaginationManager, PageInfo } from "../utils/performance";
 import {
@@ -31,16 +31,16 @@ export function createByDateViewState(): ByDateViewState {
 export async function renderByDateView(
   container: HTMLElement,
   allDailyData: DailySummaryRow[],
-  state: ByDateViewState
+  state: ByDateViewState,
 ) {
   container.innerHTML = "";
 
   // Get unique languages and editors from allDailyData for dropdowns
   const uniqueLangs = Array.from(
-    new Set(allDailyData.map((r) => r.language).filter(Boolean))
+    new Set(allDailyData.map((r) => r.language).filter(Boolean)),
   );
   const uniqueApps = Array.from(
-    new Set(allDailyData.map((r) => r.app).filter(Boolean))
+    new Set(allDailyData.map((r) => r.app).filter(Boolean)),
   );
 
   // Create filter bar
@@ -50,7 +50,7 @@ export async function renderByDateView(
         type: "select",
         label: "Language",
         options: uniqueLangs.filter(
-          (lang): lang is string => lang !== undefined
+          (lang): lang is string => lang !== undefined,
         ),
       },
       "app-bydate": { type: "select", label: "Editor", options: uniqueApps },
@@ -66,18 +66,15 @@ export async function renderByDateView(
         filters.startDate = filterValues["start-bydate"];
       if (filterValues["end-bydate"])
         filters.endDate = filterValues["end-bydate"];
-      state.filteredData = await ipcRenderer.invoke(
-        "get-daily-summary",
-        getCurrentUserId(),
-        filters
-      );
+      state.filteredData = await safeIpcInvoke("get-daily-summary", [filters], {
+        fallback: [],
+      });
       renderByDateTable(container, state.filteredData, state);
     },
     onClear: async () => {
-      state.filteredData = await ipcRenderer.invoke(
-        "get-daily-summary",
-        getCurrentUserId()
-      );
+      state.filteredData = await safeIpcInvoke("get-daily-summary", [], {
+        fallback: [],
+      });
       renderByDateTable(container, state.filteredData, state);
     },
   });
@@ -106,10 +103,9 @@ export async function renderByDateView(
 
   // Initial data load
   if (!state.filteredData.length) {
-    state.filteredData = await ipcRenderer.invoke(
-      "get-daily-summary",
-      getCurrentUserId()
-    );
+    state.filteredData = await safeIpcInvoke("get-daily-summary", [], {
+      fallback: [],
+    });
   }
   renderByDateTable(container, state.filteredData, state);
 }
@@ -117,7 +113,7 @@ export async function renderByDateView(
 export function renderByDateTable(
   container: HTMLElement,
   data: DailySummaryRow[],
-  state: ByDateViewState
+  state: ByDateViewState,
 ) {
   // Remove old table and pagination if they exist
   const oldTable = container.querySelector(".details-container");
@@ -135,7 +131,7 @@ export function renderByDateTable(
       state.sortState.direction,
       (item) => {
         return new Date(item.date).getTime();
-      }
+      },
     );
   } else {
     // For non-date columns, we need to maintain date grouping but sort within each date
@@ -163,7 +159,7 @@ export function renderByDateTable(
             if (column === "time") return item.total_time;
             if (column === "language") return item.language || "";
             return String(item[column as keyof DailySummaryRow] || "");
-          }
+          },
         );
       });
     }
@@ -179,7 +175,7 @@ export function renderByDateTable(
       (pageData: DailySummaryRow[], pageInfo: PageInfo) => {
         renderByDatePage(container, pageData, state);
         updateByDatePaginationControls(container, pageInfo, state);
-      }
+      },
     );
   }
 
@@ -190,7 +186,7 @@ export function renderByDateTable(
 export function renderByDatePage(
   container: HTMLElement,
   dataToRender: DailySummaryRow[],
-  state: ByDateViewState
+  state: ByDateViewState,
 ) {
   // Remove old table if exists
   const oldTable = container.querySelector(".details-container");
@@ -250,11 +246,11 @@ export function renderByDatePage(
     rows.forEach((row: DailySummaryRow) => {
       tableContent += `
         <tr class="clickable-row" data-app="${escapeHtml(
-          row.app
+          row.app,
         )}" data-date="${row.date}">
           <td><img src="${row.icon}" alt="${escapeHtml(
-        row.app
-      )} icon" class="icon" /></td>
+            row.app,
+          )} icon" class="icon" /></td>
           <td>${escapeHtml(row.app)}</td>
           <td>${escapeHtml(formatTimeSpent(row.total_time))}</td>
         </tr>
@@ -294,11 +290,11 @@ export function renderByDatePage(
 export function updateByDatePaginationControls(
   container: HTMLElement,
   pageInfo: PageInfo,
-  state: ByDateViewState
+  state: ByDateViewState,
 ) {
   // Always remove any existing pagination containers first
   const oldPaginationContainers = container.querySelectorAll(
-    ".pagination-container"
+    ".pagination-container",
   );
   oldPaginationContainers.forEach((pc) => pc.remove());
 
@@ -341,7 +337,7 @@ export function updateByDatePaginationControls(
 export function handleByDateSort(
   container: HTMLElement,
   column: string,
-  state: ByDateViewState
+  state: ByDateViewState,
 ) {
   if (state.sortState.column === column) {
     state.sortState.direction =

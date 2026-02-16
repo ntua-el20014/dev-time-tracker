@@ -68,7 +68,7 @@ ipcMain.handle("get-all-users", async (_event) => {
  * In Supabase, the current user is always the authenticated user
  * This handler is kept for backwards compatibility but doesn't change the user
  */
-ipcMain.handle("set-current-user", async (_event, _userId: number | string) => {
+ipcMain.handle("set-current-user", async (_event) => {
   // In Supabase, current user is determined by authentication
   // This handler is deprecated but kept for compatibility
   return true;
@@ -118,17 +118,14 @@ ipcMain.handle("delete-user", async (_event, userId: number | string) => {
 /**
  * Set user avatar
  */
-ipcMain.handle(
-  "set-user-avatar",
-  async (_event, _userId: number | string, avatar: string) => {
-    try {
-      await updateUserProfileData({ avatar });
-      return true;
-    } catch (err) {
-      return false;
-    }
-  },
-);
+ipcMain.handle("set-user-avatar", async (_event, avatar: string) => {
+  try {
+    await updateUserProfileData({ avatar });
+    return true;
+  } catch (err) {
+    return false;
+  }
+});
 
 /**
  * Set user role (in organization)

@@ -1,11 +1,11 @@
-import { ipcRenderer } from "electron";
 import edit from "../../assets/edit.png";
-import { escapeHtml, getCurrentUserId, prettyDate } from "../utils";
+import { escapeHtml, prettyDate, safeIpcInvoke } from "../utils";
 import {
   showModal,
   showChartConfigModal,
   showConfirmationModal,
   showDetailsModal,
+  showSessionReviewPanel,
 } from "../components";
 import { PaginationManager, PageInfo } from "../utils/performance";
 import { createExportModal } from "../utils/sessionExporter";
@@ -36,31 +36,31 @@ export function createBySessionViewState(): BySessionViewState {
 
 export async function renderBySessionView(
   container: HTMLElement,
-  state: BySessionViewState
+  state: BySessionViewState,
 ) {
   container.innerHTML = "";
 
   // Fetch all tags and sessions for dropdowns
-  const allTags: Tag[] = await ipcRenderer.invoke(
-    "get-all-tags",
-    getCurrentUserId()
-  );
-  const allProjects = await ipcRenderer.invoke(
-    "get-user-projects",
-    getCurrentUserId()
-  );
+  const allTags: Tag[] = await safeIpcInvoke("get-all-tags", [], {
+    fallback: [],
+  });
+  const allProjects = await safeIpcInvoke("get-user-projects", [], {
+    fallback: [],
+  });
   let sessions: SessionRow[];
   if (state.filteredSessions.length) {
     sessions = state.filteredSessions;
   } else {
-    sessions = await ipcRenderer.invoke("get-sessions", getCurrentUserId());
+    sessions = await safeIpcInvoke("get-sessions", [], {
+      fallback: [],
+    });
     state.filteredSessions = sessions;
   }
 
   // Unique tags and projects for dropdowns
   const uniqueTags = Array.from(new Set(sessions.flatMap((s) => s.tags || [])));
   const uniqueProjects = Array.from(
-    new Set(sessions.filter((s) => s.project_name).map((s) => s.project_name!))
+    new Set(sessions.filter((s) => s.project_name).map((s) => s.project_name!)),
   );
 
   // Create filter bar
@@ -88,7 +88,7 @@ export async function renderBySessionView(
         // Convert project name to project ID
         const projectName = filterValues["project-session"];
         const project = allProjects.find(
-          (p: Project) => p.name === projectName
+          (p: Project) => p.name === projectName,
         );
         if (project) {
           filters.projectId = project.id;
@@ -102,19 +102,16 @@ export async function renderBySessionView(
         filters.startDate = filterValues["start-session"];
       if (filterValues["end-session"])
         filters.endDate = filterValues["end-session"];
-      const filtered = await ipcRenderer.invoke(
-        "get-sessions",
-        getCurrentUserId(),
-        filters
-      );
+      const filtered = await safeIpcInvoke("get-sessions", [filters], {
+        fallback: [],
+      });
       state.filteredSessions = filtered;
       renderSessionRows(container, filtered, state, allTags);
     },
     onClear: async () => {
-      state.filteredSessions = await ipcRenderer.invoke(
-        "get-sessions",
-        getCurrentUserId()
-      );
+      state.filteredSessions = await safeIpcInvoke("get-sessions", [], {
+        fallback: [],
+      });
       renderSessionRows(container, state.filteredSessions, state, allTags);
     },
   });
@@ -143,11 +140,26 @@ export async function renderBySessionView(
   exportSessionBtn.textContent = "📥 Export Data";
   exportSessionBtn.className = "create-chart-button";
   exportSessionBtn.onclick = () => {
-    createExportModal(getCurrentUserId());
+    createExportModal();
+  };
+
+  // Add review sessions button
+  const reviewSessionsBtn = document.createElement("button");
+  reviewSessionsBtn.textContent = "🔍 Review Sessions";
+  reviewSessionsBtn.className = "create-chart-button";
+  reviewSessionsBtn.onclick = () => {
+    showSessionReviewPanel(async () => {
+      // Refresh session list after deletions
+      state.filteredSessions = await safeIpcInvoke("get-sessions", [], {
+        fallback: [],
+      });
+      renderSessionRows(container, state.filteredSessions, state, allTags);
+    });
   };
 
   sessionTitle.appendChild(createSessionChartBtn);
   sessionTitle.appendChild(exportSessionBtn);
+  sessionTitle.appendChild(reviewSessionsBtn);
   container.appendChild(sessionTitle);
 
   const sessionTable = document.createElement("table");
@@ -183,7 +195,7 @@ export function handleSessionSort(
   container: HTMLElement,
   column: string,
   state: BySessionViewState,
-  allTags: Tag[]
+  allTags: Tag[],
 ) {
   if (state.sortState.column === column) {
     state.sortState.direction =
@@ -202,7 +214,7 @@ export function handleSessionSort(
 
 export function updateSessionTableHeaders(
   container: HTMLElement,
-  state: BySessionViewState
+  state: BySessionViewState,
 ) {
   const headers = container.querySelectorAll(".sortable-header");
   headers.forEach((header) => {
@@ -222,7 +234,7 @@ export function renderSessionRows(
   container: HTMLElement,
   sessionsToRender: SessionRow[],
   state: BySessionViewState,
-  allTags: Tag[]
+  allTags: Tag[],
 ) {
   // Apply current sorting if any
   let sortedSessions = sessionsToRender;
@@ -237,7 +249,7 @@ export function renderSessionRows(
         if (column === "duration") return item.duration || 0;
         if (column === "project") return item.project_name || "";
         return String(item[column as keyof SessionRow] || "");
-      }
+      },
     );
   }
 
@@ -248,7 +260,7 @@ export function renderSessionRows(
       (pageData, pageInfo) => {
         renderSessionPage(container, pageData, state, allTags);
         updatePaginationControls(container, pageInfo, state);
-      }
+      },
     );
   }
 
@@ -260,7 +272,7 @@ export function renderSessionPage(
   container: HTMLElement,
   sessionsToRender: SessionRow[],
   state: BySessionViewState,
-  allTags: Tag[]
+  allTags: Tag[],
 ) {
   const sessionTableBody = container.querySelector("#sessionTableBody");
   if (!sessionTableBody) return;
@@ -288,11 +300,11 @@ export function renderSessionPage(
                 const color =
                   tagObj?.color ||
                   getComputedStyle(document.body).getPropertyValue(
-                    "--accent"
+                    "--accent",
                   ) ||
                   "#f0db4f";
                 return `<span class="session-tag" style="background:${color}">${escapeHtml(
-                  t
+                  t,
                 )}</span>`;
               })
               .join("")}
@@ -310,7 +322,7 @@ export function renderSessionPage(
                     session.project_color || "#3b82f6"
                   }"></div>
                   <span class="project-name">${escapeHtml(
-                    session.project_name
+                    session.project_name,
                   )}</span>
                   ${
                     session.is_billable
@@ -338,26 +350,25 @@ export function renderSessionPage(
       const tr = (btn as HTMLElement).closest("tr");
       const sessionId = tr?.getAttribute("data-session-id");
       const session = state.filteredSessions.find(
-        (s: SessionRow) => String(s.id) === String(sessionId)
+        (s: SessionRow) => String(s.id) === String(sessionId),
       );
       if (session)
         showEditSessionModal(session, allTags, async () => {
-          const updatedSessions = await ipcRenderer.invoke(
-            "get-sessions",
-            getCurrentUserId()
-          );
+          const updatedSessions = await safeIpcInvoke("get-sessions", [], {
+            fallback: [],
+          });
           state.filteredSessions = updatedSessions;
           // Reset filter UI fields
           const filterBar = container.querySelector(".summary-filter-bar");
           if (filterBar) {
             const tagSelect = filterBar.querySelector(
-              "#filter-tag-session"
+              "#filter-tag-session",
             ) as HTMLSelectElement;
             const startInput = filterBar.querySelector(
-              "#filter-start-session"
+              "#filter-start-session",
             ) as HTMLInputElement;
             const endInput = filterBar.querySelector(
-              "#filter-end-session"
+              "#filter-end-session",
             ) as HTMLInputElement;
             if (tagSelect) tagSelect.value = "";
             if (startInput) startInput.value = "";
@@ -373,7 +384,7 @@ export function renderSessionPage(
     row.addEventListener("click", () => {
       const sessionId = (row as HTMLElement).getAttribute("data-session-id");
       const session = state.filteredSessions.find(
-        (s: SessionRow) => String(s.id) === String(sessionId)
+        (s: SessionRow) => String(s.id) === String(sessionId),
       );
       if (session && sessionId) {
         showDetailsModal({
@@ -391,11 +402,11 @@ export function renderSessionPage(
 export function updatePaginationControls(
   container: HTMLElement,
   pageInfo: PageInfo,
-  state: BySessionViewState
+  state: BySessionViewState,
 ) {
   // Always remove any existing pagination containers first
   const oldPaginationContainers = container.querySelectorAll(
-    ".pagination-container"
+    ".pagination-container",
   );
   oldPaginationContainers.forEach((pc) => pc.remove());
 
@@ -428,7 +439,7 @@ export function updatePaginationControls(
 export async function showEditSessionModal(
   session: SessionRow,
   allTags: Tag[],
-  onChange: () => void
+  onChange: () => void,
 ) {
   const currentTags: string[] = session.tags || [];
   let selectedTags = [...currentTags];
@@ -454,19 +465,21 @@ export async function showEditSessionModal(
     cancelText: "Cancel",
     cancelClass: "",
     onSubmit: async (values) => {
-      await ipcRenderer.invoke("edit-session", {
-        userId: getCurrentUserId(),
-        id: session.id,
-        title: values.title,
-        description: values.description,
-        tags: selectedTags,
-      });
-      await ipcRenderer.invoke(
-        "set-session-tags",
-        getCurrentUserId(),
-        session.id,
-        selectedTags
+      await safeIpcInvoke(
+        "edit-session",
+        [
+          {
+            id: session.id,
+            title: values.title,
+            description: values.description,
+            tags: selectedTags,
+          },
+        ],
+        { fallback: null },
       );
+      await safeIpcInvoke("set-session-tags", [session.id, selectedTags], {
+        fallback: null,
+      });
       onChange();
     },
     onCancel: () => {
@@ -495,11 +508,13 @@ export async function showEditSessionModal(
           confirmText: "Delete",
           confirmClass: "btn-delete",
           onConfirm: async () => {
-            await ipcRenderer.invoke("delete-session", session.id);
+            await safeIpcInvoke("delete-session", [session.id], {
+              fallback: null,
+            });
             // Close the modal manually
             const modal = document.getElementById("customModal");
             const closeBtn = modal?.querySelector(
-              ".modal-close-btn"
+              ".modal-close-btn",
             ) as HTMLButtonElement;
             closeBtn?.click();
             onChange();
@@ -544,7 +559,7 @@ export async function showEditSessionModal(
             `<span class="modal-tag-item">
           ${tag}
           <button type="button" class="modal-tag-remove" data-tag="${tag}">&times;</button>
-        </span>`
+        </span>`,
         )
         .join("");
       tagList.querySelectorAll("button[data-tag]").forEach((btn) => {

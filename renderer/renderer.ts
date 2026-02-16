@@ -15,17 +15,21 @@ import {
   showConfirmationModal,
 } from "./components";
 import { renderLandingPage } from "./components";
-// import { renderUserLanding } from "./components";
-import { getCurrentUserId } from "./utils";
+import { safeIpcInvoke } from "./utils";
 import { isCurrentUserManagerOrAdmin } from "./utils";
 import {
   checkAuthStatus,
   onAuthStateChange,
   getCurrentUser,
+  getCurrentSession,
 } from "../src/supabase/api";
 import { initializeOAuthListener } from "./utils/oauthHandler";
 import { loadUserLangMap } from "../src/utils/extractData";
 import { showOnboarding, shouldShowOnboarding } from "./components";
+import {
+  initConnectionStatus,
+  destroyConnectionStatus,
+} from "./components/ConnectionStatus";
 import "./styles/base.css";
 import "./styles/accent-text.css";
 import "./styles/calendar.css";
@@ -46,6 +50,7 @@ import "./styles/users.css";
 import "./styles/userRoleManager.css";
 import "./styles/auth.css";
 import "./styles/organization.css";
+import "./styles/connection-status.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
 function setupTabs() {
@@ -188,12 +193,12 @@ function setupRecordAndPauseBtns() {
       (window as any).isPaused = false;
       pauseBtn.style.display = "";
       updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
-      await ipcRenderer.invoke("start-tracking", getCurrentUserId());
+      await ipcRenderer.invoke("start-tracking");
     } else {
       (window as any).isRecording = false;
       (window as any).isPaused = false;
       pauseBtn.style.display = "none";
-      await ipcRenderer.invoke("stop-tracking", getCurrentUserId());
+      await ipcRenderer.invoke("stop-tracking");
     }
     updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
   });
@@ -204,7 +209,7 @@ function setupRecordAndPauseBtns() {
       await ipcRenderer.invoke("pause-tracking");
     } else {
       (window as any).isPaused = false;
-      await ipcRenderer.invoke("resume-tracking", getCurrentUserId());
+      await ipcRenderer.invoke("resume-tracking");
     }
     updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
   });
@@ -301,10 +306,12 @@ ipcRenderer.on("get-session-info", async () => {
   // Add a small delay to ensure any previous modals are fully closed
   setTimeout(async () => {
     // Load available projects for selection
-    let projects = [];
+    let projects: any[] = [];
     try {
-      const userId = await ipcRenderer.invoke("get-current-user-id");
-      projects = await ipcRenderer.invoke("get-user-projects", userId);
+      projects = await safeIpcInvoke("get-user-projects", [], {
+        fallback: [],
+        showNotification: false,
+      });
     } catch (error) {
       // Failed to load projects, continue without them
     }
@@ -610,9 +617,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (landing) landing.style.display = "none";
       if (mainUI) mainUI.style.display = "";
 
-      // Get the current user and initialize main UI
+      // Get the current user and sync session to main process
       const user = await getCurrentUser();
       if (user) {
+        // Sync existing session to main process
+        const session = await getCurrentSession();
+        if (session) {
+          await ipcRenderer.invoke("sync-auth-session", {
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
+        }
         showMainUIForUser(user.id);
       } else {
         throw new Error("No authenticated user found");
@@ -622,7 +637,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (landing) {
         if (mainUI) mainUI.style.display = "none";
         landing.style.display = "";
-        renderLandingPage(landing, (session: any) => {
+        renderLandingPage(landing, async (session: any) => {
+          await ipcRenderer.invoke("sync-auth-session", {
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
           showMainUIForUser(session.user.id);
           if (landing) landing.style.display = "none";
         });
@@ -642,7 +661,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (landing) {
         if (mainUI) mainUI.style.display = "none";
         landing.style.display = "";
-        renderLandingPage(landing, (session: any) => {
+        renderLandingPage(landing, async (session: any) => {
+          await ipcRenderer.invoke("sync-auth-session", {
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
           showMainUIForUser(session.user.id);
           landing.style.display = "none";
         });
@@ -651,19 +674,31 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Listen for auth state changes
-  onAuthStateChange((session: any) => {
+  onAuthStateChange(async (session: any) => {
     if (session) {
+      // Sync session tokens to main process so IPC handlers can authenticate
+      await ipcRenderer.invoke("sync-auth-session", {
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
       // User signed in
       showMainUIForUser(session.user.id);
       if (landing) landing.style.display = "none";
     } else {
+      // Clear session in main process
+      await ipcRenderer.invoke("sync-auth-session", null);
       // User signed out - reset the initialization flag
       isMainUIInitialized = false;
+      destroyConnectionStatus();
       localStorage.removeItem("currentUserId");
       if (mainUI) mainUI.style.display = "none";
       if (landing) {
         landing.style.display = "";
-        renderLandingPage(landing, (newSession: any) => {
+        renderLandingPage(landing, async (newSession: any) => {
+          await ipcRenderer.invoke("sync-auth-session", {
+            access_token: newSession.access_token,
+            refresh_token: newSession.refresh_token,
+          });
           showMainUIForUser(newSession.user.id);
           landing.style.display = "none";
         });
@@ -676,25 +711,31 @@ function renderMainUI() {
   initUI();
   applyAccentColor();
   setupHotkeys();
+  initConnectionStatus();
 }
 
 let dailyGoalCheckInterval: NodeJS.Timeout | null = null;
 
 async function checkDailyGoalProgress() {
   try {
-    const userId = getCurrentUserId();
     const today = new Date().toLocaleDateString("en-CA");
-    const dailyGoal = await ipcRenderer.invoke("get-daily-goal", userId, today);
+    const dailyGoal = await safeIpcInvoke<{
+      time: number;
+      isCompleted: boolean;
+    } | null>("get-daily-goal", [today], {
+      fallback: null,
+      showNotification: false,
+    });
     if (!dailyGoal) return;
 
-    const totalMins = await ipcRenderer.invoke(
+    const totalMins = await safeIpcInvoke<number>(
       "get-total-time-for-day",
-      userId,
-      today,
+      [today],
+      { fallback: 0, showNotification: false },
     );
 
     if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {
-      await ipcRenderer.invoke("complete-daily-goal", userId, today);
+      await ipcRenderer.invoke("complete-daily-goal", today);
       showNotification("🎉 Daily goal achieved!");
       // Optionally, re-render dashboard/logs
       renderDashboard();

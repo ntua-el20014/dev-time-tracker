@@ -1,7 +1,7 @@
 import * as linguistLanguages from "linguist-languages";
 import { getIconForFile } from "vscode-icons-js";
 import { ipcRenderer } from "electron";
-import { getCurrentUserId } from "../../renderer/utils";
+import { getCurrentUserId } from "../../renderer/utils/userUtils";
 
 const preferredExtensionMap: Record<string, string> = {
   ".md": "Markdown",
@@ -15,7 +15,7 @@ let userLangMap: Record<string, string> = {};
 export async function loadUserLangMap() {
   userLangMap = await ipcRenderer.invoke(
     "get-user-lang-map",
-    getCurrentUserId()
+    getCurrentUserId(),
   );
 }
 
@@ -51,11 +51,11 @@ export function getLanguageDataFromTitle(title: string) {
   let lang;
   if (preferredExtensionMap[foundExt]) {
     lang = Object.values(linguistLanguages).find(
-      (l) => l.name === preferredExtensionMap[foundExt]
+      (l) => l.name === preferredExtensionMap[foundExt],
     );
   } else {
     lang = Object.values(linguistLanguages).find(
-      (l) => Array.isArray(l.extensions) && l.extensions.includes(foundExt)
+      (l) => Array.isArray(l.extensions) && l.extensions.includes(foundExt),
     );
   }
 

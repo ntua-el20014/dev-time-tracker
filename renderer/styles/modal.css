@@ -772,7 +772,9 @@ select#tag-select option {
   background: var(--row-odd);
   color: var(--fg);
   box-sizing: border-box;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 #projectForm input[type="color"],
@@ -787,7 +789,9 @@ select#tag-select option {
   border: 1px solid var(--border);
   background: var(--row-odd);
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 #projectForm input[type="text"]:focus,
@@ -837,4 +841,122 @@ select#tag-select option {
 #cloudProjectEditForm input[type="color"]::-webkit-color-swatch {
   border: none;
   border-radius: 50%;
+}
+
+/* ==========================================
+   SESSION REVIEW PANEL
+   ========================================== */
+
+.session-review-panel {
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.session-review-panel h2 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  color: var(--fg);
+}
+
+.review-description {
+  color: var(--dimmed);
+  margin: 0 0 16px 0;
+  font-size: 13px;
+}
+
+.review-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.review-controls label {
+  color: var(--fg);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.review-controls select {
+  background: var(--card-bg);
+  color: var(--fg);
+  border: 1px solid var(--row-hover);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.review-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--dimmed);
+  font-size: 14px;
+}
+
+.review-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--row-hover);
+}
+
+.review-select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.review-session-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.review-session-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.review-session-item:hover {
+  background: var(--row-hover);
+}
+
+.review-session-item.selected {
+  background: rgba(var(--accent-rgb, 100, 108, 255), 0.1);
+}
+
+.review-session-check {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.review-session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.review-session-title {
+  font-size: 13px;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.review-session-meta {
+  font-size: 11px;
+  color: var(--dimmed);
 }
