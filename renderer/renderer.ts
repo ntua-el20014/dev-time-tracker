@@ -6,6 +6,7 @@ import { renderSummary } from "./summaryTab";
 import { renderDashboard } from "./dashboardTab";
 import { renderCalendar } from "./calendarTab";
 import { renderProjects } from "./projectsTab";
+import { renderOrganizationTab } from "./organizationTab";
 import { initTheme, updateRecordBtn, updatePauseBtn } from "./theme";
 import {
   displayOSInfo,
@@ -13,9 +14,16 @@ import {
   showInAppNotification,
   showConfirmationModal,
 } from "./components";
-import { renderUserLanding } from "./components";
+import { renderLandingPage } from "./components";
+// import { renderUserLanding } from "./components";
 import { getCurrentUserId } from "./utils";
 import { isCurrentUserManagerOrAdmin } from "./utils";
+import {
+  checkAuthStatus,
+  onAuthStateChange,
+  getCurrentUser,
+} from "../src/supabase/api";
+import { initializeOAuthListener } from "./utils/oauthHandler";
 import { loadUserLangMap } from "../src/utils/extractData";
 import { showOnboarding, shouldShowOnboarding } from "./components";
 import "./styles/base.css";
@@ -36,14 +44,16 @@ import "./styles/theme.css";
 import "./styles/timeline.css";
 import "./styles/users.css";
 import "./styles/userRoleManager.css";
+import "./styles/auth.css";
+import "./styles/organization.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
 function setupTabs() {
   const tabs = Array.from(
-    document.querySelectorAll(".tab")
+    document.querySelectorAll(".tab"),
   ) as HTMLButtonElement[];
   const tabContents = Array.from(
-    document.querySelectorAll(".tab-content")
+    document.querySelectorAll(".tab-content"),
   ) as HTMLDivElement[];
 
   // Remove old listeners by replacing each tab with a clone
@@ -80,6 +90,7 @@ function setupTabs() {
       }
       if (tabId === "calendar") renderCalendar();
       if (tabId === "projects") renderProjects();
+      if (tabId === "organization") renderOrganizationTab();
     });
   });
 }
@@ -87,7 +98,7 @@ function setupTabs() {
 async function setupRoleBasedTabVisibility() {
   const isManagerOrAdmin = await isCurrentUserManagerOrAdmin();
   const projectsTab = document.querySelector(
-    '.tab[data-tab="projects"]'
+    '.tab[data-tab="projects"]',
   ) as HTMLButtonElement;
 
   if (projectsTab) {
@@ -110,7 +121,7 @@ function initUI() {
   ipcRenderer.on("window-tracked", () => {
     // Only refresh logs if Today tab is active
     const todayTab = document.querySelector(
-      '.tab[data-tab="today"]'
+      '.tab[data-tab="today"]',
     ) as HTMLButtonElement;
     const todayContent = document.getElementById("tab-today");
     if (
@@ -125,10 +136,10 @@ function initUI() {
 
   // --- Make Dashboard tab active by default ---
   const tabs = Array.from(
-    document.querySelectorAll(".tab")
+    document.querySelectorAll(".tab"),
   ) as HTMLButtonElement[];
   const tabContents = Array.from(
-    document.querySelectorAll(".tab-content")
+    document.querySelectorAll(".tab-content"),
   ) as HTMLDivElement[];
   tabs.forEach((t) => t.classList.remove("active"));
   tabContents.forEach((tc) => {
@@ -137,7 +148,7 @@ function initUI() {
   });
 
   const dashboardTab = document.querySelector(
-    '.tab[data-tab="dashboard"]'
+    '.tab[data-tab="dashboard"]',
   ) as HTMLButtonElement;
   const dashboardContent = document.getElementById("tab-dashboard");
   if (dashboardTab && dashboardContent) {
@@ -154,7 +165,7 @@ function initUI() {
 function setupRecordAndPauseBtns() {
   // Remove old listeners by replacing buttons with clones
   const recordBtnOld = document.getElementById(
-    "recordBtn"
+    "recordBtn",
   ) as HTMLButtonElement;
   const pauseBtnOld = document.getElementById("pauseBtn") as HTMLButtonElement;
 
@@ -222,7 +233,7 @@ function setupHotkeys() {
       e.preventDefault();
       e.stopPropagation();
       const recordBtn = document.getElementById(
-        "recordBtn"
+        "recordBtn",
       ) as HTMLButtonElement;
       if (recordBtn) recordBtn.click();
       return;
@@ -260,7 +271,7 @@ function setupHotkeys() {
     if (e.ctrlKey && e.key === "5") {
       e.preventDefault();
       const projectsTab = document.querySelector(
-        '.tab[data-tab="projects"]'
+        '.tab[data-tab="projects"]',
       ) as HTMLButtonElement;
       // Only trigger if the tab is visible (user has access)
       if (projectsTab && projectsTab.style.display !== "none") {
@@ -355,12 +366,11 @@ ipcRenderer.on("get-session-info", async () => {
     let projectDropdown: any = null;
     if (activeProjects.length > 0) {
       const projectContainer = document.getElementById(
-        "session-project-container"
+        "session-project-container",
       );
       if (projectContainer) {
-        const { createCustomDropdown } = await import(
-          "./components/CustomDropdown"
-        );
+        const { createCustomDropdown } =
+          await import("./components/CustomDropdown");
         projectDropdown = createCustomDropdown({
           id: "session-project",
           name: "project",
@@ -379,13 +389,13 @@ ipcRenderer.on("get-session-info", async () => {
 
     const form = document.getElementById("sessionInfoForm") as HTMLFormElement;
     const titleInput = document.getElementById(
-      "session-title"
+      "session-title",
     ) as HTMLInputElement;
     const cancelBtn = document.getElementById(
-      "sessionCancelBtn"
+      "sessionCancelBtn",
     ) as HTMLButtonElement;
     const closeBtn = modal.querySelector(
-      ".modal-close-btn"
+      ".modal-close-btn",
     ) as HTMLButtonElement;
 
     // Focus the title input
@@ -477,7 +487,7 @@ ipcRenderer.on(
       message?: string;
       sessionId?: number;
       type?: string;
-    }
+    },
   ) => {
     if (data && data.message) {
       showNotification(`${data.title} - ${data.message}`);
@@ -492,7 +502,7 @@ ipcRenderer.on(
             confirmText: "Open Calendar",
             onConfirm: () => {
               const calendarTab = document.querySelector(
-                '.tab[data-tab="calendar"]'
+                '.tab[data-tab="calendar"]',
               ) as HTMLButtonElement;
               if (calendarTab) {
                 calendarTab.click();
@@ -502,16 +512,12 @@ ipcRenderer.on(
         }, 2000);
       }
     }
-  }
+  },
 );
 
 export async function applyAccentColor() {
   const theme = document.body.classList.contains("light") ? "light" : "dark";
-  const accentColor = await ipcRenderer.invoke(
-    "get-accent-color",
-    theme,
-    getCurrentUserId()
-  );
+  const accentColor = await ipcRenderer.invoke("get-accent-color", theme);
 
   if (theme === "light") {
     document.body.style.setProperty("--accent", accentColor);
@@ -526,8 +532,7 @@ export async function applyAccentColor() {
 }
 
 async function applyUserTheme() {
-  const userId = getCurrentUserId();
-  const savedTheme = (await ipcRenderer.invoke("get-user-theme", userId)) as
+  const savedTheme = (await ipcRenderer.invoke("get-user-theme")) as
     | "light"
     | "dark";
   if (savedTheme === "light") {
@@ -541,15 +546,32 @@ async function applyUserTheme() {
   window.dispatchEvent(new Event("theme-changed"));
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  localStorage.removeItem("currentUserId");
-  const landing = document.getElementById("userLanding");
+document.addEventListener("DOMContentLoaded", async () => {
+  const landing = document.getElementById("userLanding") as HTMLDivElement;
   const mainUI = document.getElementById("mainUI");
-  const storedUserId = localStorage.getItem("currentUserId");
+
+  // Initialize OAuth listener globally to handle password resets and email confirmations
+  initializeOAuthListener((session: any) => {
+    // This callback will be triggered when auth events (password reset, email confirmation, etc.) occur
+    if (session?.user?.id) {
+      showMainUIForUser(session.user.id);
+      if (landing) landing.style.display = "none";
+      if (mainUI) mainUI.style.display = "";
+    }
+  });
 
   // Initialize automatic text color updates for accent backgrounds
 
-  function showMainUIForUser(userId: number) {
+  // Flag to prevent double initialization
+  let isMainUIInitialized = false;
+
+  function showMainUIForUser(userId: string | number) {
+    // Prevent duplicate initialization
+    if (isMainUIInitialized) {
+      return;
+    }
+    isMainUIInitialized = true;
+
     localStorage.setItem("currentUserId", String(userId));
     if (mainUI) {
       mainUI.style.display = "";
@@ -572,19 +594,82 @@ document.addEventListener("DOMContentLoaded", () => {
       ipcRenderer.invoke("check-notifications");
     }, 5000);
 
+    // Start daily goal checker after user is authenticated
+    startDailyGoalChecker();
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).showMainUIForUser = showMainUIForUser;
   }
 
-  if (storedUserId) {
-    // Stored user ID found, show main UI
-    showMainUIForUser(Number(storedUserId));
-  } else if (landing) {
-    // No stored user ID, rendering user landing
-    renderUserLanding(landing, (userId) => {
-      showMainUIForUser(userId);
-    });
+  // Check if user is authenticated with Supabase
+  try {
+    const isAuthenticated = await checkAuthStatus();
+
+    if (isAuthenticated) {
+      // User is authenticated, show main UI
+      if (landing) landing.style.display = "none";
+      if (mainUI) mainUI.style.display = "";
+
+      // Get the current user and initialize main UI
+      const user = await getCurrentUser();
+      if (user) {
+        showMainUIForUser(user.id);
+      } else {
+        throw new Error("No authenticated user found");
+      }
+    } else {
+      // No authenticated user, show auth landing
+      if (landing) {
+        if (mainUI) mainUI.style.display = "none";
+        landing.style.display = "";
+        renderLandingPage(landing, (session: any) => {
+          showMainUIForUser(session.user.id);
+          if (landing) landing.style.display = "none";
+        });
+      }
+    }
+  } catch (error) {
+    // If there's an error checking auth, fall back to stored user ID
+    const storedUserId = localStorage.getItem("currentUserId");
+
+    if (storedUserId) {
+      // If we have a stored user, go straight to main UI
+      if (landing) landing.style.display = "none";
+      if (mainUI) mainUI.style.display = "";
+      showMainUIForUser(storedUserId);
+    } else {
+      // No stored user, show auth landing
+      if (landing) {
+        if (mainUI) mainUI.style.display = "none";
+        landing.style.display = "";
+        renderLandingPage(landing, (session: any) => {
+          showMainUIForUser(session.user.id);
+          landing.style.display = "none";
+        });
+      }
+    }
   }
+
+  // Listen for auth state changes
+  onAuthStateChange((session: any) => {
+    if (session) {
+      // User signed in
+      showMainUIForUser(session.user.id);
+      if (landing) landing.style.display = "none";
+    } else {
+      // User signed out - reset the initialization flag
+      isMainUIInitialized = false;
+      localStorage.removeItem("currentUserId");
+      if (mainUI) mainUI.style.display = "none";
+      if (landing) {
+        landing.style.display = "";
+        renderLandingPage(landing, (newSession: any) => {
+          showMainUIForUser(newSession.user.id);
+          landing.style.display = "none";
+        });
+      }
+    }
+  });
 });
 
 function renderMainUI() {
@@ -596,23 +681,28 @@ function renderMainUI() {
 let dailyGoalCheckInterval: NodeJS.Timeout | null = null;
 
 async function checkDailyGoalProgress() {
-  const userId = getCurrentUserId();
-  const today = new Date().toLocaleDateString("en-CA");
-  const dailyGoal = await ipcRenderer.invoke("get-daily-goal", userId, today);
-  if (!dailyGoal) return;
+  try {
+    const userId = getCurrentUserId();
+    const today = new Date().toLocaleDateString("en-CA");
+    const dailyGoal = await ipcRenderer.invoke("get-daily-goal", userId, today);
+    if (!dailyGoal) return;
 
-  const totalMins = await ipcRenderer.invoke(
-    "get-total-time-for-day",
-    userId,
-    today
-  );
+    const totalMins = await ipcRenderer.invoke(
+      "get-total-time-for-day",
+      userId,
+      today,
+    );
 
-  if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {
-    await ipcRenderer.invoke("complete-daily-goal", userId, today);
-    showNotification("🎉 Daily goal achieved!");
-    // Optionally, re-render dashboard/logs
-    renderDashboard();
-    renderLogs(today);
+    if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {
+      await ipcRenderer.invoke("complete-daily-goal", userId, today);
+      showNotification("🎉 Daily goal achieved!");
+      // Optionally, re-render dashboard/logs
+      renderDashboard();
+      renderLogs(today);
+    }
+  } catch (error) {
+    // No user logged in yet, skip daily goal check
+    return;
   }
 }
 
@@ -621,8 +711,3 @@ function startDailyGoalChecker() {
   checkDailyGoalProgress();
   dailyGoalCheckInterval = setInterval(checkDailyGoalProgress, 60 * 1000);
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-  // ...existing code...
-  startDailyGoalChecker();
-});

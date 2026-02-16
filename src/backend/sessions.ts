@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import db from "./db";
 import { notifyRenderer } from "../utils/ipcHelp";
 import { getLocalDateString } from "../utils/timeFormat";
 import { Tag, SessionRow } from "./types";
+import { v4 as uuidv4 } from "uuid";
 
 export function getSessions(
   userId: number,
@@ -27,7 +27,7 @@ export function getSessions(
       LEFT JOIN tags t ON st.tag_id = t.id
       WHERE s.user_id = ?
     `;
-    const params: any[] = [userId];
+    const params: (string | number)[] = [userId];
 
     if (filters?.startDate) {
       query += " AND date(s.timestamp) >= date(?)";
@@ -96,11 +96,12 @@ export function addSession(
     const info = db
       .prepare(
         `
-      INSERT INTO sessions (timestamp, start_time, duration, title, description, project_id, is_billable, user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sessions (local_id, timestamp, start_time, duration, title, description, project_id, is_billable, user_id, synced, last_modified)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
     `
       )
       .run(
+        uuidv4(),
         timestamp,
         start_time,
         duration,
@@ -108,7 +109,8 @@ export function addSession(
         description || null,
         projectId || null,
         isBillable ? 1 : 0,
-        userId
+        userId,
+        timestamp
       );
     const sessionId = info.lastInsertRowid as number;
     if (tags && tags.length) setSessionTags(userId, sessionId, tags);
@@ -132,9 +134,16 @@ export function editSession(
   try {
     db.prepare(
       `
-      UPDATE sessions SET title = ?, description = ?, project_id = ?, is_billable = ? WHERE id = ?
+      UPDATE sessions SET title = ?, description = ?, project_id = ?, is_billable = ?, synced = 0, last_modified = ? WHERE id = ?
     `
-    ).run(title, description, projectId || null, isBillable ? 1 : 0, id);
+    ).run(
+      title,
+      description,
+      projectId || null,
+      isBillable ? 1 : 0,
+      new Date().toISOString(),
+      id
+    );
     if (tags) setSessionTags(userId, id, tags);
   } catch (err) {
     notifyRenderer("Failed to update session.", 5000);
@@ -170,8 +179,10 @@ export function addTag(
   try {
     if (!color) color = "#f0db4f";
     const info = db
-      .prepare(`INSERT INTO tags (name, user_id, color) VALUES (?, ?, ?)`)
-      .run(name, userId, color);
+      .prepare(
+        `INSERT INTO tags (local_id, name, user_id, color, synced, last_modified) VALUES (?, ?, ?, ?, 0, ?)`
+      )
+      .run(uuidv4(), name, userId, color, new Date().toISOString());
     return info.lastInsertRowid as number;
   } catch {
     try {
@@ -187,11 +198,9 @@ export function addTag(
 }
 
 export function setTagColor(userId: number, tagName: string, color: string) {
-  db.prepare(`UPDATE tags SET color = ? WHERE name = ? AND user_id = ?`).run(
-    color,
-    tagName,
-    userId
-  );
+  db.prepare(
+    `UPDATE tags SET color = ?, synced = 0, last_modified = ? WHERE name = ? AND user_id = ?`
+  ).run(color, new Date().toISOString(), tagName, userId);
 }
 
 export function setSessionTags(
@@ -215,8 +224,8 @@ export function setSessionTags(
       }
       if (tagId !== undefined) {
         db.prepare(
-          `INSERT OR IGNORE INTO session_tags (session_id, tag_id) VALUES (?, ?)`
-        ).run(sessionId, tagId);
+          `INSERT OR IGNORE INTO session_tags (local_id, session_id, tag_id, synced, last_modified) VALUES (?, ?, ?, ?, ?)`
+        ).run(uuidv4(), sessionId, tagId, 0, new Date().toISOString());
       }
     }
   } catch (err) {
@@ -274,11 +283,12 @@ export function clearSessions() {
 }
 export function importSessions(sessionsArr: any[]) {
   const stmt = db.prepare(
-    "INSERT INTO sessions (id, timestamp, start_time, duration, title, description, project_id, is_billable, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO sessions (id, local_id, timestamp, start_time, duration, title, description, project_id, is_billable, user_id, synced, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   for (const row of sessionsArr) {
     stmt.run(
       row.id,
+      uuidv4(),
       row.timestamp,
       row.start_time,
       row.duration,
@@ -286,7 +296,9 @@ export function importSessions(sessionsArr: any[]) {
       row.description,
       row.project_id || null,
       row.is_billable || 0,
-      row.user_id
+      row.user_id,
+      0,
+      new Date().toISOString()
     );
   }
 }
@@ -295,10 +307,18 @@ export function clearTags() {
 }
 export function importTags(tagsArr: any[]) {
   const stmt = db.prepare(
-    "INSERT INTO tags (id, name, user_id, color) VALUES (?, ?, ?, ?)"
+    "INSERT INTO tags (id, local_id, name, user_id, color, synced, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
   );
   for (const row of tagsArr) {
-    stmt.run(row.id, row.name, row.user_id, row.color);
+    stmt.run(
+      row.id,
+      uuidv4(),
+      row.name,
+      row.user_id,
+      row.color,
+      0,
+      new Date().toISOString()
+    );
   }
 }
 export function clearSessionTags() {
@@ -306,9 +326,9 @@ export function clearSessionTags() {
 }
 export function importSessionTags(sessionTagsArr: any[]) {
   const stmt = db.prepare(
-    "INSERT INTO session_tags (session_id, tag_id) VALUES (?, ?)"
+    "INSERT INTO session_tags (local_id, session_id, tag_id, synced, last_modified) VALUES (?, ?, ?, ?, ?)"
   );
   for (const row of sessionTagsArr) {
-    stmt.run(row.session_id, row.tag_id);
+    stmt.run(uuidv4(), row.session_id, row.tag_id, 0, new Date().toISOString());
   }
 }

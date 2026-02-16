@@ -4,13 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="
-  default-src 'self';
-  script-src 'self' 'unsafe-eval' http://localhost:3000;
-  style-src 'self' 'unsafe-inline';
-  img-src 'self' data:;
-  connect-src 'self';
-  "
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' http://localhost:3000; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://aziclaffcixwdyjkaups.supabase.co http://localhost:3000;"
     />
   </head>
   <body>
@@ -30,6 +24,7 @@
           >
             Projects
           </button>
+          <button class="tab" data-tab="organization">Organization</button>
           <button class="tab" data-tab="profile">My Profile</button>
         </div>
         <div id="tab-dashboard" class="tab-content" style="display: none">
@@ -66,6 +61,11 @@
         <div id="tab-projects" class="tab-content" style="display: none">
           <div class="container">
             <div id="projectsContent"></div>
+          </div>
+        </div>
+        <div id="tab-organization" class="tab-content" style="display: none">
+          <div class="container">
+            <div id="organizationContent"></div>
           </div>
         </div>
         <div id="tab-profile" class="tab-content" style="display: none">

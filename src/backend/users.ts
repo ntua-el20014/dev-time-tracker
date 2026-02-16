@@ -1,17 +1,32 @@
 import db from "./db";
 import { notifyRenderer } from "../utils/ipcHelp";
-import { UserRole } from "../../shared/types";
+import { UserRole, CreateUserData } from "../../shared/types";
+import { v4 as uuidv4 } from "uuid";
+import crypto from "crypto";
 
 // --- User management functions ---
-export function createUser(
-  username: string,
-  avatar = "",
-  role: UserRole = UserRole.EMPLOYEE
-): number | undefined {
+export function createUser(data: CreateUserData): number | undefined {
+  const {
+    username,
+    email,
+    password,
+    avatar = "",
+    role = UserRole.EMPLOYEE,
+  } = data;
   try {
     const info = db
-      .prepare(`INSERT INTO users (username, avatar, role) VALUES (?, ?, ?)`)
-      .run(username, avatar, role);
+      .prepare(
+        `INSERT INTO users (local_id, username, email, password_hash, avatar, role, synced, last_modified) VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
+      )
+      .run(
+        uuidv4(),
+        username,
+        email,
+        crypto.createHash("sha256").update(password).digest("hex"),
+        avatar,
+        role,
+        new Date().toISOString()
+      );
     return info.lastInsertRowid as number;
   } catch {
     const row = db
@@ -19,6 +34,17 @@ export function createUser(
       .get(username) as { id: number } | undefined;
     return row?.id;
   }
+}
+
+export function validatePassword(userId: number, password: string): boolean {
+  const hashedPassword = crypto
+    .createHash("sha256")
+    .update(password)
+    .digest("hex");
+  const row = db
+    .prepare(`SELECT password_hash FROM users WHERE id = ?`)
+    .get(userId) as { password_hash: string } | undefined;
+  return row?.password_hash === hashedPassword;
 }
 
 export function getAllUsers(): {
@@ -39,8 +65,8 @@ export function getAllUsers(): {
 
 export function setCurrentUser(userId: number) {
   db.prepare(
-    `INSERT OR REPLACE INTO app_settings (key, value) VALUES ('current_user', ?)`
-  ).run(String(userId));
+    `INSERT OR REPLACE INTO app_settings (key, value, synced, last_modified) VALUES ('current_user', ?, 0, ?)`
+  ).run(String(userId), new Date().toISOString());
 }
 
 export function getCurrentUser(): number {
@@ -72,14 +98,18 @@ export function getUserInfo(
 
 export function setUserRole(userId: number, role: UserRole) {
   try {
-    db.prepare(`UPDATE users SET role = ? WHERE id = ?`).run(role, userId);
+    db.prepare(
+      `UPDATE users SET role = ?, synced = 0, last_modified = ? WHERE id = ?`
+    ).run(role, new Date().toISOString(), userId);
   } catch (err) {
     notifyRenderer("Failed to update user role.", 5000);
   }
 }
 
 export function setUserAvatar(userId: number, avatar: string) {
-  db.prepare(`UPDATE users SET avatar = ? WHERE id = ?`).run(avatar, userId);
+  db.prepare(
+    `UPDATE users SET avatar = ?, synced = 0, last_modified = ? WHERE id = ?`
+  ).run(avatar, new Date().toISOString(), userId);
 }
 
 // Database migration functions
@@ -92,10 +122,17 @@ export function importUsers(
   usersArr: { id: number; username: string; avatar: string; role?: UserRole }[]
 ) {
   const stmt = db.prepare(
-    "INSERT INTO users (id, username, avatar, role) VALUES (?, ?, ?, ?)"
+    "INSERT INTO users (id, local_id, username, avatar, role, synced, last_modified) VALUES (?, ?, ?, ?, ?, 0, ?)"
   );
   for (const row of usersArr) {
-    stmt.run(row.id, row.username, row.avatar, row.role || UserRole.EMPLOYEE);
+    stmt.run(
+      row.id,
+      uuidv4(),
+      row.username,
+      row.avatar,
+      row.role || UserRole.EMPLOYEE,
+      new Date().toISOString()
+    );
   }
 }
 
@@ -122,7 +159,13 @@ export function ensureAdminExists() {
     if (firstUser) {
       setUserRole(1, UserRole.ADMIN);
     } else {
-      createUser("Admin", "", UserRole.ADMIN);
+      createUser({
+        username: "Admin",
+        email: "admin@local",
+        password: "admin",
+        avatar: "",
+        role: UserRole.ADMIN,
+      });
     }
   }
 }

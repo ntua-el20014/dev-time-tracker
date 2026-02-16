@@ -62,6 +62,8 @@ export async function renderDashboard() {
   // --- Calendar Widget ---
   const calendarDiv = document.getElementById("dashboard-calendar");
   if (calendarDiv) {
+    // Clear any existing calendars before rendering a new one
+    calendarDiv.innerHTML = "";
     const calendar = await renderCalendarWidget();
     calendarDiv.appendChild(calendar);
   }

@@ -51,8 +51,17 @@ export type DailySummaryFilters = {
 export interface User {
   id: number;
   username: string;
+  email: string;
   avatar: string;
   role: UserRole;
+}
+
+export interface CreateUserData {
+  username: string;
+  email: string;
+  password: string;
+  avatar?: string;
+  role?: UserRole;
 }
 
 export enum UserRole {
@@ -108,6 +117,7 @@ export interface Project {
   color?: string;
   is_active: number;
   manager_id: number;
+  org_id?: number;
   created_at: string;
 }
 

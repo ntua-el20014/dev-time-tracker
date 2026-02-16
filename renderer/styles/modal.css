@@ -163,6 +163,7 @@
 }
 
 #customModalForm input[type="text"],
+#customModalForm input[type="password"],
 #customModalForm textarea,
 #customModalForm select {
   width: 100%;
@@ -757,7 +758,11 @@ select#tag-select option {
 #projectForm input[type="text"],
 #projectForm textarea,
 #projectEditForm input[type="text"],
-#projectEditForm textarea {
+#projectEditForm textarea,
+#cloudProjectForm input[type="text"],
+#cloudProjectForm textarea,
+#cloudProjectEditForm input[type="text"],
+#cloudProjectEditForm textarea {
   width: 100%;
   margin-bottom: 12px;
   border-radius: 6px;
@@ -771,7 +776,9 @@ select#tag-select option {
 }
 
 #projectForm input[type="color"],
-#projectEditForm input[type="color"] {
+#projectEditForm input[type="color"],
+#cloudProjectForm input[type="color"],
+#cloudProjectEditForm input[type="color"] {
   width: 50px;
   height: 50px;
   padding: 2px;
@@ -788,14 +795,22 @@ select#tag-select option {
 #projectForm input[type="color"]:focus,
 #projectEditForm input[type="text"]:focus,
 #projectEditForm textarea:focus,
-#projectEditForm input[type="color"]:focus {
+#projectEditForm input[type="color"]:focus,
+#cloudProjectForm input[type="text"]:focus,
+#cloudProjectForm textarea:focus,
+#cloudProjectForm input[type="color"]:focus,
+#cloudProjectEditForm input[type="text"]:focus,
+#cloudProjectEditForm textarea:focus,
+#cloudProjectEditForm input[type="color"]:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2);
 }
 
 #projectForm textarea,
-#projectEditForm textarea {
+#projectEditForm textarea,
+#cloudProjectForm textarea,
+#cloudProjectEditForm textarea {
   height: 60px;
   margin-bottom: 16px;
   resize: vertical;
@@ -808,14 +823,18 @@ select#tag-select option {
 }
 
 #projectForm input[type="color"]::-webkit-color-swatch-wrapper,
-#projectEditForm input[type="color"]::-webkit-color-swatch-wrapper {
+#projectEditForm input[type="color"]::-webkit-color-swatch-wrapper,
+#cloudProjectForm input[type="color"]::-webkit-color-swatch-wrapper,
+#cloudProjectEditForm input[type="color"]::-webkit-color-swatch-wrapper {
   padding: 0;
   border: none;
   border-radius: 50%;
 }
 
 #projectForm input[type="color"]::-webkit-color-swatch,
-#projectEditForm input[type="color"]::-webkit-color-swatch {
+#projectEditForm input[type="color"]::-webkit-color-swatch,
+#cloudProjectForm input[type="color"]::-webkit-color-swatch,
+#cloudProjectEditForm input[type="color"]::-webkit-color-swatch {
   border: none;
   border-radius: 50%;
 }

@@ -1,5 +1,6 @@
 import db from "./db";
 import { notifyRenderer } from "../utils/ipcHelp";
+import { v4 as uuidv4 } from "uuid";
 import { Project, ProjectWithMembers } from "../../shared/types";
 import { isUserManagerOrAdmin } from "./users";
 
@@ -23,16 +24,23 @@ export function createProject(
 
     const info = db
       .prepare(
-        `INSERT INTO projects (name, description, color, manager_id) VALUES (?, ?, ?, ?)`
+        `INSERT INTO projects (local_id, name, description, color, manager_id, synced, last_modified) VALUES (?, ?, ?, ?, ?, 0, ?)`
       )
-      .run(name, description, color, managerId);
+      .run(
+        uuidv4(),
+        name,
+        description,
+        color,
+        managerId,
+        new Date().toISOString()
+      );
 
     const projectId = info.lastInsertRowid as number;
 
     // Add the manager as a project member with manager role
     db.prepare(
-      `INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'manager')`
-    ).run(projectId, managerId);
+      `INSERT INTO project_members (local_id, project_id, user_id, role, synced, last_modified) VALUES (?, ?, ?, 'manager', 0, ?)`
+    ).run(uuidv4(), projectId, managerId, new Date().toISOString());
 
     notifyRenderer(`Project "${name}" created successfully!`);
     return projectId;
@@ -139,8 +147,8 @@ export function updateProject(
 ) {
   try {
     db.prepare(
-      `UPDATE projects SET name = ?, description = ?, color = ? WHERE id = ?`
-    ).run(name, description, color, id);
+      `UPDATE projects SET name = ?, description = ?, color = ?, synced = 0, last_modified = ? WHERE id = ?`
+    ).run(name, description, color, new Date().toISOString(), id);
 
     notifyRenderer(`Project "${name}" updated successfully!`);
   } catch (err) {
@@ -151,7 +159,9 @@ export function updateProject(
 export function deleteProject(id: number) {
   try {
     // Instead of deleting, mark as inactive to preserve session history
-    db.prepare(`UPDATE projects SET is_active = 0 WHERE id = ?`).run(id);
+    db.prepare(
+      `UPDATE projects SET is_active = 0, synced = 0, last_modified = ? WHERE id = ?`
+    ).run(new Date().toISOString(), id);
     notifyRenderer("Project archived successfully!");
   } catch (err) {
     notifyRenderer("Failed to archive project.", 5000);
@@ -160,7 +170,9 @@ export function deleteProject(id: number) {
 
 export function restoreProject(id: number) {
   try {
-    db.prepare(`UPDATE projects SET is_active = 1 WHERE id = ?`).run(id);
+    db.prepare(
+      `UPDATE projects SET is_active = 1, synced = 0, last_modified = ? WHERE id = ?`
+    ).run(new Date().toISOString(), id);
     notifyRenderer("Project restored successfully!");
   } catch (err) {
     notifyRenderer("Failed to restore project.", 5000);
@@ -198,8 +210,8 @@ export function addProjectMember(
     }
 
     db.prepare(
-      `INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)`
-    ).run(projectId, userId, role);
+      `INSERT OR IGNORE INTO project_members (local_id, project_id, user_id, role, synced, last_modified) VALUES (?, ?, ?, ?, 0, ?)`
+    ).run(uuidv4(), projectId, userId, role, new Date().toISOString());
     notifyRenderer("User added to project successfully!");
   } catch (err) {
     notifyRenderer("Failed to add user to project.", 5000);
@@ -243,8 +255,8 @@ export function updateProjectMemberRole(
     }
 
     db.prepare(
-      `UPDATE project_members SET role = ? WHERE project_id = ? AND user_id = ?`
-    ).run(role, projectId, userId);
+      `UPDATE project_members SET role = ?, synced = 0, last_modified = ? WHERE project_id = ? AND user_id = ?`
+    ).run(role, new Date().toISOString(), projectId, userId);
     notifyRenderer("User role updated successfully!");
   } catch (err) {
     notifyRenderer("Failed to update user role.", 5000);
@@ -266,16 +278,17 @@ export function transferProjectManagement(
     }
 
     db.transaction(() => {
+      const now = new Date().toISOString();
+
       // Update the project manager
-      db.prepare(`UPDATE projects SET manager_id = ? WHERE id = ?`).run(
-        newManagerId,
-        projectId
-      );
+      db.prepare(
+        `UPDATE projects SET manager_id = ?, synced = 0, last_modified = ? WHERE id = ?`
+      ).run(newManagerId, now, projectId);
 
       // Update the new manager's role in project_members
       db.prepare(
-        `INSERT OR REPLACE INTO project_members (project_id, user_id, role) VALUES (?, ?, 'manager')`
-      ).run(projectId, newManagerId);
+        `INSERT OR REPLACE INTO project_members (local_id, project_id, user_id, role, synced, last_modified) VALUES (?, ?, ?, 'manager', 0, ?)`
+      ).run(uuidv4(), projectId, newManagerId, now);
     })();
 
     notifyRenderer("Project management transferred successfully!");
@@ -418,17 +431,21 @@ export function clearProjects() {
 
 export function importProjects(projectsArr: any[]) {
   const stmt = db.prepare(
-    "INSERT INTO projects (id, name, description, color, is_active, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO projects (id, local_id, name, description, color, is_active, created_by, created_at, manager_id, synced, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   for (const row of projectsArr) {
     stmt.run(
       row.id,
+      uuidv4(),
       row.name,
       row.description,
       row.color,
       row.is_active,
       row.created_by,
-      row.created_at
+      row.created_at,
+      row.manager_id || row.created_by, // Fall back to created_by if manager_id not set
+      0,
+      new Date().toISOString()
     );
   }
 }

@@ -5,7 +5,6 @@ import stopBtn from "../assets/stop-button.png";
 import pauseIconImg from "../assets/pause-button.png";
 import playIconImg from "../assets/play-button.png";
 import { applyAccentColor } from "./renderer";
-import { getCurrentUserId } from "./utils";
 import { ipcRenderer } from "electron";
 
 // --- User Theme Preference Helpers ---
@@ -13,24 +12,19 @@ import { ipcRenderer } from "electron";
 export async function initTheme() {
   const toggleBtn = document.getElementById("toggleTheme");
   const themeIcon = document.getElementById("themeIcon") as HTMLImageElement;
-  const userId = getCurrentUserId();
 
   if (toggleBtn && themeIcon) {
     toggleBtn.addEventListener("click", async () => {
       const isLight = !document.body.classList.contains("light");
       document.body.classList.toggle("light", isLight);
-      await ipcRenderer.invoke(
-        "set-user-theme",
-        isLight ? "light" : "dark",
-        userId
-      );
+      await ipcRenderer.invoke("set-user-theme", isLight ? "light" : "dark");
       updateThemeIcon(themeIcon);
       await applyAccentColor();
       window.dispatchEvent(new Event("theme-changed"));
     });
 
-    // Load theme from config
-    const savedTheme = (await ipcRenderer.invoke("get-user-theme", userId)) as
+    // Load theme from Supabase preferences
+    const savedTheme = (await ipcRenderer.invoke("get-user-theme")) as
       | "light"
       | "dark";
     if (savedTheme === "light") {
@@ -44,8 +38,7 @@ export async function initTheme() {
 }
 
 export async function setUserTheme(theme: "light" | "dark") {
-  const userId = getCurrentUserId();
-  await ipcRenderer.invoke("set-user-theme", theme, userId);
+  await ipcRenderer.invoke("set-user-theme", theme);
 }
 
 export function updateThemeIcon(themeIcon: HTMLImageElement) {
@@ -61,7 +54,7 @@ export function updateThemeIcon(themeIcon: HTMLImageElement) {
 
 export function updateRecordIcon(
   recordIcon: HTMLImageElement,
-  isRecording: boolean
+  isRecording: boolean,
 ) {
   if (!recordIcon) return;
   if (isRecording) {
@@ -76,7 +69,7 @@ export function updateRecordIcon(
 export function updateRecordBtn(
   recordBtn: HTMLButtonElement,
   recordIcon: HTMLImageElement,
-  isRecording: boolean
+  isRecording: boolean,
 ) {
   if (!recordBtn || !recordIcon) return;
   updateRecordIcon(recordIcon, isRecording);
@@ -89,7 +82,7 @@ export function updateRecordBtn(
 
 export function updatePauseIcon(
   pauseIcon: HTMLImageElement,
-  isPaused: boolean
+  isPaused: boolean,
 ) {
   if (!pauseIcon) return;
   if (isPaused) {
@@ -105,7 +98,7 @@ export function updatePauseIcon(
 export function updatePauseBtn(
   pauseBtn: HTMLButtonElement,
   pauseIcon: HTMLImageElement,
-  isPaused: boolean
+  isPaused: boolean,
 ) {
   if (!pauseBtn || !pauseIcon) return;
   updatePauseIcon(pauseIcon, isPaused);
