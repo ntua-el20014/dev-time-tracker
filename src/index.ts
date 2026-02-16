@@ -13,6 +13,7 @@ import {
   markNotificationSent,
 } from "./supabase/scheduledSessions";
 import { getCurrentUser } from "./supabase/api";
+import { supabase } from "./supabase/config";
 import "./ipc/sessionHandlers";
 import "./ipc/usageHandlers";
 import "./ipc/tagHandlers";
@@ -24,6 +25,32 @@ import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";
 import "./ipc/exportHandlers";
 import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
+
+// Sync auth session from renderer to main process
+// The renderer has localStorage and holds the Supabase session;
+// the main process needs the tokens to make authenticated API calls.
+ipcMain.handle(
+  "sync-auth-session",
+  async (
+    _event,
+    tokens: { access_token: string; refresh_token: string } | null,
+  ) => {
+    if (tokens) {
+      const { error } = await supabase.auth.setSession({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+      });
+      if (error) {
+        return false;
+      }
+      return true;
+    } else {
+      // Sign out in main process
+      await supabase.auth.signOut();
+      return true;
+    }
+  },
+);
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;

@@ -63,6 +63,43 @@ export async function logUsage(
 }
 
 /**
+ * Helper to map raw daily_usage_summary rows to the shape the renderer expects.
+ * DB columns: app_name, icon_url, language_extension, time_spent_seconds
+ * Renderer expects: app, icon, lang_ext, time_spent (LogEntry) / total_time (DailySummaryRow)
+ */
+function mapSummaryRow(row: any) {
+  return {
+    ...row,
+    app: row.app_name ?? row.app,
+    icon: row.icon_url ?? row.icon,
+    lang_ext: row.language_extension ?? row.lang_ext,
+    time_spent: row.time_spent_seconds ?? row.time_spent ?? 0,
+    total_time: row.time_spent_seconds ?? row.total_time ?? 0,
+  };
+}
+
+/**
+ * Aggregate mapped summary rows by a key, summing time fields.
+ * Used to merge rows that differ only by language into a single app entry.
+ */
+function aggregateSummaryRows(rows: any[], keyFn: (row: any) => string): any[] {
+  const map = new Map<string, any>();
+  for (const row of rows) {
+    const key = keyFn(row);
+    if (map.has(key)) {
+      const existing = map.get(key)!;
+      existing.time_spent += row.time_spent;
+      existing.total_time += row.total_time;
+      existing.time_spent_seconds =
+        (existing.time_spent_seconds || 0) + (row.time_spent_seconds || 0);
+    } else {
+      map.set(key, { ...row });
+    }
+  }
+  return Array.from(map.values());
+}
+
+/**
  * Get usage summary for a specific date
  */
 export async function getUsageSummary(userId: string, date: string) {
@@ -71,12 +108,16 @@ export async function getUsageSummary(userId: string, date: string) {
     .select("*")
     .eq("user_id", userId)
     .eq("date", date)
-    .order("time_spent", { ascending: false });
+    .order("time_spent_seconds", { ascending: false });
 
   if (error) {
     throw error;
   }
-  return data || [];
+  const mapped = (data || []).map(mapSummaryRow);
+  // Aggregate by app so multiple languages don't create duplicate rows
+  return aggregateSummaryRows(mapped, (r) => r.app).sort(
+    (a: any, b: any) => b.time_spent - a.time_spent,
+  );
 }
 
 /**
@@ -104,7 +145,7 @@ export async function getUsageLogs(
     .order("timestamp", { ascending: false });
 
   if (filters?.app) {
-    query = query.eq("app", filters.app);
+    query = query.eq("app_name", filters.app);
   }
   if (filters?.language) {
     query = query.eq("language", filters.language);
@@ -124,7 +165,7 @@ export async function getUsageLogs(
   if (error) {
     throw error;
   }
-  return data || [];
+  return (data || []).map(mapUsageLogRow);
 }
 
 /**
@@ -152,7 +193,7 @@ export async function getDailySummary(
     query = query.lte("date", filters.endDate);
   }
   if (filters?.app) {
-    query = query.eq("app", filters.app);
+    query = query.eq("app_name", filters.app);
   }
   if (filters?.language) {
     query = query.eq("language", filters.language);
@@ -163,7 +204,9 @@ export async function getDailySummary(
   if (error) {
     throw error;
   }
-  return data || [];
+  const mapped = (data || []).map(mapSummaryRow);
+  // Aggregate by (date, app) so multiple languages don't create duplicate rows
+  return aggregateSummaryRows(mapped, (r) => `${r.date}|${r.app}`);
 }
 
 /**
@@ -172,15 +215,21 @@ export async function getDailySummary(
 export async function getEditorUsage(userId: string) {
   const { data, error } = await supabase
     .from("daily_usage_summary")
-    .select("app, language, lang_ext, icon, time_spent")
+    .select(
+      "app_name, language, language_extension, icon_url, time_spent_seconds",
+    )
     .eq("user_id", userId)
     .not("language", "is", null)
-    .order("time_spent", { ascending: false });
+    .order("time_spent_seconds", { ascending: false });
 
   if (error) {
     throw error;
   }
-  return data || [];
+  const mapped = (data || []).map(mapSummaryRow);
+  // Aggregate by app so multiple languages don't create duplicate editor entries
+  return aggregateSummaryRows(mapped, (r) => r.app).sort(
+    (a: any, b: any) => b.total_time - a.total_time,
+  );
 }
 
 /**
@@ -189,7 +238,7 @@ export async function getEditorUsage(userId: string) {
 export async function getLanguageUsage(userId: string) {
   const { data, error } = await supabase
     .from("daily_usage_summary")
-    .select("language, app, time_spent")
+    .select("language, app_name, time_spent_seconds")
     .eq("user_id", userId)
     .not("language", "is", null);
 
@@ -209,8 +258,8 @@ export async function getLanguageUsage(userId: string) {
       languageMap.set(lang, { total_time: 0, apps: new Set() });
     }
     const langData = languageMap.get(lang)!;
-    langData.total_time += item.time_spent || 0;
-    langData.apps.add(item.app);
+    langData.total_time += item.time_spent_seconds || 0;
+    langData.apps.add(item.app_name);
   });
 
   return Array.from(languageMap.entries())
@@ -220,6 +269,29 @@ export async function getLanguageUsage(userId: string) {
       app_count: stats.apps.size,
     }))
     .sort((a, b) => b.total_time - a.total_time);
+}
+
+/**
+ * Helper to map raw usage_logs rows to the shape the renderer expects.
+ * DB columns: app_name, window_title, icon_url, language_extension, timestamp
+ * Renderer expects: app, title, icon, lang_ext, time
+ */
+function mapUsageLogRow(row: any) {
+  const ts = row.timestamp ? new Date(row.timestamp) : null;
+  return {
+    ...row,
+    app: row.app_name ?? row.app,
+    title: row.window_title ?? row.title,
+    icon: row.icon_url ?? row.icon,
+    lang_ext: row.language_extension ?? row.lang_ext,
+    time: ts
+      ? ts.toLocaleTimeString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })
+      : "",
+  };
 }
 
 /**
@@ -237,7 +309,7 @@ export async function getUsageDetailsForAppDate(
     .from("usage_logs")
     .select("*")
     .eq("user_id", userId)
-    .eq("app", app)
+    .eq("app_name", app)
     .gte("timestamp", startOfDay)
     .lte("timestamp", endOfDay)
     .order("timestamp", { ascending: false });
@@ -245,7 +317,7 @@ export async function getUsageDetailsForAppDate(
   if (error) {
     throw error;
   }
-  return data || [];
+  return (data || []).map(mapUsageLogRow);
 }
 
 /**
@@ -287,7 +359,7 @@ export async function getUsageDetailsForSession(
   if (error) {
     throw error;
   }
-  return data || [];
+  return (data || []).map(mapUsageLogRow);
 }
 
 /**
@@ -328,7 +400,7 @@ export async function getLanguageSummaryByDateRange(
 ) {
   const { data, error } = await supabase
     .from("daily_usage_summary")
-    .select("language, lang_ext, time_spent_seconds")
+    .select("language, language_extension, time_spent_seconds")
     .eq("user_id", userId)
     .gte("date", startDate)
     .lte("date", endDate)
@@ -345,11 +417,11 @@ export async function getLanguageSummaryByDateRange(
   >();
 
   (data || []).forEach((item: any) => {
-    const key = `${item.language}|${item.lang_ext || ""}`;
+    const key = `${item.language}|${item.language_extension || ""}`;
     if (!languageMap.has(key)) {
       languageMap.set(key, {
         language: item.language,
-        lang_ext: item.lang_ext || "",
+        lang_ext: item.language_extension || "",
         total_time: 0,
       });
     }
@@ -368,10 +440,10 @@ export async function getLanguageSummaryByDateRange(
 export async function getUserEditors(userId: string) {
   const { data, error } = await supabase
     .from("daily_usage_summary")
-    .select("app, icon")
+    .select("app_name, icon_url")
     .eq("user_id", userId)
-    .not("icon", "is", null)
-    .neq("icon", "");
+    .not("icon_url", "is", null)
+    .neq("icon_url", "");
 
   if (error) {
     throw error;
@@ -380,8 +452,8 @@ export async function getUserEditors(userId: string) {
   // Get distinct app-icon pairs
   const editorMap = new Map<string, { app: string; icon: string }>();
   (data || []).forEach((item: any) => {
-    if (!editorMap.has(item.app)) {
-      editorMap.set(item.app, { app: item.app, icon: item.icon });
+    if (!editorMap.has(item.app_name)) {
+      editorMap.set(item.app_name, { app: item.app_name, icon: item.icon_url });
     }
   });
 
@@ -394,16 +466,18 @@ export async function getUserEditors(userId: string) {
 export async function getUserLangExts(userId: string) {
   const { data, error } = await supabase
     .from("daily_usage_summary")
-    .select("lang_ext")
+    .select("language_extension")
     .eq("user_id", userId)
-    .not("lang_ext", "is", null)
-    .neq("lang_ext", "");
+    .not("language_extension", "is", null)
+    .neq("language_extension", "");
 
   if (error) {
     throw error;
   }
 
   // Get distinct lang_exts
-  const extsSet = new Set((data || []).map((item: any) => item.lang_ext));
+  const extsSet = new Set(
+    (data || []).map((item: any) => item.language_extension),
+  );
   return Array.from(extsSet).map((lang_ext) => ({ lang_ext }));
 }

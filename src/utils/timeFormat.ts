@@ -17,8 +17,10 @@ export function getLocalDateString(date = new Date()): string {
 }
 
 // Pretty date formatting
-export function prettyDate(dateStr: string | Date): string {
+export function prettyDate(dateStr: string | Date | null | undefined): string {
+  if (dateStr == null) return "Unknown date";
   const d = typeof dateStr === "string" ? new Date(dateStr) : dateStr;
+  if (isNaN(d.getTime())) return "Unknown date";
   return d.toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",

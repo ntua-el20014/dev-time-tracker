@@ -25,16 +25,24 @@ function loadUserLangMap(userId: string) {
   }
 }
 
-ipcMain.handle("get-user-lang-map", async (_event) => {
-  const user = await getCurrentUser();
-  if (!user) return {};
-  return loadUserLangMap(user.id);
+ipcMain.handle("get-user-lang-map", async (_event, userId?: string) => {
+  let uid = userId;
+  if (!uid) {
+    const user = await getCurrentUser();
+    if (!user) return {};
+    uid = user.id;
+  }
+  return loadUserLangMap(uid);
 });
 
-ipcMain.handle("open-lang-json", async (_event) => {
-  const user = await getCurrentUser();
-  if (!user) return;
-  const userLangPath = getUserLangPath(user.id);
+ipcMain.handle("open-lang-json", async (_event, userId?: string) => {
+  let uid = userId;
+  if (!uid) {
+    const user = await getCurrentUser();
+    if (!user) return;
+    uid = user.id;
+  }
+  const userLangPath = getUserLangPath(uid);
   if (!fs.existsSync(userLangPath)) {
     fs.writeFileSync(userLangPath, "{}", "utf-8");
   }

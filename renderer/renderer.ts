@@ -21,6 +21,7 @@ import {
   checkAuthStatus,
   onAuthStateChange,
   getCurrentUser,
+  getCurrentSession,
 } from "../src/supabase/api";
 import { initializeOAuthListener } from "./utils/oauthHandler";
 import { loadUserLangMap } from "../src/utils/extractData";
@@ -616,9 +617,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (landing) landing.style.display = "none";
       if (mainUI) mainUI.style.display = "";
 
-      // Get the current user and initialize main UI
+      // Get the current user and sync session to main process
       const user = await getCurrentUser();
       if (user) {
+        // Sync existing session to main process
+        const session = await getCurrentSession();
+        if (session) {
+          await ipcRenderer.invoke("sync-auth-session", {
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
+        }
         showMainUIForUser(user.id);
       } else {
         throw new Error("No authenticated user found");
@@ -628,7 +637,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (landing) {
         if (mainUI) mainUI.style.display = "none";
         landing.style.display = "";
-        renderLandingPage(landing, (session: any) => {
+        renderLandingPage(landing, async (session: any) => {
+          await ipcRenderer.invoke("sync-auth-session", {
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
           showMainUIForUser(session.user.id);
           if (landing) landing.style.display = "none";
         });
@@ -648,7 +661,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (landing) {
         if (mainUI) mainUI.style.display = "none";
         landing.style.display = "";
-        renderLandingPage(landing, (session: any) => {
+        renderLandingPage(landing, async (session: any) => {
+          await ipcRenderer.invoke("sync-auth-session", {
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
           showMainUIForUser(session.user.id);
           landing.style.display = "none";
         });
@@ -657,12 +674,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Listen for auth state changes
-  onAuthStateChange((session: any) => {
+  onAuthStateChange(async (session: any) => {
     if (session) {
+      // Sync session tokens to main process so IPC handlers can authenticate
+      await ipcRenderer.invoke("sync-auth-session", {
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
       // User signed in
       showMainUIForUser(session.user.id);
       if (landing) landing.style.display = "none";
     } else {
+      // Clear session in main process
+      await ipcRenderer.invoke("sync-auth-session", null);
       // User signed out - reset the initialization flag
       isMainUIInitialized = false;
       destroyConnectionStatus();
@@ -670,7 +694,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (mainUI) mainUI.style.display = "none";
       if (landing) {
         landing.style.display = "";
-        renderLandingPage(landing, (newSession: any) => {
+        renderLandingPage(landing, async (newSession: any) => {
+          await ipcRenderer.invoke("sync-auth-session", {
+            access_token: newSession.access_token,
+            refresh_token: newSession.refresh_token,
+          });
           showMainUIForUser(newSession.user.id);
           landing.style.display = "none";
         });

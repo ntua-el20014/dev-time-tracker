@@ -2,6 +2,61 @@ import { ipcMain } from "electron";
 import * as timeTracking from "../supabase/timeTracking";
 import * as tags from "../supabase/tags";
 import { getCurrentUser } from "../supabase/api";
+import { supabase } from "../supabase/config";
+
+/**
+ * Enrich raw Supabase session rows with derived fields the renderer expects:
+ * - date (from start_time)
+ * - tags (from session_tags join)
+ * - project_name / project_color (from cloud_projects)
+ */
+async function enrichSessions(rawSessions: any[]): Promise<any[]> {
+  if (rawSessions.length === 0) return [];
+
+  const sessionIds = rawSessions.map((s) => s.id);
+
+  // Batch-fetch tags for all sessions
+  const { data: sessionTagsData } = await supabase
+    .from("session_tags")
+    .select("session_id, user_tags(name, color)")
+    .in("session_id", sessionIds);
+
+  const tagsBySession: Record<string, string[]> = {};
+  for (const st of sessionTagsData || []) {
+    const sid = (st as any).session_id;
+    const tagName = (st as any).user_tags?.name;
+    if (tagName) {
+      if (!tagsBySession[sid]) tagsBySession[sid] = [];
+      tagsBySession[sid].push(tagName);
+    }
+  }
+
+  // Batch-fetch projects for sessions that have a project_id
+  const projectIds = [
+    ...new Set(rawSessions.map((s) => s.project_id).filter(Boolean)),
+  ];
+  const projectMap: Record<string, { name: string; color: string }> = {};
+  if (projectIds.length > 0) {
+    const { data: projects } = await supabase
+      .from("cloud_projects")
+      .select("id, name, color")
+      .in("id", projectIds);
+    for (const p of projects || []) {
+      projectMap[(p as any).id] = {
+        name: (p as any).name,
+        color: (p as any).color,
+      };
+    }
+  }
+
+  return rawSessions.map((s) => ({
+    ...s,
+    date: s.start_time ? s.start_time.split("T")[0] : null,
+    tags: tagsBySession[s.id] || [],
+    project_name: s.project_id ? projectMap[s.project_id]?.name : null,
+    project_color: s.project_id ? projectMap[s.project_id]?.color : null,
+  }));
+}
 
 /**
  * Get all sessions for the current user with optional filters
@@ -41,7 +96,11 @@ ipcMain.handle(
         }
       }
 
-      return await timeTracking.getAllSessions(user.id, supabaseFilters);
+      const rawSessions = await timeTracking.getAllSessions(
+        user.id,
+        supabaseFilters,
+      );
+      return await enrichSessions(rawSessions);
     } catch (err) {
       // Error getting sessions - return empty array
       return [];
@@ -133,7 +192,9 @@ ipcMain.handle(
       if (!user) {
         throw new Error("User not authenticated");
       }
-      return await timeTracking.getSmallSessions(user.id, maxDurationSeconds);
+      return await enrichSessions(
+        await timeTracking.getSmallSessions(user.id, maxDurationSeconds),
+      );
     } catch (err) {
       return [];
     }

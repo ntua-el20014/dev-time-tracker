@@ -3,22 +3,28 @@ import type { Database } from "../types/database.types";
 import { SUPABASE_CONFIG } from "./env";
 
 // Create a custom storage adapter for Electron
+// In the renderer process, use localStorage. In the main process (no window),
+// use an in-memory store so setSession/getSession work after syncing tokens.
+const memoryStore: Record<string, string> = {};
+
 const electronStorage = {
   getItem: (key: string) => {
     if (typeof window !== "undefined" && window.localStorage) {
       return window.localStorage.getItem(key);
     }
-    return null;
+    return memoryStore[key] ?? null;
   },
   setItem: (key: string, value: string) => {
     if (typeof window !== "undefined" && window.localStorage) {
       window.localStorage.setItem(key, value);
     }
+    memoryStore[key] = value;
   },
   removeItem: (key: string) => {
     if (typeof window !== "undefined" && window.localStorage) {
       window.localStorage.removeItem(key);
     }
+    delete memoryStore[key];
   },
 };
 
