@@ -58,6 +58,7 @@ CREATE TABLE cloud_projects (
     color TEXT DEFAULT '#3b82f6',
     scope TEXT NOT NULL DEFAULT 'organization' CHECK (scope IN ('personal', 'organization')),
     is_active BOOLEAN DEFAULT true,
+    archived BOOLEAN DEFAULT false,
     manager_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
     org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -202,9 +203,10 @@ CREATE TABLE user_preferences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID UNIQUE NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
     theme TEXT DEFAULT 'system' CHECK (theme IN ('light', 'dark', 'system')),
-    accent_color TEXT DEFAULT '#3b82f6',
+    accent_color JSONB DEFAULT '{"light": "#007acc", "dark": "#f0db4f"}',
     editor_colors JSONB DEFAULT '{}', -- { "VS Code": "#007acc", "IntelliJ": "#ff6b6b", ... }
     notification_settings JSONB DEFAULT '{"daily_goals": true, "scheduled_sessions": true}',
+    idle_timeout_seconds INTEGER DEFAULT 300, -- 5 minutes default
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

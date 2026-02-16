@@ -50,10 +50,10 @@ import { updateAccentTextColors } from "./utils/colorUtils";
 
 function setupTabs() {
   const tabs = Array.from(
-    document.querySelectorAll(".tab")
+    document.querySelectorAll(".tab"),
   ) as HTMLButtonElement[];
   const tabContents = Array.from(
-    document.querySelectorAll(".tab-content")
+    document.querySelectorAll(".tab-content"),
   ) as HTMLDivElement[];
 
   // Remove old listeners by replacing each tab with a clone
@@ -98,7 +98,7 @@ function setupTabs() {
 async function setupRoleBasedTabVisibility() {
   const isManagerOrAdmin = await isCurrentUserManagerOrAdmin();
   const projectsTab = document.querySelector(
-    '.tab[data-tab="projects"]'
+    '.tab[data-tab="projects"]',
   ) as HTMLButtonElement;
 
   if (projectsTab) {
@@ -121,7 +121,7 @@ function initUI() {
   ipcRenderer.on("window-tracked", () => {
     // Only refresh logs if Today tab is active
     const todayTab = document.querySelector(
-      '.tab[data-tab="today"]'
+      '.tab[data-tab="today"]',
     ) as HTMLButtonElement;
     const todayContent = document.getElementById("tab-today");
     if (
@@ -136,10 +136,10 @@ function initUI() {
 
   // --- Make Dashboard tab active by default ---
   const tabs = Array.from(
-    document.querySelectorAll(".tab")
+    document.querySelectorAll(".tab"),
   ) as HTMLButtonElement[];
   const tabContents = Array.from(
-    document.querySelectorAll(".tab-content")
+    document.querySelectorAll(".tab-content"),
   ) as HTMLDivElement[];
   tabs.forEach((t) => t.classList.remove("active"));
   tabContents.forEach((tc) => {
@@ -148,7 +148,7 @@ function initUI() {
   });
 
   const dashboardTab = document.querySelector(
-    '.tab[data-tab="dashboard"]'
+    '.tab[data-tab="dashboard"]',
   ) as HTMLButtonElement;
   const dashboardContent = document.getElementById("tab-dashboard");
   if (dashboardTab && dashboardContent) {
@@ -165,7 +165,7 @@ function initUI() {
 function setupRecordAndPauseBtns() {
   // Remove old listeners by replacing buttons with clones
   const recordBtnOld = document.getElementById(
-    "recordBtn"
+    "recordBtn",
   ) as HTMLButtonElement;
   const pauseBtnOld = document.getElementById("pauseBtn") as HTMLButtonElement;
 
@@ -233,7 +233,7 @@ function setupHotkeys() {
       e.preventDefault();
       e.stopPropagation();
       const recordBtn = document.getElementById(
-        "recordBtn"
+        "recordBtn",
       ) as HTMLButtonElement;
       if (recordBtn) recordBtn.click();
       return;
@@ -271,7 +271,7 @@ function setupHotkeys() {
     if (e.ctrlKey && e.key === "5") {
       e.preventDefault();
       const projectsTab = document.querySelector(
-        '.tab[data-tab="projects"]'
+        '.tab[data-tab="projects"]',
       ) as HTMLButtonElement;
       // Only trigger if the tab is visible (user has access)
       if (projectsTab && projectsTab.style.display !== "none") {
@@ -366,12 +366,11 @@ ipcRenderer.on("get-session-info", async () => {
     let projectDropdown: any = null;
     if (activeProjects.length > 0) {
       const projectContainer = document.getElementById(
-        "session-project-container"
+        "session-project-container",
       );
       if (projectContainer) {
-        const { createCustomDropdown } = await import(
-          "./components/CustomDropdown"
-        );
+        const { createCustomDropdown } =
+          await import("./components/CustomDropdown");
         projectDropdown = createCustomDropdown({
           id: "session-project",
           name: "project",
@@ -390,13 +389,13 @@ ipcRenderer.on("get-session-info", async () => {
 
     const form = document.getElementById("sessionInfoForm") as HTMLFormElement;
     const titleInput = document.getElementById(
-      "session-title"
+      "session-title",
     ) as HTMLInputElement;
     const cancelBtn = document.getElementById(
-      "sessionCancelBtn"
+      "sessionCancelBtn",
     ) as HTMLButtonElement;
     const closeBtn = modal.querySelector(
-      ".modal-close-btn"
+      ".modal-close-btn",
     ) as HTMLButtonElement;
 
     // Focus the title input
@@ -488,7 +487,7 @@ ipcRenderer.on(
       message?: string;
       sessionId?: number;
       type?: string;
-    }
+    },
   ) => {
     if (data && data.message) {
       showNotification(`${data.title} - ${data.message}`);
@@ -503,7 +502,7 @@ ipcRenderer.on(
             confirmText: "Open Calendar",
             onConfirm: () => {
               const calendarTab = document.querySelector(
-                '.tab[data-tab="calendar"]'
+                '.tab[data-tab="calendar"]',
               ) as HTMLButtonElement;
               if (calendarTab) {
                 calendarTab.click();
@@ -513,16 +512,12 @@ ipcRenderer.on(
         }, 2000);
       }
     }
-  }
+  },
 );
 
 export async function applyAccentColor() {
   const theme = document.body.classList.contains("light") ? "light" : "dark";
-  const accentColor = await ipcRenderer.invoke(
-    "get-accent-color",
-    theme,
-    getCurrentUserId()
-  );
+  const accentColor = await ipcRenderer.invoke("get-accent-color", theme);
 
   if (theme === "light") {
     document.body.style.setProperty("--accent", accentColor);
@@ -537,8 +532,7 @@ export async function applyAccentColor() {
 }
 
 async function applyUserTheme() {
-  const userId = getCurrentUserId();
-  const savedTheme = (await ipcRenderer.invoke("get-user-theme", userId)) as
+  const savedTheme = (await ipcRenderer.invoke("get-user-theme")) as
     | "light"
     | "dark";
   if (savedTheme === "light") {
@@ -696,7 +690,7 @@ async function checkDailyGoalProgress() {
     const totalMins = await ipcRenderer.invoke(
       "get-total-time-for-day",
       userId,
-      today
+      today,
     );
 
     if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {

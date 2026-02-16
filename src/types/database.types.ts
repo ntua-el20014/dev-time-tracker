@@ -25,34 +25,16 @@ export interface Database {
           updated_at?: TimestampString;
         };
         Update: {
-          id?: string;
           name?: string;
           updated_at?: TimestampString;
         };
-      };
-      app_settings: {
-        Row: {
-          key: string;
-          value: string | null;
-          created_at: TimestampString;
-          updated_at: TimestampString;
-        };
-        Insert: {
-          key: string;
-          value?: string | null;
-          created_at?: TimestampString;
-          updated_at?: TimestampString;
-        };
-        Update: {
-          value?: string | null;
-          updated_at?: TimestampString;
-        };
+        Relationships: [];
       };
       user_profiles: {
         Row: {
           id: string;
-          local_id: string | null;
           username: string;
+          email: string | null;
           avatar: string | null;
           role: "admin" | "manager" | "employee";
           org_id: string | null;
@@ -61,8 +43,8 @@ export interface Database {
         };
         Insert: {
           id: string;
-          local_id?: string | null;
           username: string;
+          email?: string | null;
           avatar?: string | null;
           role?: "admin" | "manager" | "employee";
           org_id?: string | null;
@@ -70,8 +52,8 @@ export interface Database {
           updated_at?: TimestampString;
         };
         Update: {
-          local_id?: string | null;
           username?: string;
+          email?: string | null;
           avatar?: string | null;
           role?: "admin" | "manager" | "employee";
           org_id?: string | null;
@@ -92,84 +74,100 @@ export interface Database {
           },
         ];
       };
-      tags: {
+      org_join_requests: {
         Row: {
           id: string;
-          local_id: string | null;
-          name: string;
           user_id: string;
-          color: string | null;
+          org_id: string;
+          status: "pending" | "approved" | "rejected";
+          requested_at: TimestampString;
+          reviewed_at: TimestampString | null;
+          reviewed_by: string | null;
           created_at: TimestampString;
           updated_at: TimestampString;
         };
         Insert: {
           id?: string;
-          local_id?: string | null;
-          name: string;
           user_id: string;
-          color?: string | null;
+          org_id: string;
+          status?: "pending" | "approved" | "rejected";
+          requested_at?: TimestampString;
+          reviewed_at?: TimestampString | null;
+          reviewed_by?: string | null;
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
         Update: {
-          local_id?: string | null;
-          name?: string;
-          color?: string | null;
+          status?: "pending" | "approved" | "rejected";
+          reviewed_at?: TimestampString | null;
+          reviewed_by?: string | null;
           updated_at?: TimestampString;
         };
         Relationships: [
           {
-            foreignKeyName: "tags_user_id_fkey";
+            foreignKeyName: "org_join_requests_user_id_fkey";
             columns: ["user_id"];
+            referencedRelation: "user_profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "org_join_requests_org_id_fkey";
+            columns: ["org_id"];
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "org_join_requests_reviewed_by_fkey";
+            columns: ["reviewed_by"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
           },
         ];
       };
-      projects: {
+      cloud_projects: {
         Row: {
           id: string;
-          local_id: string | null;
           name: string;
           description: string | null;
-          color: string | null;
+          color: string;
+          scope: "personal" | "organization";
           is_active: boolean;
           manager_id: string;
-          org_id: string;
+          org_id: string | null;
           created_at: TimestampString;
           updated_at: TimestampString;
         };
         Insert: {
           id?: string;
-          local_id?: string | null;
           name: string;
           description?: string | null;
-          color?: string | null;
+          color?: string;
+          scope?: "personal" | "organization";
           is_active?: boolean;
           manager_id: string;
-          org_id: string;
+          org_id?: string | null;
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
         Update: {
-          local_id?: string | null;
           name?: string;
           description?: string | null;
-          color?: string | null;
+          color?: string;
+          scope?: "personal" | "organization";
           is_active?: boolean;
           manager_id?: string;
-          org_id?: string;
+          org_id?: string | null;
           updated_at?: TimestampString;
         };
         Relationships: [
           {
-            foreignKeyName: "projects_manager_id_fkey";
+            foreignKeyName: "cloud_projects_manager_id_fkey";
             columns: ["manager_id"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "projects_org_id_fkey";
+            foreignKeyName: "cloud_projects_org_id_fkey";
             columns: ["org_id"];
             referencedRelation: "organizations";
             referencedColumns: ["id"];
@@ -181,24 +179,24 @@ export interface Database {
           id: string;
           project_id: string;
           user_id: string;
-          role: "manager" | "employee";
-          joined_at: TimestampString;
+          role: "manager" | "member";
+          assigned_at: TimestampString;
         };
         Insert: {
           id?: string;
           project_id: string;
           user_id: string;
-          role?: "manager" | "employee";
-          joined_at?: TimestampString;
+          role?: "manager" | "member";
+          assigned_at?: TimestampString;
         };
         Update: {
-          role?: "manager" | "employee";
+          role?: "manager" | "member";
         };
         Relationships: [
           {
             foreignKeyName: "project_members_project_id_fkey";
             columns: ["project_id"];
-            referencedRelation: "projects";
+            referencedRelation: "cloud_projects";
             referencedColumns: ["id"];
           },
           {
@@ -209,36 +207,103 @@ export interface Database {
           },
         ];
       };
-      usage_logs: {
+      time_tracking_sessions: {
         Row: {
           id: string;
-          local_id: string | null;
           user_id: string;
-          app: string;
-          title: string;
-          language: string | null;
-          timestamp: TimestampString;
+          org_id: string | null;
+          project_id: string | null;
+          title: string | null;
+          description: string | null;
+          start_time: TimestampString;
+          end_time: TimestampString | null;
+          duration: number | null;
+          is_billable: boolean;
           created_at: TimestampString;
           updated_at: TimestampString;
         };
         Insert: {
           id?: string;
-          local_id?: string | null;
           user_id: string;
-          app: string;
-          title: string;
-          language?: string | null;
-          timestamp: TimestampString;
+          org_id?: string | null;
+          project_id?: string | null;
+          title?: string | null;
+          description?: string | null;
+          start_time: TimestampString;
+          end_time?: TimestampString | null;
+          duration?: number | null;
+          is_billable?: boolean;
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
         Update: {
-          local_id?: string | null;
-          app?: string;
-          title?: string;
-          language?: string | null;
-          timestamp?: TimestampString;
+          org_id?: string | null;
+          project_id?: string | null;
+          title?: string | null;
+          description?: string | null;
+          start_time?: TimestampString;
+          end_time?: TimestampString | null;
+          duration?: number | null;
+          is_billable?: boolean;
           updated_at?: TimestampString;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_tracking_sessions_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "user_profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_tracking_sessions_org_id_fkey";
+            columns: ["org_id"];
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_tracking_sessions_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "cloud_projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      usage_logs: {
+        Row: {
+          id: string;
+          user_id: string;
+          org_id: string | null;
+          session_id: string | null;
+          app_name: string;
+          window_title: string | null;
+          language: string | null;
+          language_extension: string | null;
+          icon_url: string | null;
+          timestamp: TimestampString;
+          created_at: TimestampString;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          org_id?: string | null;
+          session_id?: string | null;
+          app_name: string;
+          window_title?: string | null;
+          language?: string | null;
+          language_extension?: string | null;
+          icon_url?: string | null;
+          timestamp: TimestampString;
+          created_at?: TimestampString;
+        };
+        Update: {
+          org_id?: string | null;
+          session_id?: string | null;
+          app_name?: string;
+          window_title?: string | null;
+          language?: string | null;
+          language_extension?: string | null;
+          icon_url?: string | null;
+          timestamp?: TimestampString;
         };
         Relationships: [
           {
@@ -247,42 +312,54 @@ export interface Database {
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "usage_logs_org_id_fkey";
+            columns: ["org_id"];
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "usage_logs_session_id_fkey";
+            columns: ["session_id"];
+            referencedRelation: "time_tracking_sessions";
+            referencedColumns: ["id"];
+          },
         ];
       };
       daily_usage_summary: {
         Row: {
           id: string;
-          local_id: string | null;
           user_id: string;
-          app: string;
+          org_id: string | null;
+          date: string;
+          app_name: string;
           language: string | null;
-          lang_ext: string | null;
-          date: string; // YYYY-MM-DD format
-          icon: string | null;
-          time_spent: number;
+          language_extension: string | null;
+          icon_url: string | null;
+          time_spent_seconds: number;
           created_at: TimestampString;
           updated_at: TimestampString;
         };
         Insert: {
           id?: string;
-          local_id?: string | null;
           user_id: string;
-          app: string;
-          language?: string | null;
-          lang_ext?: string | null;
+          org_id?: string | null;
           date: string;
-          icon?: string | null;
-          time_spent?: number;
+          app_name: string;
+          language?: string | null;
+          language_extension?: string | null;
+          icon_url?: string | null;
+          time_spent_seconds?: number;
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
         Update: {
-          local_id?: string | null;
-          app?: string;
+          org_id?: string | null;
+          app_name?: string;
           language?: string | null;
-          lang_ext?: string | null;
-          icon?: string | null;
-          time_spent?: number;
+          language_extension?: string | null;
+          icon_url?: string | null;
+          time_spent_seconds?: number;
           updated_at?: TimestampString;
         };
         Relationships: [
@@ -292,57 +369,39 @@ export interface Database {
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "daily_usage_summary_org_id_fkey";
+            columns: ["org_id"];
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
         ];
       };
-      sessions: {
+      user_tags: {
         Row: {
           id: string;
-          local_id: string | null;
-          timestamp: TimestampString;
-          start_time: TimestampString;
-          duration: number;
-          title: string;
-          description: string | null;
-          project_id: string | null;
-          is_billable: boolean;
           user_id: string;
+          name: string;
+          color: string;
           created_at: TimestampString;
           updated_at: TimestampString;
         };
         Insert: {
           id?: string;
-          local_id?: string | null;
-          timestamp: TimestampString;
-          start_time: TimestampString;
-          duration: number;
-          title: string;
-          description?: string | null;
-          project_id?: string | null;
-          is_billable?: boolean;
           user_id: string;
+          name: string;
+          color?: string;
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
         Update: {
-          local_id?: string | null;
-          timestamp?: TimestampString;
-          start_time?: TimestampString;
-          duration?: number;
-          title?: string;
-          description?: string | null;
-          project_id?: string | null;
-          is_billable?: boolean;
+          name?: string;
+          color?: string;
           updated_at?: TimestampString;
         };
         Relationships: [
           {
-            foreignKeyName: "sessions_project_id_fkey";
-            columns: ["project_id"];
-            referencedRelation: "projects";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "sessions_user_id_fkey";
+            foreignKeyName: "user_tags_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
@@ -353,10 +412,12 @@ export interface Database {
         Row: {
           session_id: string;
           tag_id: string;
+          created_at: TimestampString;
         };
         Insert: {
           session_id: string;
           tag_id: string;
+          created_at?: TimestampString;
         };
         Update: {
           session_id?: string;
@@ -366,80 +427,83 @@ export interface Database {
           {
             foreignKeyName: "session_tags_session_id_fkey";
             columns: ["session_id"];
-            referencedRelation: "sessions";
+            referencedRelation: "time_tracking_sessions";
             referencedColumns: ["id"];
           },
           {
             foreignKeyName: "session_tags_tag_id_fkey";
             columns: ["tag_id"];
-            referencedRelation: "tags";
+            referencedRelation: "user_tags";
             referencedColumns: ["id"];
           },
         ];
       };
-      daily_goals: {
+      daily_work_goals: {
         Row: {
           id: string;
-          local_id: string | null;
           user_id: string;
-          date: string; // YYYY-MM-DD format
-          time: number;
+          date: string;
+          target_minutes: number;
           description: string | null;
           is_completed: boolean;
+          completed_at: TimestampString | null;
           created_at: TimestampString;
           updated_at: TimestampString;
         };
         Insert: {
           id?: string;
-          local_id?: string | null;
           user_id: string;
           date: string;
-          time: number;
+          target_minutes: number;
           description?: string | null;
           is_completed?: boolean;
+          completed_at?: TimestampString | null;
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
         Update: {
-          local_id?: string | null;
-          time?: number;
+          target_minutes?: number;
           description?: string | null;
           is_completed?: boolean;
+          completed_at?: TimestampString | null;
           updated_at?: TimestampString;
         };
         Relationships: [
           {
-            foreignKeyName: "daily_goals_user_id_fkey";
+            foreignKeyName: "daily_work_goals_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "user_profiles";
             referencedColumns: ["id"];
           },
         ];
       };
-      scheduled_sessions: {
+      scheduled_work_sessions: {
         Row: {
           id: string;
-          local_id: string | null;
           user_id: string;
+          org_id: string | null;
+          project_id: string | null;
           title: string;
           description: string | null;
           scheduled_datetime: TimestampString;
-          estimated_duration: number | null;
+          estimated_duration_minutes: number | null;
           recurrence_type: "none" | "weekly";
           recurrence_data: Json | null;
           status: "pending" | "notified" | "completed" | "missed" | "cancelled";
+          actual_session_id: string | null;
           last_notification_sent: TimestampString | null;
           created_at: TimestampString;
           updated_at: TimestampString;
         };
         Insert: {
           id?: string;
-          local_id?: string | null;
           user_id: string;
+          org_id?: string | null;
+          project_id?: string | null;
           title: string;
           description?: string | null;
           scheduled_datetime: TimestampString;
-          estimated_duration?: number | null;
+          estimated_duration_minutes?: number | null;
           recurrence_type?: "none" | "weekly";
           recurrence_data?: Json | null;
           status?:
@@ -448,16 +512,18 @@ export interface Database {
             | "completed"
             | "missed"
             | "cancelled";
+          actual_session_id?: string | null;
           last_notification_sent?: TimestampString | null;
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
         Update: {
-          local_id?: string | null;
+          org_id?: string | null;
+          project_id?: string | null;
           title?: string;
           description?: string | null;
           scheduled_datetime?: TimestampString;
-          estimated_duration?: number | null;
+          estimated_duration_minutes?: number | null;
           recurrence_type?: "none" | "weekly";
           recurrence_data?: Json | null;
           status?:
@@ -466,14 +532,33 @@ export interface Database {
             | "completed"
             | "missed"
             | "cancelled";
+          actual_session_id?: string | null;
           last_notification_sent?: TimestampString | null;
           updated_at?: TimestampString;
         };
         Relationships: [
           {
-            foreignKeyName: "scheduled_sessions_user_id_fkey";
+            foreignKeyName: "scheduled_work_sessions_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "user_profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "scheduled_work_sessions_org_id_fkey";
+            columns: ["org_id"];
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "scheduled_work_sessions_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "cloud_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "scheduled_work_sessions_actual_session_id_fkey";
+            columns: ["actual_session_id"];
+            referencedRelation: "time_tracking_sessions";
             referencedColumns: ["id"];
           },
         ];
@@ -482,10 +567,12 @@ export interface Database {
         Row: {
           scheduled_session_id: string;
           tag_id: string;
+          created_at: TimestampString;
         };
         Insert: {
           scheduled_session_id: string;
           tag_id: string;
+          created_at?: TimestampString;
         };
         Update: {
           scheduled_session_id?: string;
@@ -495,13 +582,53 @@ export interface Database {
           {
             foreignKeyName: "scheduled_session_tags_scheduled_session_id_fkey";
             columns: ["scheduled_session_id"];
-            referencedRelation: "scheduled_sessions";
+            referencedRelation: "scheduled_work_sessions";
             referencedColumns: ["id"];
           },
           {
             foreignKeyName: "scheduled_session_tags_tag_id_fkey";
             columns: ["tag_id"];
-            referencedRelation: "tags";
+            referencedRelation: "user_tags";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      user_preferences: {
+        Row: {
+          id: string;
+          user_id: string;
+          theme: "light" | "dark" | "system";
+          accent_color: string;
+          editor_colors: Json;
+          notification_settings: Json;
+          idle_timeout_seconds: number;
+          created_at: TimestampString;
+          updated_at: TimestampString;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          theme?: "light" | "dark" | "system";
+          accent_color?: string;
+          editor_colors?: Json;
+          notification_settings?: Json;
+          idle_timeout_seconds?: number;
+          created_at?: TimestampString;
+          updated_at?: TimestampString;
+        };
+        Update: {
+          theme?: "light" | "dark" | "system";
+          accent_color?: string;
+          editor_colors?: Json;
+          notification_settings?: Json;
+          idle_timeout_seconds?: number;
+          updated_at?: TimestampString;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_preferences_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "user_profiles";
             referencedColumns: ["id"];
           },
         ];

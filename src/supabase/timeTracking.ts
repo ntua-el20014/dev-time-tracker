@@ -1,7 +1,9 @@
 import { supabase } from "./config";
 import type { Database } from "../types/database.types";
+import { setSessionTagsByNames } from "./tags";
 
-type SessionInsert = Database["public"]["Tables"]["sessions"]["Insert"];
+type SessionInsert =
+  Database["public"]["Tables"]["time_tracking_sessions"]["Insert"];
 
 /**
  * Start a new tracking session
@@ -18,14 +20,13 @@ export async function startSession(
     project_id: projectId || null,
     description: description || null,
     start_time: now,
-    timestamp: now,
     duration: 0,
     title: description || "Untitled Session",
     is_billable: false,
   };
 
   const { data, error } = await supabase
-    .from("sessions")
+    .from("time_tracking_sessions")
     .insert(sessionData as any)
     .select()
     .single();
@@ -42,7 +43,7 @@ export async function startSession(
 export async function endSession(sessionId: string) {
   // Get the session to calculate duration
   const { data: session, error: fetchError } = await supabase
-    .from("sessions")
+    .from("time_tracking_sessions")
     .select("start_time")
     .eq("id", sessionId)
     .single();
@@ -62,7 +63,7 @@ export async function endSession(sessionId: string) {
   );
 
   const { data, error } = await (supabase as any)
-    .from("sessions")
+    .from("time_tracking_sessions")
     .update({
       duration: durationSeconds,
       updated_at: now,
@@ -86,7 +87,7 @@ export async function getSmallSessions(
   maxDurationSeconds: number,
 ) {
   const { data, error } = await supabase
-    .from("sessions")
+    .from("time_tracking_sessions")
     .select("*")
     .eq("user_id", userId)
     .lte("duration", maxDurationSeconds)
@@ -104,7 +105,7 @@ export async function getSmallSessions(
  */
 export async function deleteSessions(sessionIds: string[]) {
   const { error } = await supabase
-    .from("sessions")
+    .from("time_tracking_sessions")
     .delete()
     .in("id", sessionIds);
 
@@ -161,7 +162,7 @@ export async function getAllSessions(
 
     // Build query with session IDs filter
     let query = supabase
-      .from("sessions")
+      .from("time_tracking_sessions")
       .select("*")
       .eq("user_id", userId)
       .in("id", sessionIds)
@@ -200,7 +201,7 @@ export async function getAllSessions(
 
   // No tag filter - proceed with regular query
   let query = supabase
-    .from("sessions")
+    .from("time_tracking_sessions")
     .select("*")
     .eq("user_id", userId)
     .order("start_time", { ascending: false });
@@ -241,7 +242,7 @@ export async function getAllSessions(
  */
 export async function getSessionById(sessionId: string) {
   const { data, error } = await supabase
-    .from("sessions")
+    .from("time_tracking_sessions")
     .select("*")
     .eq("id", sessionId)
     .single();
@@ -269,7 +270,7 @@ export async function updateSession(
   },
 ) {
   const { data, error } = await (supabase as any)
-    .from("sessions")
+    .from("time_tracking_sessions")
     .update({
       ...updates,
       updated_at: new Date().toISOString(),
@@ -289,13 +290,55 @@ export async function updateSession(
  */
 export async function deleteSession(sessionId: string) {
   const { error } = await supabase
-    .from("sessions")
+    .from("time_tracking_sessions")
     .delete()
     .eq("id", sessionId);
 
   if (error) {
     throw error;
   }
+}
+
+/**
+ * Add a completed session (retrospectively)
+ * Used for adding sessions with known duration and details
+ */
+export async function addSession(
+  userId: string,
+  startTime: string,
+  duration: number,
+  title: string,
+  description?: string,
+  tags?: string[],
+  projectId?: string,
+  isBillable: boolean = false,
+) {
+  const sessionData: SessionInsert = {
+    user_id: userId,
+    start_time: startTime,
+    duration,
+    title,
+    description: description || null,
+    project_id: projectId || null,
+    is_billable: isBillable,
+  };
+
+  const { data, error } = await supabase
+    .from("time_tracking_sessions")
+    .insert(sessionData as any)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  // If tags provided, set them
+  if (tags && tags.length > 0 && data) {
+    await setSessionTagsByNames(userId, (data as any).id, tags);
+  }
+
+  return data;
 }
 
 /**
@@ -307,7 +350,7 @@ export async function getSessionsInDateRange(
   endDate: string,
 ) {
   const { data, error } = await supabase
-    .from("sessions")
+    .from("time_tracking_sessions")
     .select("*")
     .eq("user_id", userId)
     .gte("start_time", startDate)

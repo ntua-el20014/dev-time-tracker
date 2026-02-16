@@ -1,7 +1,7 @@
 /**
  * Cloud Projects Management API (Supabase)
  * Manages organization projects in Supabase
- * Links to local SQLite projects via local_id field
+ * Supports both personal and organization-scoped projects
  */
 
 import { supabase } from "./config";
@@ -17,9 +17,10 @@ import type {
 
 /**
  * Get all cloud projects for the current user's organization
+ * Only returns projects with scope="organization"
  */
 export async function getOrganizationProjects(
-  userId?: string
+  userId?: string,
 ): Promise<CloudProjectWithManager[]> {
   let currentUserId = userId;
 
@@ -45,9 +46,9 @@ export async function getOrganizationProjects(
 
   const userOrgId = (profiles[0] as any).org_id;
 
-  // Get projects with manager info
+  // Get organization projects with manager info (exclude archived)
   const { data, error } = await supabase
-    .from("projects")
+    .from("cloud_projects")
     .select(
       `
       *,
@@ -55,9 +56,50 @@ export async function getOrganizationProjects(
         username,
         email
       )
-    `
+    `,
     )
     .eq("org_id", userOrgId)
+    .eq("scope", "organization")
+    .eq("archived", false)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data || []) as CloudProjectWithManager[];
+}
+
+/**
+ * Get all personal projects for a specific user
+ * Returns projects with scope="personal"
+ */
+export async function getPersonalProjects(
+  userId?: string,
+): Promise<CloudProjectWithManager[]> {
+  let currentUserId = userId;
+
+  // If userId not provided, try to get from auth
+  if (!currentUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+    currentUserId = user.id;
+  }
+
+  // Get personal projects with manager info (exclude archived)
+  const { data, error } = await supabase
+    .from("cloud_projects")
+    .select(
+      `
+      *,
+      manager:user_profiles!manager_id (
+        username,
+        email
+      )
+    `,
+    )
+    .eq("manager_id", currentUserId)
+    .eq("scope", "personal")
+    .eq("archived", false)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -68,10 +110,10 @@ export async function getOrganizationProjects(
  * Get cloud project by ID
  */
 export async function getCloudProjectById(
-  projectId: string
+  projectId: string,
 ): Promise<CloudProjectWithManager | null> {
   const { data, error } = await supabase
-    .from("projects")
+    .from("cloud_projects")
     .select(
       `
       *,
@@ -79,7 +121,7 @@ export async function getCloudProjectById(
         username,
         email
       )
-    `
+    `,
     )
     .eq("id", projectId)
     .single();
@@ -92,39 +134,12 @@ export async function getCloudProjectById(
 }
 
 /**
- * Get cloud project by local_id (links to SQLite)
- */
-export async function getCloudProjectByLocalId(
-  localId: string
-): Promise<CloudProjectWithManager | null> {
-  const { data, error } = await supabase
-    .from("projects")
-    .select(
-      `
-      *,
-      manager:user_profiles!manager_id (
-        username,
-        email
-      )
-    `
-    )
-    .eq("local_id", localId)
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null; // Not found
-    throw error;
-  }
-  return data as CloudProjectWithManager;
-}
-
-/**
- * Create a cloud project (admin/manager only)
- * Can optionally link to local project via local_id
+ * Create a cloud project (admin/manager only for org projects, any user for personal)
+ * Default scope is "organization" if org_id is provided, otherwise "personal"
  */
 export async function createCloudProject(
   data: CreateCloudProjectData,
-  userId?: string
+  userId?: string,
 ): Promise<CloudProject> {
   let currentUserId = userId;
 
@@ -137,15 +152,25 @@ export async function createCloudProject(
     currentUserId = user.id;
   }
 
-  // Use RPC call to create project with proper auth context
-  const { data: project, error } = await supabase.rpc("create_cloud_project", {
-    p_name: data.name,
-    p_description: data.description || "",
-    p_color: data.color,
-    p_org_id: data.org_id,
-    p_manager_id: data.manager_id || currentUserId,
-    p_local_id: data.local_id || null,
-  } as any);
+  // Determine scope: if org_id is provided, default to organization, else personal
+  const scope = data.scope || (data.org_id ? "organization" : "personal");
+
+  // For personal projects, org_id should be null
+  const orgId = scope === "personal" ? null : data.org_id;
+
+  // Use direct insert instead of RPC for better type safety
+  const { data: project, error } = await (supabase as any)
+    .from("cloud_projects")
+    .insert({
+      name: data.name,
+      description: data.description || null,
+      color: data.color || "#3b82f6",
+      scope: scope,
+      manager_id: data.manager_id || currentUserId,
+      org_id: orgId,
+    })
+    .select()
+    .single();
 
   if (error) throw error;
   return project as CloudProject;
@@ -156,10 +181,10 @@ export async function createCloudProject(
  */
 export async function updateCloudProject(
   projectId: string,
-  updates: UpdateCloudProjectData
+  updates: UpdateCloudProjectData,
 ): Promise<CloudProject> {
   const { data, error } = await supabase
-    .from("projects")
+    .from("cloud_projects")
     // @ts-ignore - Supabase RLS typing limitation
     .update(updates)
     .eq("id", projectId)
@@ -171,20 +196,10 @@ export async function updateCloudProject(
 }
 
 /**
- * Link a local project to a cloud project
- */
-export async function linkLocalProject(
-  cloudProjectId: string,
-  localId: string
-): Promise<CloudProject> {
-  return updateCloudProject(cloudProjectId, { local_id: localId } as any);
-}
-
-/**
  * Get project members
  */
 export async function getProjectMembers(
-  projectId: string
+  projectId: string,
 ): Promise<ProjectMemberWithUser[]> {
   const { data, error } = await supabase
     .from("project_members")
@@ -197,10 +212,10 @@ export async function getProjectMembers(
         avatar,
         role
       )
-    `
+    `,
     )
     .eq("project_id", projectId)
-    .order("joined_at", { ascending: false });
+    .order("assigned_at", { ascending: false });
 
   if (error) throw error;
   return (data || []) as ProjectMemberWithUser[];
@@ -210,7 +225,7 @@ export async function getProjectMembers(
  * Assign a user to a project
  */
 export async function assignMemberToProject(
-  data: AssignProjectMemberData
+  data: AssignProjectMemberData,
 ): Promise<ProjectMember> {
   // Check if already assigned
   const { data: existing } = await supabase
@@ -239,7 +254,7 @@ export async function assignMemberToProject(
  */
 export async function removeMemberFromProject(
   projectId: string,
-  userId: string
+  userId: string,
 ): Promise<void> {
   const { error } = await supabase
     .from("project_members")
@@ -256,7 +271,7 @@ export async function removeMemberFromProject(
 export async function updateProjectMemberRole(
   projectId: string,
   userId: string,
-  role: "manager" | "member"
+  role: "manager" | "member",
 ): Promise<ProjectMember> {
   const { data, error } = await supabase
     .from("project_members")
@@ -269,4 +284,104 @@ export async function updateProjectMemberRole(
 
   if (error) throw error;
   return data as ProjectMember;
+}
+
+/**
+ * Archive a project (soft delete)
+ * Admin/manager/project manager only
+ */
+export async function archiveProject(projectId: string): Promise<void> {
+  const { error } = await (supabase.rpc as any)("archive_project", {
+    p_project_id: projectId,
+  });
+
+  if (error) throw error;
+}
+
+/**
+ * Restore an archived project
+ * Admin/manager/project manager only
+ */
+export async function restoreProject(projectId: string): Promise<void> {
+  const { error } = await (supabase.rpc as any)("restore_project", {
+    p_project_id: projectId,
+  });
+
+  if (error) throw error;
+}
+
+/**
+ * Get all archived projects for the current user
+ * Returns both organization and personal archived projects
+ */
+export async function getArchivedProjects(
+  userId?: string,
+): Promise<CloudProjectWithManager[]> {
+  let currentUserId = userId;
+
+  // If userId not provided, try to get from auth
+  if (!currentUserId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+    currentUserId = user.id;
+  }
+
+  // Get user's org_id
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("org_id")
+    .eq("id", currentUserId)
+    .limit(1);
+
+  const userOrgId =
+    profiles && profiles.length > 0 ? (profiles[0] as any)?.org_id : null;
+
+  // Get archived projects (both org and personal)
+  const { data, error } = await supabase
+    .from("cloud_projects")
+    .select(
+      `
+      *,
+      manager:user_profiles!manager_id (
+        username,
+        email
+      )
+    `,
+    )
+    .eq("archived", true)
+    .or(`manager_id.eq.${currentUserId},org_id.eq.${userOrgId}`)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return (data || []) as CloudProjectWithManager[];
+}
+
+/**
+ * Get project statistics (sessions, time, members)
+ */
+export async function getProjectStats(projectId: string): Promise<{
+  total_sessions: number;
+  total_time_seconds: number;
+  total_members: number;
+  last_activity: string | null;
+}> {
+  const { data, error } = await (supabase.rpc as any)("get_project_stats", {
+    p_project_id: projectId,
+  });
+
+  if (error) throw error;
+
+  // RPC returns array with single row
+  if (data && data.length > 0) {
+    return data[0];
+  }
+
+  return {
+    total_sessions: 0,
+    total_time_seconds: 0,
+    total_members: 0,
+    last_activity: null,
+  };
 }

@@ -24,7 +24,9 @@
               actual_session_id, last_notification_sent, created_at
 - [x] Design user_preferences table (NEW - for app settings)
       Fields: id, user_id, theme, accent_color, editor_colors,
-              notification_settings, created_at, updated_at
+              notification_settings, idle_timeout_seconds, created_at, updated_at
+      FIXED: Changed accent_color from TEXT to JSONB (stores {light, dark} colors)
+      ADDED: idle_timeout_seconds INTEGER field (default 300 = 5 minutes)
 - [x] Design local_projects table (merge with cloud_projects or keep separate)
       Decision: Merge into cloud_projects, add 'scope' field (personal/organization)
 - [x] Review existing user_profiles table - ensure has all needed fields
@@ -96,15 +98,17 @@
       DONE: Added tag filter that queries user_tags + session_tags
 
 ### Step 2.2: Create Tags & Goals API
-- [ ] Create src/supabase/tags.ts
+- [x] Create src/supabase/tags.ts
       Functions:
       - getAllTags(userId)
       - createTag(userId, name, color)
-      - updateTag(tagId, name, color)
+      - updateTag(tagId, updates)
       - deleteTag(tagId)
       - getSessionTags(sessionId)
       - setSessionTags(sessionId, tagIds[])
-- [ ] Create src/supabase/goals.ts
+      BONUS: setSessionTagsByNames(userId, sessionId, tagNames[]) - helper for SQLite compatibility
+      BONUS: getTagByName(userId, name) - helper function
+- [x] Create src/supabase/goals.ts
       Functions:
       - setDailyGoal(userId, date, targetMinutes, description)
       - getDailyGoal(userId, date)
@@ -114,7 +118,7 @@
       - getTotalTimeForDay(userId, date)
 
 ### Step 2.3: Create Scheduled Sessions API
-- [ ] Create src/supabase/scheduledSessions.ts
+- [x] Create src/supabase/scheduledSessions.ts
       Functions:
       - createScheduledSession(userId, sessionData)
       - getScheduledSessions(userId, filters?)
@@ -124,7 +128,7 @@
       - getUpcomingSessionNotifications(userId)
 
 ### Step 2.4: Create User Preferences API
-- [ ] Create src/supabase/userPreferences.ts
+- [x] Create src/supabase/userPreferences.ts
       Functions:
       - getUserPreferences(userId)
       - updateUserPreferences(userId, preferences)
@@ -136,7 +140,7 @@
       - setAccentColor(userId, color)
 
 ### Step 2.5: Update Projects API
-- [ ] Update src/supabase/cloudProjects.ts
+- [x] Update src/supabase/cloudProjects.ts
       - Add support for 'personal' scope projects
       - Add getPersonalProjects(userId)
       - Update createProject to accept scope parameter
@@ -147,52 +151,60 @@
 ## ═══════════════════════════════════════════════════════════════════
 
 ### Step 3.1: Create New Supabase-based IPC Handlers
-- [ ] Create src/ipc/supabase/sessionHandlers.ts
+- [x] Create src/ipc/supabase/sessionHandlers.ts
       Replace: src/ipc/sessionHandlers.ts
       Migrate all session-related handlers to use Supabase API
-- [ ] Create src/ipc/supabase/usageHandlers.ts
+- [x] Create src/ipc/supabase/usageHandlers.ts
       Replace: src/ipc/usageHandlers.ts
       Migrate all usage/logging handlers to use Supabase API
-- [ ] Create src/ipc/supabase/tagHandlers.ts
+- [x] Create src/ipc/supabase/tagHandlers.ts
       Extract tag handlers from sessionHandlers
       Use new Supabase tags API
-- [ ] Create src/ipc/supabase/goalHandlers.ts
+- [x] Create src/ipc/supabase/goalHandlers.ts
       Extract from usageHandlers
       Use new Supabase goals API
-- [ ] Create src/ipc/supabase/scheduledSessionHandlers.ts
+- [x] Create src/ipc/supabase/scheduledSessionHandlers.ts
       Replace: src/ipc/scheduledSessionHandlers.ts
       Use new Supabase API
-- [ ] Create src/ipc/supabase/preferencesHandlers.ts
+- [x] Create src/ipc/supabase/preferencesHandlers.ts
       NEW: Handle user preferences from Supabase
-- [ ] Update src/ipc/projectHandlers.ts
+- [x] Update src/ipc/projectHandlers.ts
       Transition to cloud_projects only (remove local project logic)
+      COMPLETED: All handlers now fully implemented with archive/restore support
 
 ### Step 3.2: Update User Handlers
-- [ ] Update src/ipc/userHandlers.ts
+- [x] Update src/ipc/userHandlers.ts
       - Remove local SQLite user operations
       - Use Supabase user_profiles instead
       - Keep handlers for compatibility but call Supabase
       - Handle getCurrentUserId from Supabase auth
 
 ### Step 3.3: Register New Handlers
-- [ ] Update src/index.ts
+- [x] Update src/index.ts
       - Import new Supabase handler files
       - Remove old SQLite handler imports
       - Verify all handlers are registered
+      - Update tracking functions to use Supabase APIs
+      - Convert userId from number to string for Supabase calls
 
 ### Step 3.4: Handle App Close with Active Session
-- [ ] Add app 'before-quit' event handler in src/index.ts
-      - Check if there's an active session (duration = 0)
-      - If active session exists, call endSession() to save it
-      - Ensure session is properly saved before app exits
-      - Handle edge cases (network errors during shutdown)
+- [x] Add app 'before-quit' event handler in src/index.ts
+      - Check if there's an active session (sessionStart && trackingInterval)
+      - If active session exists, call addSession() to auto-save it
+      - Ensure session is properly saved before app exits (>= 10 seconds)
+      - Handle edge cases (network errors during shutdown - don't block app close)
+      COMPLETED: Auto-saves active sessions with default title when app closes
 
 ### Step 3.5: Handle App Settings
-- [ ] Migrate app settings (theme, accent color, etc.)
-      From: localStorage + SQLite app_settings table
+- [x] Migrate app settings (theme, accent color, editor colors, idle timeout)
+      From: localStorage + config files
       To: user_preferences table in Supabase
-- [ ] Update theme.ts to use Supabase preferences
-- [ ] Update renderer.ts preferences loading
+- [x] Update theme.ts to use Supabase preferences (removed userId params)
+- [x] Update renderer.ts to use Supabase preferences (removed userId params)
+- [x] Update profileTab.ts to use Supabase preferences (removed userId params)
+- [x] Handlers now use getCurrentUser() internally for auth
+- [x] Added idle_timeout_seconds to user_preferences table
+- [x] Idle timeout now per-user (updates main process immediately when changed)
 
 ## ═══════════════════════════════════════════════════════════════════
 ## PHASE 4: FRONTEND MIGRATION
@@ -279,11 +291,13 @@
 - [ ] Delete src/ipc/dbHandler.ts (database export/import handlers)
 
 ### Step 5.2: Remove Old IPC Handlers
-- [ ] Delete src/ipc/sessionHandlers.ts (replaced by Supabase version)
-- [ ] Delete src/ipc/usageHandlers.ts (replaced by Supabase version)
-- [ ] Delete src/ipc/scheduledSessionHandlers.ts (replaced)
-- [ ] Update src/ipc/projectHandlers.ts (remove SQLite logic)
-- [ ] Clean up src/ipc/userHandlers.ts (Supabase only)
+- [ ] Delete src/ipc/sessionHandlers.ts (DEPRECATED - replaced by supabase/sessionHandlers.ts)
+- [ ] Delete src/ipc/usageHandlers.ts (DEPRECATED - replaced by supabase/usageHandlers.ts)
+- [ ] Delete src/ipc/scheduledSessionHandlers.ts (DEPRECATED - replaced by supabase/scheduledSessionHandlers.ts)
+- [ ] Delete src/ipc/appHandlers.ts (DEPRECATED - handlers moved to supabase/preferencesHandlers.ts)
+- [x] Update src/ipc/projectHandlers.ts (archive/restore/stats now implemented)
+- [x] Clean up src/ipc/userHandlers.ts (already using Supabase)
+      Note: All handlers now use Supabase, old SQLite-based handlers ready for deletion
 
 ### Step 5.3: Remove Database Utilities
 - [ ] Delete src/utils/fileOps.ts (database export/import utilities)

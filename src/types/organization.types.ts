@@ -9,12 +9,11 @@ export interface Organization {
 
 export interface UserProfile {
   id: string;
-  local_id?: string;
   username: string;
-  email?: string;
-  avatar?: string;
+  email?: string | null;
+  avatar?: string | null;
   role: "admin" | "manager" | "employee";
-  org_id?: string;
+  org_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -25,8 +24,8 @@ export interface OrgJoinRequest {
   org_id: string;
   status: "pending" | "approved" | "rejected";
   requested_at: string;
-  reviewed_at?: string;
-  reviewed_by?: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,8 +33,8 @@ export interface OrgJoinRequest {
 export interface OrgJoinRequestWithUser extends OrgJoinRequest {
   user?: {
     username: string;
-    email?: string;
-    avatar?: string;
+    email?: string | null;
+    avatar?: string | null;
   };
 }
 
@@ -47,16 +46,16 @@ export interface OrganizationWithStats extends Organization {
   project_count?: number;
 }
 
-// Supabase Project (linked to local via local_id)
+// Supabase Project (personal or organization)
 export interface CloudProject {
   id: string;
-  local_id?: string; // Links to SQLite project
   name: string;
-  description?: string;
-  color?: string;
+  description?: string | null;
+  color: string;
+  scope: "personal" | "organization";
   is_active: boolean;
-  manager_id?: string;
-  org_id?: string;
+  manager_id: string;
+  org_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -64,7 +63,7 @@ export interface CloudProject {
 export interface CloudProjectWithManager extends CloudProject {
   manager?: {
     username: string;
-    email?: string;
+    email?: string | null;
   };
 }
 
@@ -73,14 +72,14 @@ export interface ProjectMember {
   project_id: string;
   user_id: string;
   role: "manager" | "member";
-  joined_at: string;
+  assigned_at: string;
 }
 
 export interface ProjectMemberWithUser extends ProjectMember {
   user?: {
     username: string;
-    email?: string;
-    avatar?: string;
+    email?: string | null;
+    avatar?: string | null;
     role: "admin" | "manager" | "employee";
   };
 }
@@ -91,19 +90,21 @@ export interface CreateOrganizationData {
 
 export interface CreateCloudProjectData {
   name: string;
-  description?: string;
+  description?: string | null;
   color?: string;
+  scope?: "personal" | "organization";
   manager_id?: string;
-  org_id: string;
-  local_id?: string; // Link to local project
+  org_id?: string | null;
 }
 
 export interface UpdateCloudProjectData {
   name?: string;
-  description?: string;
+  description?: string | null;
   color?: string;
+  scope?: "personal" | "organization";
   is_active?: boolean;
   manager_id?: string;
+  org_id?: string | null;
 }
 
 export interface AssignProjectMemberData {

@@ -296,6 +296,56 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Function to archive a project
+CREATE OR REPLACE FUNCTION archive_project(p_project_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    -- Check if user is admin/manager or project manager
+    IF NOT (is_user_admin_or_manager() OR EXISTS (
+        SELECT 1 FROM cloud_projects 
+        WHERE id = p_project_id AND manager_id = auth.uid()
+    )) THEN
+        RAISE EXCEPTION 'Only admins, managers, or project managers can archive projects';
+    END IF;
+    
+    -- Archive the project
+    UPDATE cloud_projects
+    SET archived = true,
+        is_active = false,
+        updated_at = NOW()
+    WHERE id = p_project_id;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Project not found';
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to restore an archived project
+CREATE OR REPLACE FUNCTION restore_project(p_project_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    -- Check if user is admin/manager or project manager
+    IF NOT (is_user_admin_or_manager() OR EXISTS (
+        SELECT 1 FROM cloud_projects 
+        WHERE id = p_project_id AND manager_id = auth.uid()
+    )) THEN
+        RAISE EXCEPTION 'Only admins, managers, or project managers can restore projects';
+    END IF;
+    
+    -- Restore the project
+    UPDATE cloud_projects
+    SET archived = false,
+        is_active = true,
+        updated_at = NOW()
+    WHERE id = p_project_id;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Project not found';
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- =====================================================
 -- TIME TRACKING HELPERS
 -- =====================================================

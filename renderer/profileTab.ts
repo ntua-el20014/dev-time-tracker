@@ -33,7 +33,7 @@ async function renderEditorUsage(container: HTMLElement) {
   type EditorUsageRow = { app: string; total_time: number };
   const usage: EditorUsageRow[] = await ipcRenderer.invoke(
     "get-editor-usage",
-    getCurrentUserId()
+    getCurrentUserId(),
   );
   if (!usage || usage.length === 0) {
     container.innerHTML = "<p>No data available.</p>";
@@ -47,11 +47,11 @@ async function renderEditorUsage(container: HTMLElement) {
       config[row.app] || defaultColors[i % defaultColors.length];
   });
   usage.sort(
-    (a: EditorUsageRow, b: EditorUsageRow) => b.total_time - a.total_time
+    (a: EditorUsageRow, b: EditorUsageRow) => b.total_time - a.total_time,
   );
   const total = usage.reduce(
     (sum: number, row: EditorUsageRow) => sum + row.total_time,
-    0
+    0,
   );
   const items = usage.map((row: EditorUsageRow) => ({
     label: row.app,
@@ -96,18 +96,18 @@ async function renderLanguageUsage(container: HTMLElement) {
   type LanguageUsageRow = { language: string; total_time: number };
   const usage: LanguageUsageRow[] = await ipcRenderer.invoke(
     "get-language-usage",
-    getCurrentUserId()
+    getCurrentUserId(),
   );
   if (!usage || usage.length === 0) {
     container.innerHTML = "<p>No data available.</p>";
     return;
   }
   usage.sort(
-    (a: LanguageUsageRow, b: LanguageUsageRow) => b.total_time - a.total_time
+    (a: LanguageUsageRow, b: LanguageUsageRow) => b.total_time - a.total_time,
   );
   const total = usage.reduce(
     (sum: number, row: LanguageUsageRow) => sum + row.total_time,
-    0
+    0,
   );
   const defaultColors = [
     "#4f8cff",
@@ -185,11 +185,11 @@ async function renderSettings(container: HTMLElement) {
   // --- Avatar Picker Logic ---
   const editors: { app: string; icon: string }[] = await ipcRenderer.invoke(
     "get-user-editors",
-    userId
+    userId,
   );
   const langs: { lang_ext: string | null }[] = await ipcRenderer.invoke(
     "get-user-lang-exts",
-    userId
+    userId,
   );
   const langIcons: string[] = [];
   for (const l of langs) {
@@ -205,7 +205,7 @@ async function renderSettings(container: HTMLElement) {
   // --- Tag management ---
   const tags: Tag[] = await ipcRenderer.invoke(
     "get-all-tags",
-    getCurrentUserId()
+    getCurrentUserId(),
   );
 
   // --- Accent color management ---
@@ -215,7 +215,6 @@ async function renderSettings(container: HTMLElement) {
   const accentColor: string = await ipcRenderer.invoke(
     "get-accent-color",
     theme,
-    getCurrentUserId()
   );
 
   // Build the complete HTML first, then set it all at once
@@ -260,14 +259,14 @@ async function renderSettings(container: HTMLElement) {
                 <span class="tag-label" style="background:${tag.color};">
                   ${escapeHtml(tag.name)}
                   <span class="tag-color-chip" data-tag="${escapeHtml(
-                    tag.name
+                    tag.name,
                   )}" style="background:${tag.color};"></span>
                 </span>
                 <button class="btn-delete btn-small delete-tag-btn" data-tag="${escapeHtml(
-                  tag.name
+                  tag.name,
                 )}">Delete</button>
               </li>
-            `
+            `,
               )
               .join("")}
           </ul>`
@@ -294,26 +293,26 @@ async function renderSettings(container: HTMLElement) {
   `;
 
   const range = container.querySelector(
-    "#idleTimeoutRange"
+    "#idleTimeoutRange",
   ) as HTMLInputElement;
   const valueSpan = container.querySelector(
-    "#idleTimeoutValue"
+    "#idleTimeoutValue",
   ) as HTMLSpanElement;
 
   const accentInput = container.querySelector(
-    "#accentColorInput"
+    "#accentColorInput",
   ) as HTMLInputElement;
   const saveAccentBtn = container.querySelector(
-    "#saveAccentColorBtn"
+    "#saveAccentColorBtn",
   ) as HTMLButtonElement;
   const resetAccentBtn = container.querySelector(
-    "#resetAccentColorsBtn"
+    "#resetAccentColorsBtn",
   ) as HTMLButtonElement;
 
   // Attach all event listeners
 
   const themeToggleBtn = container.querySelector(
-    "#themeToggleBtn"
+    "#themeToggleBtn",
   ) as HTMLButtonElement;
   themeToggleBtn.addEventListener("click", async () => {
     document.body.classList.toggle("light");
@@ -362,7 +361,7 @@ async function renderSettings(container: HTMLElement) {
 
   saveAccentBtn.addEventListener("click", async () => {
     const currentTheme: "dark" | "light" = document.body.classList.contains(
-      "light"
+      "light",
     )
       ? "light"
       : "dark";
@@ -372,12 +371,7 @@ async function renderSettings(container: HTMLElement) {
       message: `Apply new accent color ${colorToSave} for ${currentTheme} theme?`,
       confirmText: "Apply",
       onConfirm: async () => {
-        await ipcRenderer.invoke(
-          "set-accent-color",
-          colorToSave,
-          currentTheme,
-          getCurrentUserId()
-        );
+        await ipcRenderer.invoke("set-accent-color", colorToSave, currentTheme);
         await applyAccentColor();
         window.dispatchEvent(new Event("theme-changed"));
         accentInput.value = colorToSave;
@@ -391,30 +385,19 @@ async function renderSettings(container: HTMLElement) {
       message: "Reset both accent colors to default values?",
       confirmText: "Reset",
       onConfirm: async () => {
-        await ipcRenderer.invoke(
-          "set-accent-color",
-          "#f0db4f",
-          "dark",
-          getCurrentUserId()
-        );
-        await ipcRenderer.invoke(
-          "set-accent-color",
-          "#007acc",
-          "light",
-          getCurrentUserId()
-        );
+        await ipcRenderer.invoke("set-accent-color", "#f0db4f", "dark");
+        await ipcRenderer.invoke("set-accent-color", "#007acc", "light");
         await applyAccentColor();
 
         // Always get the current theme at the moment of reset
         const currentTheme: "dark" | "light" = document.body.classList.contains(
-          "light"
+          "light",
         )
           ? "light"
           : "dark";
         const newAccent = await ipcRenderer.invoke(
           "get-accent-color",
           currentTheme,
-          getCurrentUserId()
         );
         accentInput.value = newAccent;
         if (accentInput.parentElement) {
@@ -428,14 +411,12 @@ async function renderSettings(container: HTMLElement) {
     const theme: "dark" | "light" = document.body.classList.contains("light")
       ? "light"
       : "dark";
-    ipcRenderer
-      .invoke("get-accent-color", theme, getCurrentUserId())
-      .then((color: string) => {
-        accentInput.value = color;
-        if (accentInput.parentElement) {
-          accentInput.parentElement.style.background = color;
-        }
-      });
+    ipcRenderer.invoke("get-accent-color", theme).then((color: string) => {
+      accentInput.value = color;
+      if (accentInput.parentElement) {
+        accentInput.parentElement.style.background = color;
+      }
+    });
   }
 
   window.addEventListener("theme-changed", updateAccentPickerForTheme);
@@ -482,7 +463,7 @@ async function renderSettings(container: HTMLElement) {
             "set-tag-color",
             getCurrentUserId(),
             tagName,
-            color
+            color,
           );
           renderSettings(container); // or rerender tag list
         },
@@ -493,10 +474,10 @@ async function renderSettings(container: HTMLElement) {
 
   // --- Avatar Picker Logic ---
   const openPickerBtn = container.querySelector(
-    "#openAvatarPickerBtn"
+    "#openAvatarPickerBtn",
   ) as HTMLButtonElement;
   const avatarInput = container.querySelector(
-    "#avatarInput"
+    "#avatarInput",
   ) as HTMLInputElement;
 
   openPickerBtn.onclick = () => {
@@ -534,7 +515,7 @@ async function renderSettings(container: HTMLElement) {
   };
 
   const removeAvatarBtn = container.querySelector(
-    "#removeAvatarBtn"
+    "#removeAvatarBtn",
   ) as HTMLButtonElement;
   if (removeAvatarBtn) {
     removeAvatarBtn.onclick = async () => {
@@ -545,7 +526,7 @@ async function renderSettings(container: HTMLElement) {
 
   // --- Help Section Event Handlers ---
   const showOnboardingBtn = container.querySelector(
-    "#showOnboardingBtn"
+    "#showOnboardingBtn",
   ) as HTMLButtonElement;
 
   if (showOnboardingBtn) {
@@ -595,7 +576,7 @@ async function renderDailyGoalHistory(container: HTMLElement) {
                     }
                   </td>
                 </tr>
-              `
+              `,
                 )
                 .join("")}
             </tbody>
@@ -636,7 +617,7 @@ export async function refreshProfile() {
   `;
 
   const contentDiv = profileDiv.querySelector(
-    "#profileChapterContent"
+    "#profileChapterContent",
   ) as HTMLElement;
   const buttons = profileDiv.querySelectorAll(".profile-chapter-btn");
 
@@ -658,7 +639,7 @@ export async function refreshProfile() {
     buttons.forEach((btn) => {
       btn.classList.toggle(
         "active",
-        (btn as HTMLButtonElement).dataset.chapter === chapter
+        (btn as HTMLButtonElement).dataset.chapter === chapter,
       );
     });
   }
@@ -719,11 +700,11 @@ function renderHotkeys(container: HTMLElement) {
     const suffix = isLight ? "" : "-w";
     try {
       return `<img src="${loadHotkey(
-        key + "-key" + suffix
+        key + "-key" + suffix,
       )}" alt="${key}" style="height:1.5em;vertical-align:middle;margin:0 2px;">`;
     } catch {
       return `<img src="${loadHotkey(
-        key + "-key"
+        key + "-key",
       )}" alt="${key}" style="height:1.5em;vertical-align:middle;margin:0 2px;">`;
     }
   }
@@ -732,13 +713,13 @@ function renderHotkeys(container: HTMLElement) {
     <h2>Keyboard Shortcuts</h2>
     <ul style="list-style:none;padding:0;margin:0;line-height:2;">
       <li><span style="min-width:180px;display:inline-block;">${keyImg(
-        "ctrl"
+        "ctrl",
       )} + ${keyImg("r")}</span> Start/Stop recording</li>
       <li><span style="min-width:180px;display:inline-block;">${keyImg(
-        "ctrl"
+        "ctrl",
       )} + ${keyImg("p")}</span> Pause/Resume recording</li>
       <li><span style="min-width:180px;display:inline-block;">${keyImg(
-        "ctrl"
+        "ctrl",
       )} + ${keyImg("hashtag")}</span> Switch to tab (# = 1,2,3...)</li>
     </ul>
     <div class="info-note" style="margin-top:16px;">

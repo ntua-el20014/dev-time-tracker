@@ -14,7 +14,7 @@ import type {
  */
 export async function requestToJoinOrganization(
   orgId: string,
-  userId?: string
+  userId?: string,
 ): Promise<OrgJoinRequest> {
   let currentUserId = userId;
 
@@ -59,7 +59,7 @@ export async function requestToJoinOrganization(
  * Get all join requests for the current user
  */
 export async function getMyJoinRequests(
-  userId?: string
+  userId?: string,
 ): Promise<OrgJoinRequest[]> {
   let currentUserId = userId;
 
@@ -86,7 +86,7 @@ export async function getMyJoinRequests(
  * Get pending join requests for the current user's organization (admin only)
  */
 export async function getPendingJoinRequests(
-  userId?: string
+  userId?: string,
 ): Promise<OrgJoinRequestWithUser[]> {
   let currentUserId = userId;
 
@@ -130,7 +130,7 @@ export async function getPendingJoinRequests(
         email,
         avatar
       )
-    `
+    `,
     )
     .eq("org_id", profile.org_id)
     .eq("status", "pending")
@@ -145,9 +145,9 @@ export async function getPendingJoinRequests(
  * Uses the database function for proper permissions
  */
 export async function approveJoinRequest(requestId: string): Promise<void> {
-  const { error } = await supabase.rpc("approve_join_request", {
+  const { error } = await (supabase.rpc as any)("approve_join_request", {
     request_id: requestId,
-  } as any);
+  });
 
   if (error) throw error;
 }
@@ -157,9 +157,9 @@ export async function approveJoinRequest(requestId: string): Promise<void> {
  * Uses the database function for proper permissions
  */
 export async function rejectJoinRequest(requestId: string): Promise<void> {
-  const { error } = await supabase.rpc("reject_join_request", {
+  const { error } = await (supabase.rpc as any)("reject_join_request", {
     request_id: requestId,
-  } as any);
+  });
 
   if (error) throw error;
 }
@@ -169,7 +169,7 @@ export async function rejectJoinRequest(requestId: string): Promise<void> {
  */
 export async function cancelJoinRequest(
   requestId: string,
-  userId?: string
+  userId?: string,
 ): Promise<void> {
   let currentUserId = userId;
 

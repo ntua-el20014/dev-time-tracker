@@ -21,9 +21,11 @@ export async function logUsage(
 
   const usageData: UsageLogsInsert = {
     user_id: userId,
-    app: appName,
-    title: windowTitle,
+    app_name: appName,
+    window_title: windowTitle,
     language: language || null,
+    language_extension: languageExtension || null,
+    icon_url: iconUrl || null,
     timestamp: logTime,
   };
 
@@ -256,7 +258,7 @@ export async function getUsageDetailsForSession(
 ) {
   // First get the session time range
   const { data: session, error: sessionError } = await supabase
-    .from("sessions")
+    .from("time_tracking_sessions")
     .select("start_time, duration")
     .eq("id", sessionId)
     .single();
@@ -314,4 +316,94 @@ export async function getLoggedDaysOfMonth(
   // Get unique dates
   const uniqueDates = new Set((data || []).map((item: any) => item.date));
   return Array.from(uniqueDates);
+}
+
+/**
+ * Get language summary aggregated by language within a date range
+ */
+export async function getLanguageSummaryByDateRange(
+  userId: string,
+  startDate: string,
+  endDate: string,
+) {
+  const { data, error } = await supabase
+    .from("daily_usage_summary")
+    .select("language, lang_ext, time_spent_seconds")
+    .eq("user_id", userId)
+    .gte("date", startDate)
+    .lte("date", endDate)
+    .not("language", "is", null);
+
+  if (error) {
+    throw error;
+  }
+
+  // Aggregate by language and lang_ext
+  const languageMap = new Map<
+    string,
+    { language: string; lang_ext: string; total_time: number }
+  >();
+
+  (data || []).forEach((item: any) => {
+    const key = `${item.language}|${item.lang_ext || ""}`;
+    if (!languageMap.has(key)) {
+      languageMap.set(key, {
+        language: item.language,
+        lang_ext: item.lang_ext || "",
+        total_time: 0,
+      });
+    }
+    const langData = languageMap.get(key)!;
+    langData.total_time += item.time_spent_seconds || 0;
+  });
+
+  return Array.from(languageMap.values()).sort(
+    (a, b) => b.total_time - a.total_time,
+  );
+}
+
+/**
+ * Get distinct editors (apps) used by the user
+ */
+export async function getUserEditors(userId: string) {
+  const { data, error } = await supabase
+    .from("daily_usage_summary")
+    .select("app, icon")
+    .eq("user_id", userId)
+    .not("icon", "is", null)
+    .neq("icon", "");
+
+  if (error) {
+    throw error;
+  }
+
+  // Get distinct app-icon pairs
+  const editorMap = new Map<string, { app: string; icon: string }>();
+  (data || []).forEach((item: any) => {
+    if (!editorMap.has(item.app)) {
+      editorMap.set(item.app, { app: item.app, icon: item.icon });
+    }
+  });
+
+  return Array.from(editorMap.values());
+}
+
+/**
+ * Get distinct language extensions used by the user
+ */
+export async function getUserLangExts(userId: string) {
+  const { data, error } = await supabase
+    .from("daily_usage_summary")
+    .select("lang_ext")
+    .eq("user_id", userId)
+    .not("lang_ext", "is", null)
+    .neq("lang_ext", "");
+
+  if (error) {
+    throw error;
+  }
+
+  // Get distinct lang_exts
+  const extsSet = new Set((data || []).map((item: any) => item.lang_ext));
+  return Array.from(extsSet).map((lang_ext) => ({ lang_ext }));
 }

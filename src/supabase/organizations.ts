@@ -15,7 +15,7 @@ import type {
  * Get current user's active organization
  */
 export async function getCurrentOrganization(
-  userId?: string
+  userId?: string,
 ): Promise<Organization | null> {
   let currentUserId = userId;
 
@@ -28,17 +28,11 @@ export async function getCurrentOrganization(
     currentUserId = user.id;
   }
 
-  // eslint-disable-next-line no-console
-  console.log("[getCurrentOrganization] Using userId:", currentUserId);
-
   // Use SECURITY DEFINER function to bypass RLS
   // @ts-ignore - RPC function not in generated types yet
   const { data, error } = await supabase.rpc("get_organization_by_user_id", {
     p_user_id: currentUserId,
   });
-
-  // eslint-disable-next-line no-console
-  console.log("[getCurrentOrganization] RPC result:", { data, error });
 
   if (error) throw error;
 
@@ -54,7 +48,7 @@ export async function getCurrentOrganization(
  * Get organization by ID (with stats)
  */
 export async function getOrganizationById(
-  orgId: string
+  orgId: string,
 ): Promise<OrganizationWithStats> {
   const { data: org, error: orgError } = await supabase
     .from("organizations")
@@ -67,14 +61,14 @@ export async function getOrganizationById(
   // Use RPC to get member counts (bypasses RLS)
   const { data: members, error: membersError } = await (supabase.rpc as any)(
     "get_organization_members_by_org_id",
-    { p_org_id: orgId }
+    { p_org_id: orgId },
   );
 
   if (membersError) throw membersError;
 
   // Get project count
   const { count: projectCount, error: projectError } = await supabase
-    .from("projects")
+    .from("cloud_projects")
     .select("*", { count: "exact", head: true })
     .eq("org_id", orgId);
 
@@ -85,10 +79,10 @@ export async function getOrganizationById(
   const member_count = memberList.length;
   const admin_count = memberList.filter((m: any) => m.role === "admin").length;
   const manager_count = memberList.filter(
-    (m: any) => m.role === "manager"
+    (m: any) => m.role === "manager",
   ).length;
   const employee_count = memberList.filter(
-    (m: any) => m.role === "employee"
+    (m: any) => m.role === "employee",
   ).length;
 
   return {
@@ -105,12 +99,12 @@ export async function getOrganizationById(
  * Get all members of an organization
  */
 export async function getOrganizationMembers(
-  orgId: string
+  orgId: string,
 ): Promise<UserProfile[]> {
   // Use SECURITY DEFINER function to bypass RLS
   const { data, error } = await (supabase.rpc as any)(
     "get_organization_members_by_org_id",
-    { p_org_id: orgId }
+    { p_org_id: orgId },
   );
 
   if (error) throw error;
@@ -122,13 +116,13 @@ export async function getOrganizationMembers(
  * Uses the database function for proper permissions
  */
 export async function createTeamOrganization(
-  data: CreateOrganizationData
+  data: CreateOrganizationData,
 ): Promise<{ org_id: string }> {
-  const { data: result, error } = await supabase.rpc(
+  const { data: result, error } = await (supabase.rpc as any)(
     "create_team_organization",
     {
       org_name: data.name,
-    } as any
+    },
   );
 
   if (error) throw error;
@@ -140,7 +134,7 @@ export async function createTeamOrganization(
  */
 export async function updateOrganization(
   orgId: string,
-  updates: Partial<CreateOrganizationData>
+  updates: Partial<CreateOrganizationData>,
 ): Promise<Organization> {
   // Supabase RLS policies cause update() to be typed as never
   const result = await supabase
@@ -160,7 +154,7 @@ export async function updateOrganization(
  */
 export async function updateUserRole(
   userId: string,
-  role: "admin" | "manager" | "employee"
+  role: "admin" | "manager" | "employee",
 ): Promise<void> {
   // Supabase RLS policies cause update() to be typed as never
   const result = await supabase
@@ -176,7 +170,7 @@ export async function updateUserRole(
  * Remove a user from the organization (admin only)
  */
 export async function removeUserFromOrganization(
-  userId: string
+  userId: string,
 ): Promise<void> {
   // Supabase RLS policies cause update() to be typed as never
   const result = await supabase
@@ -192,7 +186,7 @@ export async function removeUserFromOrganization(
  * Get current user's profile from Supabase
  */
 export async function getCurrentUserProfile(
-  userId?: string
+  userId?: string,
 ): Promise<UserProfile | null> {
   let currentUserId = userId;
 
@@ -205,17 +199,11 @@ export async function getCurrentUserProfile(
     currentUserId = user.id;
   }
 
-  // eslint-disable-next-line no-console
-  console.log("[getCurrentUserProfile] Using userId:", currentUserId);
-
   // Use SECURITY DEFINER function to bypass RLS
   // @ts-ignore - RPC function not in generated types yet
   const { data, error } = await supabase.rpc("get_user_profile_by_id", {
     p_user_id: currentUserId,
   });
-
-  // eslint-disable-next-line no-console
-  console.log("[getCurrentUserProfile] RPC result:", { data, error });
 
   if (error) throw error;
 
