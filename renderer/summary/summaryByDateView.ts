@@ -1,11 +1,6 @@
 import { ipcRenderer } from "electron";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
-import {
-  escapeHtml,
-  getCurrentUserId,
-  prettyDate,
-  safeIpcInvoke,
-} from "../utils";
+import { escapeHtml, prettyDate, safeIpcInvoke } from "../utils";
 import { showChartConfigModal, showDetailsModal } from "../components";
 import { DateBasedPaginationManager, PageInfo } from "../utils/performance";
 import {
@@ -71,19 +66,15 @@ export async function renderByDateView(
         filters.startDate = filterValues["start-bydate"];
       if (filterValues["end-bydate"])
         filters.endDate = filterValues["end-bydate"];
-      state.filteredData = await safeIpcInvoke(
-        "get-daily-summary",
-        [getCurrentUserId(), filters],
-        { fallback: [] },
-      );
+      state.filteredData = await safeIpcInvoke("get-daily-summary", [filters], {
+        fallback: [],
+      });
       renderByDateTable(container, state.filteredData, state);
     },
     onClear: async () => {
-      state.filteredData = await safeIpcInvoke(
-        "get-daily-summary",
-        [getCurrentUserId()],
-        { fallback: [] },
-      );
+      state.filteredData = await safeIpcInvoke("get-daily-summary", [], {
+        fallback: [],
+      });
       renderByDateTable(container, state.filteredData, state);
     },
   });
@@ -112,11 +103,9 @@ export async function renderByDateView(
 
   // Initial data load
   if (!state.filteredData.length) {
-    state.filteredData = await safeIpcInvoke(
-      "get-daily-summary",
-      [getCurrentUserId()],
-      { fallback: [] },
-    );
+    state.filteredData = await safeIpcInvoke("get-daily-summary", [], {
+      fallback: [],
+    });
   }
   renderByDateTable(container, state.filteredData, state);
 }

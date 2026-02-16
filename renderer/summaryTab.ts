@@ -1,11 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { ipcRenderer } from "electron";
-import {
-  getMonday,
-  filterDailyDataForWeek,
-  getCurrentUserId,
-  safeIpcInvoke,
-} from "./utils";
+import { getMonday, filterDailyDataForWeek, safeIpcInvoke } from "./utils";
 import {
   renderTimelineChart,
   renderCustomChartsSection,
@@ -37,11 +32,9 @@ export async function renderSummary() {
   summaryDiv.innerHTML =
     '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading summary…</span></div>';
 
-  summaryState.allDailyData = await safeIpcInvoke(
-    "get-daily-summary",
-    [getCurrentUserId()],
-    { fallback: [] },
-  );
+  summaryState.allDailyData = await safeIpcInvoke("get-daily-summary", [], {
+    fallback: [],
+  });
 
   summaryDiv.innerHTML = "";
 

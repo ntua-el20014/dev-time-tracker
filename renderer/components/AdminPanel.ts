@@ -2,7 +2,7 @@ import { showInAppNotification, showNotification } from "./Notifications";
 import { showConfirmationModal } from "./Modals";
 import { clearAllOnboardingData } from "./Onboarding";
 import { renderUserRoleManager } from "./UserRoleManager";
-import { isCurrentUserAdmin, getCurrentUserId } from "../utils/userUtils";
+import { isCurrentUserAdmin } from "../utils/userUtils";
 import { SessionExporter, createExportModal } from "../utils/sessionExporter";
 
 // Supabase handles automatic backups. Manual backup/rollback of raw DB files
@@ -110,7 +110,7 @@ export async function renderAdminPanel(container: HTMLElement) {
   exportModalBtn.className = "goal-btn";
   exportModalBtn.textContent = "Export Data…";
   exportModalBtn.onclick = () => {
-    createExportModal(getCurrentUserId() as unknown as number);
+    createExportModal();
   };
   container.appendChild(exportModalBtn);
 
@@ -123,7 +123,7 @@ export async function renderAdminPanel(container: HTMLElement) {
     quickJsonBtn.textContent = "Exporting…";
     try {
       const exporter = new SessionExporter();
-      await exporter.exportData(getCurrentUserId() as unknown as number, {
+      await exporter.exportData({
         format: "json",
         includeFields: {
           sessions: true,
@@ -148,7 +148,7 @@ export async function renderAdminPanel(container: HTMLElement) {
     quickCsvBtn.textContent = "Exporting…";
     try {
       const exporter = new SessionExporter();
-      await exporter.exportData(getCurrentUserId() as unknown as number, {
+      await exporter.exportData({
         format: "csv",
         includeFields: {
           sessions: true,

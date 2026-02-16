@@ -23,9 +23,9 @@ export interface ExportOptions {
 }
 
 export class SessionExporter {
-  async exportData(userId: number, options: ExportOptions): Promise<void> {
+  async exportData(options: ExportOptions): Promise<void> {
     try {
-      const data = await this.collectData(userId, options);
+      const data = await this.collectData(options);
 
       let success = false;
       if (options.format === "csv") {
@@ -43,7 +43,7 @@ export class SessionExporter {
     }
   }
 
-  private async collectData(userId: number, options: ExportOptions) {
+  private async collectData(options: ExportOptions) {
     const data: Record<string, unknown[]> = {};
 
     if (options.includeFields.sessions) {
@@ -56,7 +56,7 @@ export class SessionExporter {
 
       let sessions: SessionRow[] = await safeIpcInvoke(
         "get-sessions",
-        [userId, filters],
+        [filters],
         {
           fallback: [],
           rethrow: true,
@@ -99,7 +99,6 @@ export class SessionExporter {
       const dailyData: DailySummaryRow[] = await safeIpcInvoke(
         "get-daily-summary",
         [
-          userId,
           {
             startDate: options.dateRange?.start,
             endDate: options.dateRange?.end,
@@ -122,7 +121,7 @@ export class SessionExporter {
     }
 
     if (options.includeFields.tags) {
-      data.tags = await safeIpcInvoke("get-all-tags", [userId], {
+      data.tags = await safeIpcInvoke("get-all-tags", [], {
         fallback: [],
         rethrow: true,
         errorMessage: "Failed to fetch tags for export",
@@ -130,7 +129,7 @@ export class SessionExporter {
     }
 
     if (options.includeFields.goals) {
-      data.goals = await safeIpcInvoke("get-all-daily-goals", [userId], {
+      data.goals = await safeIpcInvoke("get-all-daily-goals", [], {
         fallback: [],
         rethrow: true,
         errorMessage: "Failed to fetch goals for export",
@@ -173,7 +172,7 @@ export class SessionExporter {
   }
 }
 
-export function createExportModal(userId: number): void {
+export function createExportModal(): void {
   const exporter = new SessionExporter();
 
   const modal = document.createElement("div");
@@ -305,7 +304,7 @@ export function createExportModal(userId: number): void {
     submitBtn.disabled = true;
 
     try {
-      await exporter.exportData(userId, options);
+      await exporter.exportData(options);
       modal.remove();
     } catch (error) {
       showNotification("Export failed. Please try again.");

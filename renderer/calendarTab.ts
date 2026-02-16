@@ -1,6 +1,5 @@
-import { ipcRenderer } from "electron";
 import { ScheduledSession } from "@shared/types";
-import { getCurrentUserId, safeIpcInvoke } from "./utils";
+import { safeIpcInvoke } from "./utils";
 import { showInAppNotification, showConfirmationModal } from "./components";
 
 // eslint-disable-next-line prefer-const
@@ -12,15 +11,12 @@ export async function renderCalendar() {
   const calendarContainer = document.getElementById("calendarContent");
   if (!calendarContainer) return;
 
-  const userId = getCurrentUserId();
-  if (!userId) return;
-
   // Show loading while scheduled sessions load
   calendarContainer.innerHTML =
     '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading calendar…</span></div>';
 
   // Load scheduled sessions for current month
-  await loadScheduledSessions(userId);
+  await loadScheduledSessions();
 
   calendarContainer.innerHTML = `
     <div class="calendar-container">
@@ -256,7 +252,7 @@ function getSessionsForDate(date: Date): ScheduledSession[] {
   });
 }
 
-async function loadScheduledSessions(userId: number) {
+async function loadScheduledSessions() {
   try {
     const startOfMonth = new Date(
       currentDate.getFullYear(),
@@ -272,7 +268,6 @@ async function loadScheduledSessions(userId: number) {
     scheduledSessions = await safeIpcInvoke<ScheduledSession[]>(
       "get-scheduled-sessions",
       [
-        userId,
         {
           startDate: startOfMonth.toISOString().split("T")[0],
           endDate: endOfMonth.toISOString().split("T")[0],
@@ -319,11 +314,10 @@ function setupCalendarEventListeners() {
       const sessionId = target.dataset.sessionId;
 
       if (action && sessionId) {
-        const id = parseInt(sessionId);
         if (action === "start") {
-          startScheduledSessionHandler(id);
+          startScheduledSessionHandler(sessionId);
         } else if (action === "delete") {
-          deleteScheduledSessionHandler(id);
+          deleteScheduledSessionHandler(sessionId);
         }
       }
       return;
@@ -335,7 +329,7 @@ function setupCalendarEventListeners() {
       const indicator = target.closest(".session-indicator") as HTMLElement;
       const sessionId = indicator.dataset.sessionId;
       if (sessionId) {
-        showSessionDetailsModal(parseInt(sessionId));
+        showSessionDetailsModal(sessionId);
       }
       return;
     }
@@ -482,9 +476,6 @@ function setupScheduleModalEventListeners() {
 }
 
 async function handleScheduleSessionSubmit() {
-  const userId = getCurrentUserId();
-  if (!userId) return;
-
   const title = (
     document.getElementById("session-title") as HTMLInputElement
   ).value.trim();
@@ -535,8 +526,10 @@ async function handleScheduleSessionSubmit() {
         .filter(Boolean)
     : [];
 
-  const scheduledSession: Omit<ScheduledSession, "id" | "created_at"> = {
-    user_id: userId,
+  const scheduledSession: Omit<
+    ScheduledSession,
+    "id" | "created_at" | "user_id"
+  > = {
     title,
     description: description || undefined,
     scheduled_datetime,
@@ -558,9 +551,10 @@ async function handleScheduleSessionSubmit() {
   };
 
   try {
-    const sessionId = await ipcRenderer.invoke(
+    const sessionId = await safeIpcInvoke(
       "create-scheduled-session",
-      scheduledSession,
+      [scheduledSession],
+      { fallback: null },
     );
     if (sessionId) {
       closeModal();
@@ -574,8 +568,10 @@ async function handleScheduleSessionSubmit() {
   }
 }
 
-async function showSessionDetailsModal(sessionId: number) {
-  const session = scheduledSessions.find((s) => s.id === sessionId);
+async function showSessionDetailsModal(sessionId: string | number) {
+  const session = scheduledSessions.find(
+    (s) => String(s.id) === String(sessionId),
+  );
   if (!session) return;
 
   const sessionDate = new Date(session.scheduled_datetime);
@@ -637,7 +633,7 @@ async function showSessionDetailsModal(sessionId: number) {
   }, 50);
 }
 
-function setupSessionDetailsModalEventListeners(sessionId: number) {
+function setupSessionDetailsModalEventListeners(sessionId: string | number) {
   // Handle buttons
   const cancelBtn = document.getElementById("calendarDetailsModalCancelBtn");
   if (cancelBtn) {
@@ -673,14 +669,10 @@ function setupSessionDetailsModalEventListeners(sessionId: number) {
 }
 
 // Helper functions for session actions
-async function startScheduledSessionHandler(sessionId: number) {
-  const userId = getCurrentUserId();
-  if (!userId) {
-    showInAppNotification("User not found");
-    return;
-  }
-
-  const session = scheduledSessions.find((s) => s.id === sessionId);
+async function startScheduledSessionHandler(sessionId: string | number) {
+  const session = scheduledSessions.find(
+    (s) => String(s.id) === String(sessionId),
+  );
   if (!session) {
     showInAppNotification("Session not found");
     return;
@@ -700,15 +692,14 @@ async function startScheduledSessionHandler(sessionId: number) {
       confirmText: "Yes, Start",
       onConfirm: async () => {
         // User confirmed - proceed with starting the session
-        await startSession(userId, sessionId, session);
+        await startSession(sessionId, session);
       },
     });
   }, 100);
 }
 
 async function startSession(
-  userId: number,
-  sessionId: number,
+  sessionId: string | number,
   session: ScheduledSession,
 ) {
   // Close modal and refresh calendar to ensure clean state
@@ -736,13 +727,15 @@ async function startSession(
         // Optionally mark the scheduled session as completed
         (async () => {
           try {
-            await ipcRenderer.invoke(
+            await safeIpcInvoke(
               "update-scheduled-session",
-              userId,
-              sessionId,
-              {
-                status: "completed",
-              },
+              [
+                sessionId,
+                {
+                  status: "completed",
+                },
+              ],
+              { fallback: null },
             );
             // Re-render calendar after status update to show changes
             await renderCalendar();
@@ -757,14 +750,10 @@ async function startSession(
   }, 200); // Increased timeout to allow calendar re-render to complete
 }
 
-async function deleteScheduledSessionHandler(sessionId: number) {
-  const userId = getCurrentUserId();
-  if (!userId) {
-    showInAppNotification("User not found");
-    return;
-  }
-
-  const session = scheduledSessions.find((s) => s.id === sessionId);
+async function deleteScheduledSessionHandler(sessionId: string | number) {
+  const session = scheduledSessions.find(
+    (s) => String(s.id) === String(sessionId),
+  );
   if (!session) {
     showInAppNotification("Session not found");
     return;
@@ -791,10 +780,10 @@ async function deleteScheduledSessionHandler(sessionId: number) {
       onConfirm: async () => {
         // User confirmed - proceed with deletion
         try {
-          const success = await ipcRenderer.invoke(
+          const success = await safeIpcInvoke(
             "delete-scheduled-session",
-            userId,
-            sessionId,
+            [sessionId],
+            { fallback: false },
           );
           if (success) {
             showInAppNotification("Session deleted successfully");

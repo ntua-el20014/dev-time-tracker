@@ -54,7 +54,7 @@ ipcMain.handle(
 /**
  * Get editor colors (app name to color mapping)
  */
-ipcMain.handle("get-editor-colors", async (_event, _userId?: number) => {
+ipcMain.handle("get-editor-colors", async (_event) => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -73,7 +73,7 @@ ipcMain.handle("get-editor-colors", async (_event, _userId?: number) => {
  */
 ipcMain.handle(
   "set-editor-color",
-  async (_event, appName: string, color: string, _userId?: number) => {
+  async (_event, appName: string, color: string) => {
     try {
       const user = await getCurrentUser();
       if (!user) {
@@ -92,7 +92,7 @@ ipcMain.handle(
 /**
  * Get current theme preference
  */
-ipcMain.handle("get-user-theme", async (_event, _userId?: number) => {
+ipcMain.handle("get-user-theme", async (_event) => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -111,7 +111,7 @@ ipcMain.handle("get-user-theme", async (_event, _userId?: number) => {
  */
 ipcMain.handle(
   "set-user-theme",
-  async (_event, theme: "light" | "dark" | "system", _userId?: number) => {
+  async (_event, theme: "light" | "dark" | "system") => {
     try {
       const user = await getCurrentUser();
       if (!user) {
@@ -132,7 +132,7 @@ ipcMain.handle(
  */
 ipcMain.handle(
   "get-accent-color",
-  async (_event, themeMode: "light" | "dark", _userId?: number) => {
+  async (_event, themeMode: "light" | "dark") => {
     try {
       const user = await getCurrentUser();
       if (!user) {
@@ -152,12 +152,7 @@ ipcMain.handle(
  */
 ipcMain.handle(
   "set-accent-color",
-  async (
-    _event,
-    color: string,
-    themeMode: "light" | "dark",
-    _userId?: number,
-  ) => {
+  async (_event, color: string, themeMode: "light" | "dark") => {
     try {
       const user = await getCurrentUser();
       if (!user) {

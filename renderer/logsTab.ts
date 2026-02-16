@@ -1,7 +1,6 @@
-import { ipcRenderer } from "electron";
 import { formatTimeSpent } from "../src/utils/timeFormat";
 import type { LogEntry } from "@shared/types";
-import { getCurrentUserId, safeIpcInvoke } from "./utils";
+import { safeIpcInvoke } from "./utils";
 import { getLangIconUrl } from "../src/utils/extractData";
 import { showModal, showInAppNotification } from "./components";
 
@@ -26,9 +25,8 @@ export async function renderLogs(date?: string) {
     container.insertBefore(dailyGoalDiv, container.firstChild);
   }
 
-  const userId = getCurrentUserId();
   const today = date || new Date().toLocaleDateString("en-CA");
-  const dailyGoal = await safeIpcInvoke("get-daily-goal", [userId, today], {
+  const dailyGoal = await safeIpcInvoke("get-daily-goal", [today], {
     fallback: null,
     showNotification: false,
   });
@@ -51,7 +49,7 @@ export async function renderLogs(date?: string) {
     dailyGoalDiv
       .querySelector("#deleteDailyGoalBtn")
       ?.addEventListener("click", async () => {
-        await ipcRenderer.invoke("delete-daily-goal", userId, today);
+        await safeIpcInvoke("delete-daily-goal", [today], { fallback: null });
         showInAppNotification("Daily goal deleted.");
         renderLogs(date);
       });
@@ -91,12 +89,10 @@ export async function renderLogs(date?: string) {
             return;
           }
 
-          await ipcRenderer.invoke(
+          await safeIpcInvoke(
             "set-daily-goal",
-            userId,
-            today,
-            mins,
-            values.description || "",
+            [today, mins, values.description || ""],
+            { fallback: null },
           );
           showInAppNotification("Daily goal set!");
           renderLogs(date);
@@ -128,11 +124,9 @@ export async function renderLogs(date?: string) {
   tbody.innerHTML =
     '<tr><td colspan="5"><div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading logs…</span></div></td></tr>';
 
-  const logs = await safeIpcInvoke<LogEntry[]>(
-    "get-logs",
-    [getCurrentUserId(), date],
-    { fallback: [] },
-  );
+  const logs = await safeIpcInvoke<LogEntry[]>("get-logs", [date], {
+    fallback: [],
+  });
 
   tbody.innerHTML = "";
   logs.forEach((log) => {

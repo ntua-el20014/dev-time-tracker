@@ -15,8 +15,7 @@ import {
   showConfirmationModal,
 } from "./components";
 import { renderLandingPage } from "./components";
-// import { renderUserLanding } from "./components";
-import { getCurrentUserId, safeIpcInvoke } from "./utils";
+import { safeIpcInvoke } from "./utils";
 import { isCurrentUserManagerOrAdmin } from "./utils";
 import {
   checkAuthStatus,
@@ -193,12 +192,12 @@ function setupRecordAndPauseBtns() {
       (window as any).isPaused = false;
       pauseBtn.style.display = "";
       updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
-      await ipcRenderer.invoke("start-tracking", getCurrentUserId());
+      await ipcRenderer.invoke("start-tracking");
     } else {
       (window as any).isRecording = false;
       (window as any).isPaused = false;
       pauseBtn.style.display = "none";
-      await ipcRenderer.invoke("stop-tracking", getCurrentUserId());
+      await ipcRenderer.invoke("stop-tracking");
     }
     updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
   });
@@ -209,7 +208,7 @@ function setupRecordAndPauseBtns() {
       await ipcRenderer.invoke("pause-tracking");
     } else {
       (window as any).isPaused = false;
-      await ipcRenderer.invoke("resume-tracking", getCurrentUserId());
+      await ipcRenderer.invoke("resume-tracking");
     }
     updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
   });
@@ -308,8 +307,7 @@ ipcRenderer.on("get-session-info", async () => {
     // Load available projects for selection
     let projects: any[] = [];
     try {
-      const userId = await ipcRenderer.invoke("get-current-user-id");
-      projects = await safeIpcInvoke("get-user-projects", [userId], {
+      projects = await safeIpcInvoke("get-user-projects", [], {
         fallback: [],
         showNotification: false,
       });
@@ -692,12 +690,11 @@ let dailyGoalCheckInterval: NodeJS.Timeout | null = null;
 
 async function checkDailyGoalProgress() {
   try {
-    const userId = getCurrentUserId();
     const today = new Date().toLocaleDateString("en-CA");
     const dailyGoal = await safeIpcInvoke<{
       time: number;
       isCompleted: boolean;
-    } | null>("get-daily-goal", [userId, today], {
+    } | null>("get-daily-goal", [today], {
       fallback: null,
       showNotification: false,
     });
@@ -705,12 +702,12 @@ async function checkDailyGoalProgress() {
 
     const totalMins = await safeIpcInvoke<number>(
       "get-total-time-for-day",
-      [userId, today],
+      [today],
       { fallback: 0, showNotification: false },
     );
 
     if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {
-      await ipcRenderer.invoke("complete-daily-goal", userId, today);
+      await ipcRenderer.invoke("complete-daily-goal", today);
       showNotification("🎉 Daily goal achieved!");
       // Optionally, re-render dashboard/logs
       renderDashboard();

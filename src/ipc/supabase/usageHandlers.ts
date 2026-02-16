@@ -6,7 +6,7 @@ import type { DailySummaryFilters } from "@shared/types";
 /**
  * Get usage logs/summary for a specific date
  */
-ipcMain.handle("get-logs", async (_event, _userId: number, date?: string) => {
+ipcMain.handle("get-logs", async (_event, date?: string) => {
   try {
     // Get current authenticated user
     const user = await getCurrentUser();
@@ -27,7 +27,7 @@ ipcMain.handle("get-logs", async (_event, _userId: number, date?: string) => {
  */
 ipcMain.handle(
   "get-logged-days-of-month",
-  async (_event, _userId: number, year: number, month: number) => {
+  async (_event, year: number, month: number) => {
     try {
       // Get current authenticated user
       const user = await getCurrentUser();
@@ -46,7 +46,7 @@ ipcMain.handle(
 /**
  * Get editor usage statistics
  */
-ipcMain.handle("get-editor-usage", async (_event, _userId: number) => {
+ipcMain.handle("get-editor-usage", async (_event) => {
   try {
     // Get current authenticated user
     const user = await getCurrentUser();
@@ -66,7 +66,7 @@ ipcMain.handle("get-editor-usage", async (_event, _userId: number) => {
  */
 ipcMain.handle(
   "get-daily-summary",
-  async (_event, _userId: number, filters?: DailySummaryFilters) => {
+  async (_event, filters?: DailySummaryFilters) => {
     try {
       // Get current authenticated user
       const user = await getCurrentUser();
@@ -94,7 +94,7 @@ ipcMain.handle(
 /**
  * Get language usage statistics
  */
-ipcMain.handle("get-language-usage", async (_event, _userId: number) => {
+ipcMain.handle("get-language-usage", async (_event) => {
   try {
     // Get current authenticated user
     const user = await getCurrentUser();
@@ -114,7 +114,7 @@ ipcMain.handle("get-language-usage", async (_event, _userId: number) => {
  */
 ipcMain.handle(
   "get-language-summary-by-date-range",
-  async (_event, _userId: number, startDate: string, endDate: string) => {
+  async (_event, startDate: string, endDate: string) => {
     try {
       // Get current authenticated user
       const user = await getCurrentUser();
@@ -139,7 +139,7 @@ ipcMain.handle(
  */
 ipcMain.handle(
   "get-usage-details-for-app-date",
-  async (_event, _userId: number, app: string, date: string) => {
+  async (_event, app: string, date: string) => {
     try {
       // Get current authenticated user
       const user = await getCurrentUser();
@@ -160,7 +160,7 @@ ipcMain.handle(
  */
 ipcMain.handle(
   "get-usage-details-for-session",
-  async (_event, _userId: number, sessionId: number | string) => {
+  async (_event, sessionId: number | string) => {
     try {
       // Get current authenticated user
       const user = await getCurrentUser();
@@ -180,7 +180,7 @@ ipcMain.handle(
 /**
  * Get user's distinct editors/apps
  */
-ipcMain.handle("get-user-editors", async (_event, _userId: number | string) => {
+ipcMain.handle("get-user-editors", async (_event) => {
   try {
     // Get current authenticated user
     const user = await getCurrentUser();
@@ -198,20 +198,17 @@ ipcMain.handle("get-user-editors", async (_event, _userId: number | string) => {
 /**
  * Get user's distinct language extensions
  */
-ipcMain.handle(
-  "get-user-lang-exts",
-  async (_event, _userId: number | string) => {
-    try {
-      // Get current authenticated user
-      const user = await getCurrentUser();
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-
-      return await usageLogs.getUserLangExts(user.id);
-    } catch (err) {
-      // Error getting language extensions
-      return [];
+ipcMain.handle("get-user-lang-exts", async (_event) => {
+  try {
+    // Get current authenticated user
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
     }
-  },
-);
+
+    return await usageLogs.getUserLangExts(user.id);
+  } catch (err) {
+    // Error getting language extensions
+    return [];
+  }
+});

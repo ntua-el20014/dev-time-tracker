@@ -12,3 +12,4 @@ export * from "./LandingPage";
 export * from "./UserRoleManager";
 export * from "./CustomDropdown";
 export * from "./ConnectionStatus";
+export * from "./SessionReviewPanel";

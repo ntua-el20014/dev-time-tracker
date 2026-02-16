@@ -22,7 +22,7 @@ import type {
 /**
  * Get current user's organization
  */
-ipcMain.handle("org:get-current", async (_event, _userId?: string) => {
+ipcMain.handle("org:get-current", async (_event) => {
   try {
     const user = await getCurrentUser();
     if (!user) return null;
@@ -112,18 +112,15 @@ ipcMain.handle("org:remove-user", async (_event, userId: string) => {
 /**
  * Get current user profile from Supabase
  */
-ipcMain.handle(
-  "org:get-current-user-profile",
-  async (_event, _userId?: string) => {
-    try {
-      const user = await getCurrentUser();
-      if (!user) return null;
-      return await orgApi.getCurrentUserProfile(user.id);
-    } catch (err) {
-      return null;
-    }
-  },
-);
+ipcMain.handle("org:get-current-user-profile", async (_event) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return null;
+    return await orgApi.getCurrentUserProfile(user.id);
+  } catch (err) {
+    return null;
+  }
+});
 
 // =====================================================
 // JOIN REQUESTS
@@ -132,23 +129,20 @@ ipcMain.handle(
 /**
  * Request to join an organization
  */
-ipcMain.handle(
-  "org:request-join",
-  async (_event, orgId: string, _userId?: string) => {
-    try {
-      const user = await getCurrentUser();
-      if (!user) return null;
-      return await orgRequestsApi.requestToJoinOrganization(orgId, user.id);
-    } catch (err) {
-      return null;
-    }
-  },
-);
+ipcMain.handle("org:request-join", async (_event, orgId: string) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return null;
+    return await orgRequestsApi.requestToJoinOrganization(orgId, user.id);
+  } catch (err) {
+    return null;
+  }
+});
 
 /**
  * Get user's join requests
  */
-ipcMain.handle("org:get-my-requests", async (_event, _userId?: string) => {
+ipcMain.handle("org:get-my-requests", async (_event) => {
   try {
     const user = await getCurrentUser();
     if (!user) return [];
@@ -161,7 +155,7 @@ ipcMain.handle("org:get-my-requests", async (_event, _userId?: string) => {
 /**
  * Get pending join requests (admin only)
  */
-ipcMain.handle("org:get-pending-requests", async (_event, _userId?: string) => {
+ipcMain.handle("org:get-pending-requests", async (_event) => {
   try {
     const user = await getCurrentUser();
     if (!user) return [];
@@ -198,19 +192,16 @@ ipcMain.handle("org:reject-request", async (_event, requestId: string) => {
 /**
  * Cancel own join request
  */
-ipcMain.handle(
-  "org:cancel-request",
-  async (_event, requestId: string, _userId?: string) => {
-    try {
-      const user = await getCurrentUser();
-      if (!user) return false;
-      await orgRequestsApi.cancelJoinRequest(requestId, user.id);
-      return true;
-    } catch (err) {
-      return false;
-    }
-  },
-);
+ipcMain.handle("org:cancel-request", async (_event, requestId: string) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return false;
+    await orgRequestsApi.cancelJoinRequest(requestId, user.id);
+    return true;
+  } catch (err) {
+    return false;
+  }
+});
 
 // =====================================================
 // CLOUD PROJECTS (Organization-level)
@@ -219,7 +210,7 @@ ipcMain.handle(
 /**
  * Get organization projects from cloud
  */
-ipcMain.handle("org:get-projects", async (_event, _userId?: string) => {
+ipcMain.handle("org:get-projects", async (_event) => {
   try {
     const user = await getCurrentUser();
     if (!user) return [];
@@ -245,7 +236,7 @@ ipcMain.handle("org:get-project-by-id", async (_event, projectId: string) => {
  */
 ipcMain.handle(
   "org:create-project",
-  async (_event, data: CreateCloudProjectData, _userId?: string) => {
+  async (_event, data: CreateCloudProjectData) => {
     try {
       const user = await getCurrentUser();
       if (!user) return null;

@@ -5,7 +5,7 @@ import { getCurrentUser } from "../../supabase/api";
 /**
  * Get all tags for the current user
  */
-ipcMain.handle("get-all-tags", async (_event, _userId?: number | string) => {
+ipcMain.handle("get-all-tags", async (_event) => {
   try {
     // Get current authenticated user
     const user = await getCurrentUser();
@@ -26,7 +26,7 @@ ipcMain.handle("get-all-tags", async (_event, _userId?: number | string) => {
  */
 ipcMain.handle(
   "set-tag-color",
-  async (_event, _userId: number | string, tagName: string, color: string) => {
+  async (_event, tagName: string, color: string) => {
     try {
       // Get current authenticated user
       const user = await getCurrentUser();
@@ -58,12 +58,7 @@ ipcMain.handle(
  */
 ipcMain.handle(
   "set-session-tags",
-  async (
-    _event,
-    _userId: number | string,
-    sessionId: string | number,
-    tagNames: string[],
-  ) => {
+  async (_event, sessionId: string | number, tagNames: string[]) => {
     try {
       // Get current authenticated user
       const user = await getCurrentUser();
@@ -85,27 +80,24 @@ ipcMain.handle(
 /**
  * Delete a tag (and remove it from all sessions)
  */
-ipcMain.handle(
-  "delete-tag",
-  async (_event, _userId: number | string, name: string) => {
-    try {
-      // Get current authenticated user
-      const user = await getCurrentUser();
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-
-      // Find the tag by name
-      const tag = await tags.getTagByName(user.id, name);
-
-      if (tag) {
-        await tags.deleteTag((tag as any).id);
-      }
-
-      return true;
-    } catch (err) {
-      // Error deleting tag
-      return false;
+ipcMain.handle("delete-tag", async (_event, name: string) => {
+  try {
+    // Get current authenticated user
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
     }
-  },
-);
+
+    // Find the tag by name
+    const tag = await tags.getTagByName(user.id, name);
+
+    if (tag) {
+      await tags.deleteTag((tag as any).id);
+    }
+
+    return true;
+  } catch (err) {
+    // Error deleting tag
+    return false;
+  }
+});

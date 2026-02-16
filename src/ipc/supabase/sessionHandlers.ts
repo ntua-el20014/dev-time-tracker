@@ -10,7 +10,6 @@ ipcMain.handle(
   "get-sessions",
   async (
     _event,
-    _userId: number | string, // Accept both for transition compatibility
     filters?: {
       tag?: string;
       startDate?: string;
@@ -58,7 +57,6 @@ ipcMain.handle(
   async (
     _event,
     {
-      userId: _userId,
       id,
       title,
       description,
@@ -66,7 +64,6 @@ ipcMain.handle(
       projectId,
       isBillable,
     }: {
-      userId: number | string;
       id: string | number;
       title?: string;
       description?: string;
@@ -123,3 +120,38 @@ ipcMain.handle("delete-session", async (_event, id: string | number) => {
     return false;
   }
 });
+
+/**
+ * Get small/short sessions below a duration threshold
+ * Used by the Session Review Panel for cleanup
+ */
+ipcMain.handle(
+  "get-small-sessions",
+  async (_event, maxDurationSeconds: number) => {
+    try {
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+      return await timeTracking.getSmallSessions(user.id, maxDurationSeconds);
+    } catch (err) {
+      return [];
+    }
+  },
+);
+
+/**
+ * Delete multiple sessions by IDs (batch cleanup)
+ */
+ipcMain.handle(
+  "delete-sessions",
+  async (_event, sessionIds: (string | number)[]) => {
+    try {
+      const ids = sessionIds.map(String);
+      await timeTracking.deleteSessions(ids);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  },
+);

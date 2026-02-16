@@ -34,7 +34,6 @@ ipcMain.handle(
   "get-scheduled-sessions",
   async (
     _event,
-    _userId: number | string,
     filters?: {
       startDate?: string;
       endDate?: string;
@@ -83,7 +82,6 @@ ipcMain.handle(
   "update-scheduled-session",
   async (
     _event,
-    _userId: number | string,
     id: number | string,
     updates: Partial<ScheduledSessionData>,
   ) => {
@@ -109,7 +107,7 @@ ipcMain.handle(
  */
 ipcMain.handle(
   "delete-scheduled-session",
-  async (_event, _userId: number | string, id: number | string) => {
+  async (_event, id: number | string) => {
     try {
       // Get current authenticated user
       const user = await getCurrentUser();
@@ -134,7 +132,6 @@ ipcMain.handle(
   "mark-scheduled-session-completed",
   async (
     _event,
-    _userId: number | string,
     scheduledSessionId: number | string,
     actualSessionId: number | string,
   ) => {

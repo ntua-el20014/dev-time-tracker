@@ -1,12 +1,6 @@
 import { ipcRenderer } from "electron";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
-import {
-  escapeHtml,
-  getCurrentUserId,
-  prettyDate,
-  prettyTime,
-  safeIpcInvoke,
-} from "../utils";
+import { escapeHtml, prettyDate, prettyTime, safeIpcInvoke } from "../utils";
 
 export interface DetailsModalConfig {
   type: "app-date" | "session";
@@ -106,13 +100,13 @@ async function loadDetailsData(
     if (config.type === "app-date") {
       detailsData = await safeIpcInvoke(
         "get-usage-details-for-app-date",
-        [getCurrentUserId(), config.data.app, config.data.date],
+        [config.data.app, config.data.date],
         { fallback: null, errorMessage: "Failed to load app details" },
       );
     } else if (config.type === "session") {
       detailsData = await safeIpcInvoke(
         "get-usage-details-for-session",
-        [getCurrentUserId(), config.data.sessionId],
+        [config.data.sessionId],
         { fallback: null, errorMessage: "Failed to load session details" },
       );
     }

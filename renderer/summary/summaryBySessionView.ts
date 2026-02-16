@@ -1,16 +1,11 @@
-import { ipcRenderer } from "electron";
 import edit from "../../assets/edit.png";
-import {
-  escapeHtml,
-  getCurrentUserId,
-  prettyDate,
-  safeIpcInvoke,
-} from "../utils";
+import { escapeHtml, prettyDate, safeIpcInvoke } from "../utils";
 import {
   showModal,
   showChartConfigModal,
   showConfirmationModal,
   showDetailsModal,
+  showSessionReviewPanel,
 } from "../components";
 import { PaginationManager, PageInfo } from "../utils/performance";
 import { createExportModal } from "../utils/sessionExporter";
@@ -46,21 +41,17 @@ export async function renderBySessionView(
   container.innerHTML = "";
 
   // Fetch all tags and sessions for dropdowns
-  const allTags: Tag[] = await safeIpcInvoke(
-    "get-all-tags",
-    [getCurrentUserId()],
-    { fallback: [] },
-  );
-  const allProjects = await safeIpcInvoke(
-    "get-user-projects",
-    [getCurrentUserId()],
-    { fallback: [] },
-  );
+  const allTags: Tag[] = await safeIpcInvoke("get-all-tags", [], {
+    fallback: [],
+  });
+  const allProjects = await safeIpcInvoke("get-user-projects", [], {
+    fallback: [],
+  });
   let sessions: SessionRow[];
   if (state.filteredSessions.length) {
     sessions = state.filteredSessions;
   } else {
-    sessions = await safeIpcInvoke("get-sessions", [getCurrentUserId()], {
+    sessions = await safeIpcInvoke("get-sessions", [], {
       fallback: [],
     });
     state.filteredSessions = sessions;
@@ -111,20 +102,16 @@ export async function renderBySessionView(
         filters.startDate = filterValues["start-session"];
       if (filterValues["end-session"])
         filters.endDate = filterValues["end-session"];
-      const filtered = await safeIpcInvoke(
-        "get-sessions",
-        [getCurrentUserId(), filters],
-        { fallback: [] },
-      );
+      const filtered = await safeIpcInvoke("get-sessions", [filters], {
+        fallback: [],
+      });
       state.filteredSessions = filtered;
       renderSessionRows(container, filtered, state, allTags);
     },
     onClear: async () => {
-      state.filteredSessions = await safeIpcInvoke(
-        "get-sessions",
-        [getCurrentUserId()],
-        { fallback: [] },
-      );
+      state.filteredSessions = await safeIpcInvoke("get-sessions", [], {
+        fallback: [],
+      });
       renderSessionRows(container, state.filteredSessions, state, allTags);
     },
   });
@@ -153,11 +140,26 @@ export async function renderBySessionView(
   exportSessionBtn.textContent = "📥 Export Data";
   exportSessionBtn.className = "create-chart-button";
   exportSessionBtn.onclick = () => {
-    createExportModal(getCurrentUserId());
+    createExportModal();
+  };
+
+  // Add review sessions button
+  const reviewSessionsBtn = document.createElement("button");
+  reviewSessionsBtn.textContent = "🔍 Review Sessions";
+  reviewSessionsBtn.className = "create-chart-button";
+  reviewSessionsBtn.onclick = () => {
+    showSessionReviewPanel(async () => {
+      // Refresh session list after deletions
+      state.filteredSessions = await safeIpcInvoke("get-sessions", [], {
+        fallback: [],
+      });
+      renderSessionRows(container, state.filteredSessions, state, allTags);
+    });
   };
 
   sessionTitle.appendChild(createSessionChartBtn);
   sessionTitle.appendChild(exportSessionBtn);
+  sessionTitle.appendChild(reviewSessionsBtn);
   container.appendChild(sessionTitle);
 
   const sessionTable = document.createElement("table");
@@ -352,11 +354,9 @@ export function renderSessionPage(
       );
       if (session)
         showEditSessionModal(session, allTags, async () => {
-          const updatedSessions = await safeIpcInvoke(
-            "get-sessions",
-            [getCurrentUserId()],
-            { fallback: [] },
-          );
+          const updatedSessions = await safeIpcInvoke("get-sessions", [], {
+            fallback: [],
+          });
           state.filteredSessions = updatedSessions;
           // Reset filter UI fields
           const filterBar = container.querySelector(".summary-filter-bar");
@@ -465,19 +465,21 @@ export async function showEditSessionModal(
     cancelText: "Cancel",
     cancelClass: "",
     onSubmit: async (values) => {
-      await ipcRenderer.invoke("edit-session", {
-        userId: getCurrentUserId(),
-        id: session.id,
-        title: values.title,
-        description: values.description,
-        tags: selectedTags,
-      });
-      await ipcRenderer.invoke(
-        "set-session-tags",
-        getCurrentUserId(),
-        session.id,
-        selectedTags,
+      await safeIpcInvoke(
+        "edit-session",
+        [
+          {
+            id: session.id,
+            title: values.title,
+            description: values.description,
+            tags: selectedTags,
+          },
+        ],
+        { fallback: null },
       );
+      await safeIpcInvoke("set-session-tags", [session.id, selectedTags], {
+        fallback: null,
+      });
       onChange();
     },
     onCancel: () => {
@@ -506,7 +508,9 @@ export async function showEditSessionModal(
           confirmText: "Delete",
           confirmClass: "btn-delete",
           onConfirm: async () => {
-            await ipcRenderer.invoke("delete-session", session.id);
+            await safeIpcInvoke("delete-session", [session.id], {
+              fallback: null,
+            });
             // Close the modal manually
             const modal = document.getElementById("customModal");
             const closeBtn = modal?.querySelector(

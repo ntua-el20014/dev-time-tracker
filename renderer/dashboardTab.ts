@@ -1,11 +1,9 @@
-import { ipcRenderer } from "electron";
 import { renderPercentBar, showInAppNotification } from "./components";
 import {
   getMonday,
   getWeekDates,
   getLocalDateString,
   filterDailyDataForWeek,
-  getCurrentUserId,
   safeIpcInvoke,
   withLoading,
 } from "./utils";
@@ -33,15 +31,14 @@ export async function renderDashboard() {
   }
 
   // --- Daily Goal Progress Bar ---
-  const userId = getCurrentUserId();
   const today = new Date().toLocaleDateString("en-CA");
-  const dailyGoal = await safeIpcInvoke("get-daily-goal", [userId, today], {
+  const dailyGoal = await safeIpcInvoke("get-daily-goal", [today], {
     fallback: null,
     showNotification: false,
   });
   const totalMins = await safeIpcInvoke<number>(
     "get-total-time-for-day",
-    [userId, today],
+    [today],
     { fallback: 0, showNotification: false },
   );
 
@@ -130,10 +127,9 @@ async function renderCalendarWidget(): Promise<HTMLDivElement> {
 
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  // Pass userId as first argument
   const loggedDaysRaw = await safeIpcInvoke<LoggedDay[]>(
     "get-logged-days-of-month",
-    [getCurrentUserId(), year, month],
+    [year, month],
     { fallback: [] },
   );
   const loggedDaysSet = new Set(
@@ -231,17 +227,14 @@ async function renderRecentActivity() {
   const statsDiv = document.getElementById("dashboard-quickstats");
   if (!statsDiv) return;
 
-  // Pass userId as first argument
   const dailySummary: DailySummaryRow[] = await safeIpcInvoke(
     "get-daily-summary",
-    [getCurrentUserId()],
+    [],
     { fallback: [] },
   );
-  const sessions: SessionRow[] = await safeIpcInvoke(
-    "get-sessions",
-    [getCurrentUserId()],
-    { fallback: [] },
-  );
+  const sessions: SessionRow[] = await safeIpcInvoke("get-sessions", [], {
+    fallback: [],
+  });
 
   // Get current week dates
   const monday = getMonday(new Date());
@@ -256,7 +249,7 @@ async function renderRecentActivity() {
   const endDate = getLocalDateString(weekDate[6]);
   const weeklyLangSummary = await safeIpcInvoke<any[]>(
     "get-language-summary-by-date-range",
-    [getCurrentUserId(), startDate, endDate],
+    [startDate, endDate],
     { fallback: [] },
   );
   // weeklyLangSummary: Array<{ language: string, total_time: number }>

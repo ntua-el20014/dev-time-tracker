@@ -105,7 +105,7 @@ async function loadProjects() {
       // Managers only see projects they are members or managers of
       currentProjects = await safeIpcInvoke(
         "get-user-projects-with-members",
-        [currentUserId],
+        [],
         { fallback: [] },
       );
     }
@@ -248,27 +248,27 @@ function setupProjectsEventListeners() {
     const target = e.target as HTMLElement;
 
     if (target.classList.contains("edit-project-btn")) {
-      const projectId = parseInt(target.dataset.projectId!);
+      const projectId = target.dataset.projectId!;
       showEditProjectModal(projectId);
     }
 
     if (target.classList.contains("manage-members-btn")) {
-      const projectId = parseInt(target.dataset.projectId!);
+      const projectId = target.dataset.projectId!;
       showManageMembersModal(projectId);
     }
 
     if (target.classList.contains("archive-project-btn")) {
-      const projectId = parseInt(target.dataset.projectId!);
+      const projectId = target.dataset.projectId!;
       archiveProject(projectId);
     }
 
     if (target.classList.contains("restore-project-btn")) {
-      const projectId = parseInt(target.dataset.projectId!);
+      const projectId = target.dataset.projectId!;
       restoreProject(projectId);
     }
 
     if (target.classList.contains("project-stats-btn")) {
-      const projectId = parseInt(target.dataset.projectId!);
+      const projectId = target.dataset.projectId!;
       showProjectStats(projectId);
     }
   });
@@ -346,23 +346,22 @@ function showCreateProjectModal() {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(form);
-    const userId = getCurrentUserId();
 
-    try {
-      await ipcRenderer.invoke(
-        "create-project",
+    const result = await safeIpcInvoke(
+      "create-project",
+      [
         formData.get("name") as string,
         formData.get("description") as string,
         formData.get("color") as string,
-        userId,
-      );
+      ],
+      { fallback: null },
+    );
+    if (result) {
       showInAppNotification("Project created successfully!", 3000);
-      renderProjects(); // Refresh the projects list
-      modal.remove();
-      overlay.remove();
-    } catch (error) {
-      showInAppNotification("Failed to create project", 5000);
+      renderProjects();
     }
+    modal.remove();
+    overlay.remove();
   };
 
   // Handle cancel and close
@@ -396,8 +395,10 @@ function showCreateProjectModal() {
     });
 }
 
-function showEditProjectModal(projectId: number) {
-  const project = currentProjects.find((p) => p.id === projectId);
+function showEditProjectModal(projectId: string | number) {
+  const project = currentProjects.find(
+    (p) => String(p.id) === String(projectId),
+  );
   if (!project) return;
 
   // Prevent opening multiple modals
@@ -474,21 +475,22 @@ function showEditProjectModal(projectId: number) {
     e.preventDefault();
     const formData = new FormData(form);
 
-    try {
-      await ipcRenderer.invoke(
-        "update-project",
+    const result = await safeIpcInvoke(
+      "update-project",
+      [
         projectId,
         formData.get("name") as string,
         formData.get("description") as string,
         formData.get("color") as string,
-      );
+      ],
+      { fallback: null },
+    );
+    if (result) {
       showInAppNotification("Project updated successfully!", 3000);
-      renderProjects(); // Refresh the projects list
-      modal.remove();
-      overlay.remove();
-    } catch (error) {
-      showInAppNotification("Failed to update project", 5000);
+      renderProjects();
     }
+    modal.remove();
+    overlay.remove();
   };
 
   // Handle cancel and close
@@ -522,8 +524,10 @@ function showEditProjectModal(projectId: number) {
     });
 }
 
-function archiveProject(projectId: number) {
-  const project = currentProjects.find((p) => p.id === projectId);
+function archiveProject(projectId: string | number) {
+  const project = currentProjects.find(
+    (p) => String(p.id) === String(projectId),
+  );
   if (!project) return;
 
   showConfirmationModal({
@@ -531,19 +535,21 @@ function archiveProject(projectId: number) {
     message: `Are you sure you want to archive "${project.name}"? This will hide it from active projects but preserve all session history.`,
     confirmText: "Archive",
     onConfirm: async () => {
-      try {
-        await ipcRenderer.invoke("delete-project", projectId);
+      const result = await safeIpcInvoke("delete-project", [projectId], {
+        fallback: false,
+      });
+      if (result) {
         showInAppNotification("Project archived successfully!", 3000);
-        renderProjects(); // Refresh the projects list
-      } catch (error) {
-        showInAppNotification("Failed to archive project", 5000);
+        renderProjects();
       }
     },
   });
 }
 
-function restoreProject(projectId: number) {
-  const project = currentProjects.find((p) => p.id === projectId);
+function restoreProject(projectId: string | number) {
+  const project = currentProjects.find(
+    (p) => String(p.id) === String(projectId),
+  );
   if (!project) return;
 
   showConfirmationModal({
@@ -551,110 +557,102 @@ function restoreProject(projectId: number) {
     message: `Are you sure you want to restore "${project.name}" to active projects?`,
     confirmText: "Restore",
     onConfirm: async () => {
-      try {
-        await ipcRenderer.invoke("restore-project", projectId);
+      const result = await safeIpcInvoke("restore-project", [projectId], {
+        fallback: false,
+      });
+      if (result) {
         showInAppNotification("Project restored successfully!", 3000);
-        renderProjects(); // Refresh the projects list
-      } catch (error) {
-        showInAppNotification("Failed to restore project", 5000);
+        renderProjects();
       }
     },
   });
 }
 
-async function showProjectStats(projectId: number) {
-  const project = currentProjects.find((p) => p.id === projectId);
+async function showProjectStats(projectId: string | number) {
+  const project = currentProjects.find(
+    (p) => String(p.id) === String(projectId),
+  );
   if (!project) return;
 
-  try {
-    const stats = await ipcRenderer.invoke("get-project-stats", projectId);
+  const stats = await safeIpcInvoke("get-project-stats", [projectId], {
+    fallback: {
+      total_sessions: 0,
+      total_time: 0,
+      member_count: 0,
+      last_activity: null,
+    },
+  });
 
-    const totalHours = Math.floor(stats.totalTime / 3600);
-    const totalMinutes = Math.floor((stats.totalTime % 3600) / 60);
-    const billableHours = Math.floor(stats.billableTime / 3600);
-    const billableMinutes = Math.floor((stats.billableTime % 3600) / 60);
-    const nonBillableHours = Math.floor(stats.nonBillableTime / 3600);
-    const nonBillableMinutes = Math.floor((stats.nonBillableTime % 3600) / 60);
+  const totalHours = Math.floor(stats.total_time / 3600);
+  const totalMinutes = Math.floor((stats.total_time % 3600) / 60);
 
-    // Create a proper statistics modal using the existing modal system
-    showModal({
-      title: `${project.name} - Statistics`,
-      fields: [], // No form fields, just display data
-      cancelText: "Close",
-      onCancel: () => {
-        // Modal will close automatically
-      },
-    });
+  // Create a proper statistics modal using the existing modal system
+  showModal({
+    title: `${project.name} - Statistics`,
+    fields: [], // No form fields, just display data
+    cancelText: "Close",
+    onCancel: () => {
+      // Modal will close automatically
+    },
+  });
 
-    // After the modal is created, replace the form content with statistics
-    setTimeout(() => {
-      const modal = document.getElementById("customModal");
-      const form = modal?.querySelector("form");
-      if (form) {
-        form.innerHTML = `
-          <div class="project-stats-modal">
-            <div class="stats-grid">
-              <div class="stat-item">
-                <div class="stat-value">${stats.totalSessions}</div>
-                <div class="stat-label">Total Sessions</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-value">${totalHours}h ${totalMinutes}m</div>
-                <div class="stat-label">Total Time</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-value">${billableHours}h ${billableMinutes}m</div>
-                <div class="stat-label">Billable Time</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-value">${nonBillableHours}h ${nonBillableMinutes}m</div>
-                <div class="stat-label">Non-Billable Time</div>
-              </div>
+  // After the modal is created, replace the form content with statistics
+  setTimeout(() => {
+    const modal = document.getElementById("customModal");
+    const form = modal?.querySelector("form");
+    if (form) {
+      form.innerHTML = `
+        <div class="project-stats-modal">
+          <div class="stats-grid">
+            <div class="stat-item">
+              <div class="stat-value">${stats.total_sessions}</div>
+              <div class="stat-label">Total Sessions</div>
             </div>
-            
-            ${
-              stats.firstSession
-                ? `
-              <div class="stats-timeline">
-                <div class="timeline-item">
-                  <strong>First Session:</strong> ${new Date(
-                    stats.firstSession,
-                  ).toLocaleDateString()}
-                </div>
-                <div class="timeline-item">
-                  <strong>Last Session:</strong> ${new Date(
-                    stats.lastSession,
-                  ).toLocaleDateString()}
-                </div>
-              </div>
-            `
-                : `
-              <div class="empty-stats">
-                <p>No sessions recorded for this project yet.</p>
-              </div>
-            `
-            }
-            
-            <div class="session-modal-actions">
-              <button type="button" id="statsModalCloseBtn" class="btn-cancel">Close</button>
+            <div class="stat-item">
+              <div class="stat-value">${totalHours}h ${totalMinutes}m</div>
+              <div class="stat-label">Total Time</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value">${stats.member_count}</div>
+              <div class="stat-label">Members</div>
             </div>
           </div>
-        `;
+          
+          ${
+            stats.last_activity
+              ? `
+            <div class="stats-timeline">
+              <div class="timeline-item">
+                <strong>Last Activity:</strong> ${new Date(
+                  stats.last_activity,
+                ).toLocaleDateString()}
+              </div>
+            </div>
+          `
+              : `
+            <div class="empty-stats">
+              <p>No sessions recorded for this project yet.</p>
+            </div>
+          `
+          }
+          
+          <div class="session-modal-actions">
+            <button type="button" id="statsModalCloseBtn" class="btn-cancel">Close</button>
+          </div>
+        </div>
+      `;
 
-        // Add close button handler
-        const closeBtn = form.querySelector("#statsModalCloseBtn");
-        if (closeBtn) {
-          closeBtn.addEventListener("click", () => {
-            modal?.classList.remove("active");
-            modal?.remove();
-            document.getElementById("customModalOverlay")?.remove();
-          });
-        }
+      // Add close button handler
+      const closeBtn = form.querySelector("#statsModalCloseBtn");
+      if (closeBtn) {
+        closeBtn.addEventListener("click", () => {
+          modal?.classList.remove("active");
+          modal?.remove();
+          document.getElementById("customModalOverlay")?.remove();
+        });
       }
-    }, 50);
-  } catch (error) {
-    showInAppNotification("Failed to load project statistics", 5000);
-  }
+    }
+  }, 50);
 }
 
 function escapeHtml(text: string): string {
@@ -663,8 +661,10 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
-async function showManageMembersModal(projectId: number) {
-  const project = currentProjects.find((p) => p.id === projectId);
+async function showManageMembersModal(projectId: string | number) {
+  const project = currentProjects.find(
+    (p) => String(p.id) === String(projectId),
+  );
   if (!project) return;
 
   // Prevent opening multiple modals
@@ -677,10 +677,13 @@ async function showManageMembersModal(projectId: number) {
   try {
     const refreshModalContent = async () => {
       // Refresh data
-      const freshUsers = await ipcRenderer.invoke("get-all-users");
-      const freshMembers = await ipcRenderer.invoke(
+      const freshUsers = await safeIpcInvoke("get-all-users", [], {
+        fallback: [],
+      });
+      const freshMembers = await safeIpcInvoke(
         "get-project-members",
-        projectId,
+        [projectId],
+        { fallback: [] },
       );
 
       const membersList = freshMembers
@@ -746,7 +749,9 @@ async function showManageMembersModal(projectId: number) {
       roleContainers.forEach((container: any) => {
         const userId = container.dataset.userId;
         const currentRole = container.dataset.currentRole;
-        const user = data.allUsers.find((u: any) => u.id === parseInt(userId));
+        const user = data.allUsers.find(
+          (u: any) => String(u.id) === String(userId),
+        );
         const canBeManager =
           user && (user.role === "admin" || user.role === "manager");
 
@@ -770,13 +775,13 @@ async function showManageMembersModal(projectId: number) {
                 await ipcRenderer.invoke(
                   "transfer-project-management",
                   projectId,
-                  parseInt(userId),
+                  userId,
                 );
               } else {
                 await ipcRenderer.invoke(
                   "update-project-member-role",
                   projectId,
-                  parseInt(userId),
+                  userId,
                   dbRole,
                 );
               }
@@ -823,7 +828,7 @@ async function showManageMembersModal(projectId: number) {
             onChange: (userId: string) => {
               if (roleSelectDropdown && userId) {
                 const selectedUser = data.allUsers.find(
-                  (u: any) => u.id === parseInt(userId),
+                  (u: any) => String(u.id) === String(userId),
                 );
                 const canBeManager =
                   selectedUser &&
@@ -873,7 +878,7 @@ async function showManageMembersModal(projectId: number) {
               await ipcRenderer.invoke(
                 "add-project-member",
                 projectId,
-                parseInt(userValue),
+                userValue,
                 dbRole,
               );
               showInAppNotification("Member added successfully!", 3000);
@@ -956,9 +961,7 @@ async function showManageMembersModal(projectId: number) {
           const removeButtons = modal?.querySelectorAll(".btn-remove-member");
           removeButtons?.forEach((btn) => {
             btn.addEventListener("click", async () => {
-              const userId = parseInt(
-                (btn as HTMLButtonElement).dataset.userId!,
-              );
+              const userId = (btn as HTMLButtonElement).dataset.userId!;
               const memberName =
                 btn
                   .closest(".member-item")
@@ -1001,7 +1004,7 @@ async function showManageMembersModal(projectId: number) {
           roleSelects?.forEach((select) => {
             select.addEventListener("change", async (e) => {
               const target = e.target as HTMLSelectElement;
-              const userId = parseInt(target.dataset.userId!);
+              const userId = target.dataset.userId!;
               const newRole = target.value as "manager" | "member";
               const oldValue =
                 target.value === "manager" ? "member" : "manager";

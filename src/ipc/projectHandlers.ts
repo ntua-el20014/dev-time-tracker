@@ -12,13 +12,7 @@ import type {
  */
 ipcMain.handle(
   "create-project",
-  async (
-    _event,
-    name: string,
-    description: string,
-    color: string,
-    _managerId?: number | string,
-  ) => {
+  async (_event, name: string, description: string, color: string) => {
     try {
       const user = await getCurrentUser();
       if (!user) {
@@ -98,76 +92,67 @@ ipcMain.handle("get-all-projects-with-members", async (_event) => {
 /**
  * Get user's personal projects
  */
-ipcMain.handle(
-  "get-user-projects",
-  async (_event, _userId?: number | string) => {
-    try {
-      const user = await getCurrentUser();
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-
-      return await cloudProjects.getPersonalProjects(user.id);
-    } catch (err) {
-      return [];
+ipcMain.handle("get-user-projects", async (_event) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
     }
-  },
-);
+
+    return await cloudProjects.getPersonalProjects(user.id);
+  } catch (err) {
+    return [];
+  }
+});
 
 /**
  * Get user's personal projects with members
  */
-ipcMain.handle(
-  "get-user-projects-with-members",
-  async (_event, _userId?: number | string) => {
-    try {
-      const user = await getCurrentUser();
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-
-      const projects = await cloudProjects.getPersonalProjects(user.id);
-
-      // Get members for each project
-      const projectsWithMembers = await Promise.all(
-        projects.map(async (project) => {
-          const members = await cloudProjects.getProjectMembers(
-            (project as any).id,
-          );
-          return { ...project, members };
-        }),
-      );
-
-      return projectsWithMembers;
-    } catch (err) {
-      return [];
+ipcMain.handle("get-user-projects-with-members", async (_event) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
     }
-  },
-);
+
+    const projects = await cloudProjects.getPersonalProjects(user.id);
+
+    // Get members for each project
+    const projectsWithMembers = await Promise.all(
+      projects.map(async (project) => {
+        const members = await cloudProjects.getProjectMembers(
+          (project as any).id,
+        );
+        return { ...project, members };
+      }),
+    );
+
+    return projectsWithMembers;
+  } catch (err) {
+    return [];
+  }
+});
 
 /**
  * Get all projects accessible to a user (organization + personal)
  */
-ipcMain.handle(
-  "get-projects-for-user",
-  async (_event, _userId?: number | string) => {
-    try {
-      const user = await getCurrentUser();
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-
-      const [orgProjects, personalProjects] = await Promise.all([
-        cloudProjects.getOrganizationProjects(user.id),
-        cloudProjects.getPersonalProjects(user.id),
-      ]);
-
-      return [...orgProjects, ...personalProjects];
-    } catch (err) {
-      return [];
+ipcMain.handle("get-projects-for-user", async (_event) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
     }
-  },
-);
+
+    const [orgProjects, personalProjects] = await Promise.all([
+      cloudProjects.getOrganizationProjects(user.id),
+      cloudProjects.getPersonalProjects(user.id),
+    ]);
+
+    return [...orgProjects, ...personalProjects];
+  } catch (err) {
+    return [];
+  }
+});
 
 /**
  * Get project by ID

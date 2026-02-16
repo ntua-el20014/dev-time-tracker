@@ -225,49 +225,80 @@
 - [x] Style connection indicator (renderer/styles/connection-status.css)
 
 ### Step 4.3: Update User Management
-- [ ] Update renderer/components/UserLanding.ts
+- [x] Update renderer/components/UserLanding.ts
       - Load users from Supabase user_profiles
       - Remove local user creation (users created via auth)
       - Handle auth-based user selection
-- [ ] Remove local user switching (single auth user model)
+      COMPLETED: UserLanding.ts deprecated, now delegates to LandingPage.ts auth flow
+- [x] Remove local user switching (single auth user model)
       Decision: Each auth user = one profile, no multi-user local switching
-- [ ] Update getCurrentUserId() to use Supabase auth user
+      COMPLETED: Removed "Test Users" button from LandingPage.ts, removed legacy numeric ID support
+- [x] Update getCurrentUserId() to use Supabase auth user
+      COMPLETED: getCurrentUserId() uses localStorage (set by Supabase auth),
+      added getCurrentUserIdAsync() with IPC fallback, removed getCurrentUserIdLegacy(),
+      simplified role check functions to remove legacy fallback paths
+- [x] Step 4.3.1: Remove userId from IPC call signatures (resolve server-side)
+      COMPLETED: All IPC handlers now resolve userId internally via getCurrentUser().
+      Removed vestigial _userId params from 38+ handlers across:
+        - src/ipc/supabase/{session,usage,tag,goal,scheduled,preferences}Handlers.ts
+        - src/ipc/{user,project,organization}Handlers.ts
+        - src/index.ts (start/stop/resume-tracking, auto-resume, trackActiveWindow)
+        - src/utils/langMap.ts (get-user-lang-map, open-lang-json)
+      Kept userId param on 12 admin handlers (operate on other users):
+        - delete-user, set-user-role, get-user-info, is-user-admin,
+          is-user-manager-or-admin, get-user-role, add-project-member,
+          remove-project-member, update-project-member-role,
+          transfer-project-management, org:update-user-role, org:remove-user
+      Updated ~50 renderer-side IPC calls across 15 files to stop passing userId:
+        - renderer.ts, dashboardTab.ts, logsTab.ts, calendarTab.ts,
+          summaryTab.ts, projectsTab.ts, profileTab.ts
+        - components/DetailsModal.ts, AdminPanel.ts
+        - summary/summaryByDateView.ts, summaryBySessionView.ts
+        - utils/organizationApi.ts, sessionExporter.ts
+      Removed unused getCurrentUserId imports from files that no longer need it.
 
 ### Step 4.4: Update Projects Tab
-- [ ] Update renderer/projectsTab.ts
+- [x] Update renderer/projectsTab.ts
       - Use cloud_projects for all projects
       - Add personal projects section
       - Update to handle scope (personal vs organization)
-- [ ] Update project creation flow
-- [ ] Update project assignment logic
+- [x] Update project creation flow
+- [x] Update project assignment logic
+      Fixed parseInt() → string IDs, fixed get-project-stats field names,
+      wrapped IPC calls with safeIpcInvoke, updated member management.
 
 ### Step 4.5: Update Profile Tab
-- [ ] Update renderer/profileTab.ts
+- [x] Update renderer/profileTab.ts
       - Load preferences from Supabase
       - Save preferences to Supabase
       - Add organization section (Sprint 5)
       - Update editor colors to use Supabase
+      Wrapped all 19 ipcRenderer.invoke calls with safeIpcInvoke.
 
 ### Step 4.6: Update Dashboard
-- [ ] Update renderer/dashboardTab.ts
+- [x] Update renderer/dashboardTab.ts
       - Load data from Supabase
       - Add organization-wide stats (if admin/manager)
       - Update real-time data (use Supabase subscriptions later)
+      Removed stale comments and unused ipcRenderer import. Already compatible.
 
 ### Step 4.7: Update Calendar & Summary Tabs
-- [ ] Update renderer/calendarTab.ts
+- [x] Update renderer/calendarTab.ts
       - Load usage data from Supabase
-- [ ] Update renderer/summaryTab.ts
+      Fixed parseInt() → string IDs, removed user_id hack, wrapped IPC calls.
+- [x] Update renderer/summaryTab.ts
       - Load summary from Supabase
       - Update filters and date range queries
+      Already compatible. Wrapped remaining calls in summaryBySessionView.ts.
 
 ### Step 4.8: Update Logs Tab
-- [ ] Update renderer/logsTab.ts
+- [x] Update renderer/logsTab.ts
       - Load usage logs from Supabase
       - Update daily goals from Supabase
+      Wrapped 2 remaining ipcRenderer.invoke calls with safeIpcInvoke.
 
 ### Step 4.9: Add Session Review Panel
-- [ ] Create renderer/components/SessionReviewPanel.ts
+- [x] Create renderer/components/SessionReviewPanel.ts
       - Add "Review Sessions" button in Sessions/Dashboard tab
       - Allow user to set duration threshold (e.g., 10s, 30s, 1min, 5min)
       - Use getSmallSessions(userId, threshold) to fetch sessions
@@ -276,6 +307,7 @@
       - Call deleteSessions(selectedIds) for batch deletion
       - Show confirmation dialog before deletion
       - Refresh sessions list after deletion
+      Created component, added IPC handlers, added trigger button, added CSS.
 
 ## ═══════════════════════════════════════════════════════════════════
 ## PHASE 5: REMOVE SQLITE DEPENDENCIES
