@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
-import * as tags from "../../supabase/tags";
-import { getCurrentUser } from "../../supabase/api";
+import * as tags from "../supabase/tags";
+import { getCurrentUser } from "../supabase/api";
 
 /**
  * Get all tags for the current user

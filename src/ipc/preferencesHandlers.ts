@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
-import * as userPreferences from "../../supabase/userPreferences";
-import { getCurrentUser } from "../../supabase/api";
-import { updateIdleTimeout } from "../../index";
+import * as userPreferences from "../supabase/userPreferences";
+import { getCurrentUser } from "../supabase/api";
+import { updateIdleTimeout } from "../index";
 
 /**
  * Get all user preferences

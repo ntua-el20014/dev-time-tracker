@@ -13,12 +13,12 @@ import {
   markNotificationSent,
 } from "./supabase/scheduledSessions";
 import { getCurrentUser } from "./supabase/api";
-import "./ipc/supabase/sessionHandlers";
-import "./ipc/supabase/usageHandlers";
-import "./ipc/supabase/tagHandlers";
-import "./ipc/supabase/goalHandlers";
-import "./ipc/supabase/scheduledSessionHandlers";
-import "./ipc/supabase/preferencesHandlers";
+import "./ipc/sessionHandlers";
+import "./ipc/usageHandlers";
+import "./ipc/tagHandlers";
+import "./ipc/goalHandlers";
+import "./ipc/scheduledSessionHandlers";
+import "./ipc/preferencesHandlers";
 import "./ipc/projectHandlers";
 import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";

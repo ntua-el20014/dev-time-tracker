@@ -151,23 +151,12 @@
 ## ═══════════════════════════════════════════════════════════════════
 
 ### Step 3.1: Create New Supabase-based IPC Handlers
-- [x] Create src/ipc/supabase/sessionHandlers.ts
-      Replace: src/ipc/sessionHandlers.ts
-      Migrate all session-related handlers to use Supabase API
-- [x] Create src/ipc/supabase/usageHandlers.ts
-      Replace: src/ipc/usageHandlers.ts
-      Migrate all usage/logging handlers to use Supabase API
-- [x] Create src/ipc/supabase/tagHandlers.ts
-      Extract tag handlers from sessionHandlers
-      Use new Supabase tags API
-- [x] Create src/ipc/supabase/goalHandlers.ts
-      Extract from usageHandlers
-      Use new Supabase goals API
-- [x] Create src/ipc/supabase/scheduledSessionHandlers.ts
-      Replace: src/ipc/scheduledSessionHandlers.ts
-      Use new Supabase API
-- [x] Create src/ipc/supabase/preferencesHandlers.ts
-      NEW: Handle user preferences from Supabase
+- [x] Create src/ipc/sessionHandlers.ts (Supabase-based, replaces old SQLite version)
+- [x] Create src/ipc/usageHandlers.ts (Supabase-based, replaces old SQLite version)
+- [x] Create src/ipc/tagHandlers.ts (extracted from sessionHandlers, uses Supabase)
+- [x] Create src/ipc/goalHandlers.ts (extracted from usageHandlers, uses Supabase)
+- [x] Create src/ipc/scheduledSessionHandlers.ts (Supabase-based, replaces old version)
+- [x] Create src/ipc/preferencesHandlers.ts (NEW: user preferences from Supabase)
 - [x] Update src/ipc/projectHandlers.ts
       Transition to cloud_projects only (remove local project logic)
       COMPLETED: All handlers now fully implemented with archive/restore support
@@ -314,48 +303,54 @@
 ## ═══════════════════════════════════════════════════════════════════
 
 ### Step 5.1: Remove Backend SQLite Files
-- [ ] Delete src/backend/db.ts (SQLite database setup)
-- [ ] Delete src/backend/users.ts (or convert to Supabase wrapper)
-- [ ] Delete src/backend/sessions.ts
-- [ ] Delete src/backend/usage.ts
-- [ ] Delete src/backend/projects.ts (or convert to cloud wrapper)
-- [ ] Delete src/backend/scheduledSessions.ts
-- [ ] Delete src/ipc/dbHandler.ts (database export/import handlers)
+- [x] Delete src/backend/db.ts (SQLite database setup)
+- [x] Delete src/backend/users.ts (or convert to Supabase wrapper)
+- [x] Delete src/backend/sessions.ts
+- [x] Delete src/backend/usage.ts
+- [x] Delete src/backend/projects.ts (or convert to cloud wrapper)
+- [x] Delete src/backend/scheduledSessions.ts
+- [x] Delete src/backend/types.ts (backend type definitions)
+- [x] Delete src/ipc/dbHandler.ts (database export/import handlers)
+- [x] Removed entire src/backend/ directory
 
 ### Step 5.2: Remove Old IPC Handlers
-- [ ] Delete src/ipc/sessionHandlers.ts (DEPRECATED - replaced by supabase/sessionHandlers.ts)
-- [ ] Delete src/ipc/usageHandlers.ts (DEPRECATED - replaced by supabase/usageHandlers.ts)
-- [ ] Delete src/ipc/scheduledSessionHandlers.ts (DEPRECATED - replaced by supabase/scheduledSessionHandlers.ts)
-- [ ] Delete src/ipc/appHandlers.ts (DEPRECATED - handlers moved to supabase/preferencesHandlers.ts)
+- [x] Delete src/ipc/sessionHandlers.ts (DEPRECATED - replaced by supabase/sessionHandlers.ts)
+- [x] Delete src/ipc/usageHandlers.ts (DEPRECATED - replaced by supabase/usageHandlers.ts)
+- [x] Delete src/ipc/scheduledSessionHandlers.ts (DEPRECATED - replaced by supabase/scheduledSessionHandlers.ts)
+- [x] Delete src/ipc/appHandlers.ts (DEPRECATED - handlers moved to preferencesHandlers.ts)
 - [x] Update src/ipc/projectHandlers.ts (archive/restore/stats now implemented)
 - [x] Clean up src/ipc/userHandlers.ts (already using Supabase)
-      Note: All handlers now use Supabase, old SQLite-based handlers ready for deletion
+- [x] Flatten ipc/supabase/ → ipc/ (moved 6 handler files up, fixed import paths,
+      removed supabase/ subfolder, updated index.ts imports)
+      Note: All IPC handlers now live directly under src/ipc/
 
 ### Step 5.3: Remove Database Utilities
-- [ ] Delete src/utils/fileOps.ts (database export/import utilities)
-- [ ] Remove database backup functionality
-- [ ] Remove CSV/JSON export for full database
-      Note: Keep session-specific export in renderer
+- [x] Clean up src/utils/fileOps.ts (removed SQLite imports + getAllDatabaseData,
+      clearAndImportAllTables, backupDatabase, restoreDatabase, getLatestBackupFile)
+- [x] Kept generic utilities: addCsvToZip, readJsonFile, readZipCsvs, exportDataToCsv
+      (used by exportHandlers.ts for session-level CSV/JSON exports)
+- [x] Remove CSV/JSON export for full database
+      Only session-level exports remain in exportHandlers.ts
+      (show-save-dialog, export-custom-csv, export-custom-json) — used by SessionExporter.
 
 ### Step 5.4: Remove Admin Panel DB Features
-- [ ] Update renderer/components/AdminPanel.ts
-      - Remove database export buttons
-      - Remove database import buttons
-      - Remove rollback functionality
-      - Keep user role management
-      - Add organization management links
+- [x] Update renderer/components/AdminPanel.ts
+      ALREADY DONE: No SQLite-specific buttons remain.
+      Old database export/import/rollback buttons were already removed.
 
 ### Step 5.5: Update Package Dependencies
-- [ ] Remove better-sqlite3 from package.json
-- [ ] Remove @types/better-sqlite3 from devDependencies
-- [ ] Run npm uninstall better-sqlite3 @types/better-sqlite3
-- [ ] Run npm install to update lock file
-- [ ] Verify build still works
+- [x] Remove better-sqlite3 from package.json
+- [x] Remove @types/better-sqlite3 from devDependencies
+- [x] Run npm uninstall better-sqlite3 @types/better-sqlite3
+      Removed 22 packages total
+- [x] Lock file updated automatically by npm uninstall
+- [x] Verify build still works (tsc --noEmit passes clean)
 
 ### Step 5.6: Clean Up Scripts
-- [ ] Delete scripts/populate-database.bat
-- [ ] Delete scripts/populate-database.sql
-- [ ] Delete scripts/test-supabase-connection.js (if not needed)
+- [x] Delete scripts/populate-database.bat
+- [x] Delete scripts/populate-database.sql
+- [x] Delete scripts/test-supabase-connection.js
+      Only scripts/generate-icon-data-uris.js remains (still needed)
 
 ## ═══════════════════════════════════════════════════════════════════
 ## PHASE 6: OPTIMIZATION & POLISH

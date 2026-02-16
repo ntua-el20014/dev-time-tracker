@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
-import * as goals from "../../supabase/goals";
-import { getCurrentUser } from "../../supabase/api";
+import * as goals from "../supabase/goals";
+import { getCurrentUser } from "../supabase/api";
 
 /**
  * Set or update a daily goal

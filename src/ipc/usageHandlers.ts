@@ -1,124 +1,214 @@
 import { ipcMain } from "electron";
-import * as usage from "../backend/usage";
+import * as usageLogs from "../supabase/usageLogs";
+import { getCurrentUser } from "../supabase/api";
 import type { DailySummaryFilters } from "@shared/types";
 
-ipcMain.handle("get-logs", async (_event, userId: number, date?: string) => {
+/**
+ * Get usage logs/summary for a specific date
+ */
+ipcMain.handle("get-logs", async (_event, date?: string) => {
   try {
-    return usage.getSummary(userId, date);
+    // Get current authenticated user
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    const dateStr = date || new Date().toISOString().split("T")[0];
+    return await usageLogs.getUsageSummary(user.id, dateStr);
   } catch (err) {
+    // Error getting logs
     return [];
   }
 });
 
+/**
+ * Get all days with logged usage for a specific month
+ */
 ipcMain.handle(
   "get-logged-days-of-month",
-  async (_event, userId: number, year: number, month: number) => {
+  async (_event, year: number, month: number) => {
     try {
-      return usage.getLoggedDaysOfMonth(userId, year, month);
+      // Get current authenticated user
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      return await usageLogs.getLoggedDaysOfMonth(user.id, year, month);
     } catch (err) {
+      // Error getting logged days
       return [];
     }
-  }
+  },
 );
 
-ipcMain.handle("get-editor-usage", async (_event, userId: number) => {
+/**
+ * Get editor usage statistics
+ */
+ipcMain.handle("get-editor-usage", async (_event) => {
   try {
-    return usage.getEditorUsage(userId);
+    // Get current authenticated user
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    return await usageLogs.getEditorUsage(user.id);
   } catch (err) {
+    // Error getting editor usage
     return [];
   }
 });
 
+/**
+ * Get daily summary with optional filters
+ */
 ipcMain.handle(
   "get-daily-summary",
-  async (_event, userId: number, filters?: DailySummaryFilters) => {
+  async (_event, filters?: DailySummaryFilters) => {
     try {
-      return usage.getDailySummary(userId, filters);
+      // Get current authenticated user
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      // Convert filters to Supabase format
+      const supabaseFilters: any = {};
+      if (filters) {
+        if (filters.startDate) supabaseFilters.startDate = filters.startDate;
+        if (filters.endDate) supabaseFilters.endDate = filters.endDate;
+        if (filters.app) supabaseFilters.app = filters.app;
+        if (filters.language) supabaseFilters.language = filters.language;
+      }
+
+      return await usageLogs.getDailySummary(user.id, supabaseFilters);
     } catch (err) {
+      // Error getting daily summary
       return [];
     }
-  }
+  },
 );
 
-ipcMain.handle("get-language-usage", async (_event, userId: number) => {
+/**
+ * Get language usage statistics
+ */
+ipcMain.handle("get-language-usage", async (_event) => {
   try {
-    return usage.getLanguageUsage(userId);
+    // Get current authenticated user
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    return await usageLogs.getLanguageUsage(user.id);
   } catch (err) {
+    // Error getting language usage
     return [];
   }
 });
 
+/**
+ * Get language summary by date range
+ */
 ipcMain.handle(
   "get-language-summary-by-date-range",
-  async (_event, userId: number, startDate: string, endDate: string) => {
-    return usage.getLanguageSummaryByDateRange(userId, startDate, endDate);
-  }
-);
-
-// --- Daily Goals ---
-ipcMain.handle(
-  "set-daily-goal",
-  (_event, userId: number, date: string, time: number, description: string) => {
-    usage.setDailyGoal(userId, date, time, description);
-    return true;
-  }
-);
-
-ipcMain.handle("get-daily-goal", (_event, userId: number, date: string) => {
-  return usage.getDailyGoal(userId, date);
-});
-
-ipcMain.handle("delete-daily-goal", (_event, userId: number, date: string) => {
-  usage.deleteDailyGoal(userId, date);
-  return true;
-});
-
-ipcMain.handle(
-  "get-total-time-for-day",
-  (_event, userId: number, date: string) => {
-    return usage.getTotalTimeForDay(userId, date);
-  }
-);
-
-ipcMain.handle(
-  "complete-daily-goal",
-  (_event, userId: number, date: string) => {
-    usage.completeDailyGoal(userId, date);
-    return true;
-  }
-);
-
-ipcMain.handle("get-all-daily-goals", (_event, userId: number) => {
-  return usage.getAllDailyGoals(userId);
-});
-
-ipcMain.handle("get-user-editors", async (_event, userId) => {
-  return usage.getUserEditors(userId);
-});
-ipcMain.handle("get-user-lang-exts", async (_event, userId) => {
-  return usage.getUserLangExts(userId);
-});
-
-// Get detailed usage data for a specific app on a specific date
-ipcMain.handle(
-  "get-usage-details-for-app-date",
-  async (_event, userId: number, app: string, date: string) => {
+  async (_event, startDate: string, endDate: string) => {
     try {
-      return usage.getUsageDetailsForAppDate(userId, app, date);
+      // Get current authenticated user
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      return await usageLogs.getLanguageSummaryByDateRange(
+        user.id,
+        startDate,
+        endDate,
+      );
     } catch (err) {
+      // Error getting language summary
       return [];
     }
-  }
+  },
 );
 
-// Get detailed usage data for a specific session
+/**
+ * Get detailed usage data for a specific app on a specific date
+ */
+ipcMain.handle(
+  "get-usage-details-for-app-date",
+  async (_event, app: string, date: string) => {
+    try {
+      // Get current authenticated user
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      return await usageLogs.getUsageDetailsForAppDate(user.id, app, date);
+    } catch (err) {
+      // Error getting usage details
+      return [];
+    }
+  },
+);
+
+/**
+ * Get detailed usage data for a specific session
+ */
 ipcMain.handle(
   "get-usage-details-for-session",
-  async (_event, userId: number, sessionId: number) => {
+  async (_event, sessionId: number | string) => {
     try {
-      return usage.getUsageDetailsForSession(userId, sessionId);
+      // Get current authenticated user
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      const sessionIdStr = String(sessionId);
+      return await usageLogs.getUsageDetailsForSession(user.id, sessionIdStr);
     } catch (err) {
+      // Error getting usage details
       return null;
     }
-  }
+  },
 );
+
+/**
+ * Get user's distinct editors/apps
+ */
+ipcMain.handle("get-user-editors", async (_event) => {
+  try {
+    // Get current authenticated user
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    return await usageLogs.getUserEditors(user.id);
+  } catch (err) {
+    // Error getting user editors
+    return [];
+  }
+});
+
+/**
+ * Get user's distinct language extensions
+ */
+ipcMain.handle("get-user-lang-exts", async (_event) => {
+  try {
+    // Get current authenticated user
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    return await usageLogs.getUserLangExts(user.id);
+  } catch (err) {
+    // Error getting language extensions
+    return [];
+  }
+});
