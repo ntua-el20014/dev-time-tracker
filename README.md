@@ -117,16 +117,49 @@ Dev Time Tracker is a **100% cloud-backed** Electron app. All data is stored in 
 
 All data lives in Supabase (PostgreSQL). The schema is defined in [`database/schema.sql`](./database/schema.sql) with triggers and functions in [`database/functions_and_triggers.sql`](./database/functions_and_triggers.sql).
 
-### Row Level Security (RLS)
+### Supabase API Reference
 
-Every table has RLS enabled. Key policies:
+The Supabase API layer lives in `src/supabase/` and provides 76 exported functions across 11 modules:
 
-- **Own data:** Users can fully manage (CRUD) their own sessions, tags, goals, preferences, and personal projects.
-- **Organization read:** Admins and managers can view sessions, usage logs, and goals for members in their organization.
-- **Organization write:** Only admins can update organization settings and user roles. Admins and managers can create organization projects.
-- **Project access:** Project managers can manage members. Organization members can view org projects.
+| Module             | File                                                          | Description                                             |
+| ------------------ | ------------------------------------------------------------- | ------------------------------------------------------- |
+| Auth & Users       | [`api.ts`](./src/supabase/api.ts)                             | Sign in/up, OAuth, password reset, profile CRUD         |
+| Client             | [`client.ts`](./src/supabase/client.ts)                       | Singleton Supabase client with Electron storage adapter |
+| Time Tracking      | [`timeTracking.ts`](./src/supabase/timeTracking.ts)           | Start/end/add sessions, filters, batch delete           |
+| Usage Logs         | [`usageLogs.ts`](./src/supabase/usageLogs.ts)                 | Log activity, daily summaries, editor/language stats    |
+| Tags               | [`tags.ts`](./src/supabase/tags.ts)                           | Tag CRUD, session tagging by ID or name                 |
+| Goals              | [`goals.ts`](./src/supabase/goals.ts)                         | Daily work goals, completion tracking                   |
+| Scheduled Sessions | [`scheduledSessions.ts`](./src/supabase/scheduledSessions.ts) | Plan future sessions, notifications, recurrence         |
+| User Preferences   | [`userPreferences.ts`](./src/supabase/userPreferences.ts)     | Theme, accent colors, editor colors, idle timeout       |
+| Projects           | [`cloudProjects.ts`](./src/supabase/cloudProjects.ts)         | Personal/org projects, members, archive/restore         |
+| Organizations      | [`organizations.ts`](./src/supabase/organizations.ts)         | Org CRUD, member management, role updates               |
+| Join Requests      | [`orgRequests.ts`](./src/supabase/orgRequests.ts)             | Request/approve/reject organization membership          |
 
-See the complete policy definitions in [`database/schema.sql`](./database/schema.sql).
+For full function signatures and parameter documentation, see the [Supabase API Reference](./src/supabase/README.md).
+
+### Database Functions & Triggers
+
+Server-side logic defined in [`database/functions_and_triggers.sql`](./database/functions_and_triggers.sql):
+
+| Function                                           | Purpose                                                                    |
+| -------------------------------------------------- | -------------------------------------------------------------------------- |
+| `handle_new_user()`                                | Auto-creates user profile, personal org, and default preferences on signup |
+| `trigger_set_timestamp()`                          | Auto-updates `updated_at` on all tables                                    |
+| `calculate_session_duration()`                     | Auto-calculates duration from start/end times                              |
+| `set_session_org_id()`                             | Auto-populates `org_id` from user profile on session insert                |
+| `set_usage_log_org_id()`                           | Auto-populates `org_id` from user profile on usage log insert              |
+| `update_daily_usage_summary()`                     | Upserts aggregated usage data for daily summaries                          |
+| `get_current_user_org_id()`                        | SECURITY DEFINER helper to get user's org (bypasses RLS)                   |
+| `get_current_user_role()`                          | SECURITY DEFINER helper to get user's role (bypasses RLS)                  |
+| `is_user_admin()` / `is_user_admin_or_manager()`   | Role check helpers                                                         |
+| `same_org(target_user_id)`                         | Check if two users share the same organization                             |
+| `create_project()`                                 | Create project with proper scope/permission checks                         |
+| `archive_project()` / `restore_project()`          | Soft-delete and restore projects                                           |
+| `approve_join_request()` / `reject_join_request()` | Process org membership requests                                            |
+| `create_team_organization()`                       | Create a new team org (admin/manager only)                                 |
+| `get_project_stats()`                              | Aggregate project statistics (sessions, time, members)                     |
+| `get_user_total_time()` / `get_org_total_time()`   | Total time queries for date ranges                                         |
+| `get_upcoming_session_notifications()`             | Upcoming scheduled session alerts                                          |
 
 ---
 
@@ -134,8 +167,8 @@ See the complete policy definitions in [`database/schema.sql`](./database/schema
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v16+)
-- [npm](https://www.npmjs.com/) or [Yarn](https://yarnpkg.com/)
+- [Node.js](https://nodejs.org/) (v18+ recommended)
+- [npm](https://www.npmjs.com/) (comes with Node.js)
 - [Git](https://git-scm.com/)
 - A [Supabase](https://supabase.com/) project (free tier works)
 
@@ -149,46 +182,84 @@ npm install
 
 ### 2. Set Up Supabase
 
-1. Create a new project at [supabase.com](https://supabase.com/)
-2. Run the schema migration in the Supabase SQL Editor:
-   - First: paste and run [`database/functions_and_triggers.sql`](./database/functions_and_triggers.sql)
-   - Then: paste and run [`database/schema.sql`](./database/schema.sql)
-3. Enable **Email/Password** authentication in Supabase → Authentication → Providers
-4. _(Optional)_ Enable **GitHub OAuth** under the same providers section
-5. Copy your project's **URL** and **anon key** from Supabase → Settings → API
+1. Create a new project at [supabase.com](https://supabase.com/) and wait for provisioning to complete
+2. In the Supabase **SQL Editor**, run the migration files **in order**:
+   - **First:** paste and run [`database/functions_and_triggers.sql`](./database/functions_and_triggers.sql) — creates helper functions, triggers, and RPC procedures
+   - **Then:** paste and run [`database/schema.sql`](./database/schema.sql) — creates all 14 tables, RLS policies, indexes, and timestamp triggers
+3. Go to **Authentication → Providers** and enable:
+   - **Email/Password** (required)
+   - **GitHub OAuth** (optional — requires a GitHub OAuth App with callback URL `https://<your-project>.supabase.co/auth/v1/callback`)
+4. Go to **Authentication → URL Configuration** and add `dev-time-tracker://callback` to the **Redirect URLs** list (needed for OAuth and password reset flows in Electron)
+5. Copy your project's **URL** and **anon key** from **Settings → API**
 
 ### 3. Configure Environment
 
-Set your Supabase credentials via environment variables or edit [`src/supabase/env.ts`](./src/supabase/env.ts):
+Set your Supabase credentials via environment variables or by editing [`src/supabase/env.ts`](./src/supabase/env.ts):
 
 ```bash
-# Environment variables (recommended)
+# Windows (PowerShell)
+$env:SUPABASE_URL = "https://your-project.supabase.co"
+$env:SUPABASE_ANON_KEY = "your-anon-key"
+
+# Windows (CMD)
 set SUPABASE_URL=https://your-project.supabase.co
 set SUPABASE_ANON_KEY=your-anon-key
+
+# Linux / macOS
+export SUPABASE_URL=https://your-project.supabase.co
+export SUPABASE_ANON_KEY=your-anon-key
 ```
 
-### 4. Run the App
+> **Tip:** For persistent configuration, you can hardcode the values directly in [`src/supabase/env.ts`](./src/supabase/env.ts). Environment variables take priority when set.
+
+### 4. Run in Development
 
 ```bash
-npm start
+npm start          # or: npm run dev
 ```
 
-### 5. Build for Production
+This launches the Electron app with Webpack hot-reload. The app will show a sign-in screen — create an account to get started. A personal organization and default preferences are auto-created on first signup.
+
+### 5. Type Checking & Linting
 
 ```bash
-npm run make
+npm run type-check            # Full TypeScript check (main + renderer)
+npm run type-check:main       # Main process only
+npm run type-check:renderer   # Renderer only
+npm run lint                  # ESLint
+npm run lint:fix              # ESLint with auto-fix
 ```
 
-### Other Commands
+### 6. Build for Production
 
-| Command              | Description                       |
-| -------------------- | --------------------------------- |
-| `npm run dev`        | Start in development mode         |
-| `npm run type-check` | Run TypeScript type checking      |
-| `npm run lint`       | Run ESLint                        |
-| `npm run lint:fix`   | Auto-fix lint issues              |
-| `npm run clean`      | Remove build artifacts            |
-| `npm run build`      | Type-check + build for production |
+```bash
+npm run make       # Type-check + package into distributable
+npm run package    # Package without creating installer
+npm run clean      # Remove build artifacts (.webpack, dist, out)
+```
+
+### All Commands
+
+| Command                       | Description                                     |
+| ----------------------------- | ----------------------------------------------- |
+| `npm start` / `npm run dev`   | Start in development mode with hot-reload       |
+| `npm run type-check`          | Run TypeScript type checking (all projects)     |
+| `npm run type-check:main`     | Type-check main process only                    |
+| `npm run type-check:renderer` | Type-check renderer only                        |
+| `npm run lint`                | Run ESLint                                      |
+| `npm run lint:fix`            | Auto-fix lint issues                            |
+| `npm run clean`               | Remove build artifacts                          |
+| `npm run build`               | Type-check + build for production               |
+| `npm run make`                | Package into distributable (platform installer) |
+| `npm run package`             | Package without creating installer              |
+| `npm run rebuild`             | Rebuild native modules for Electron             |
+
+### Troubleshooting
+
+- **Native module errors:** Run `npm run rebuild` to rebuild native dependencies for your Electron version.
+- **Auth not working:** Check that your Supabase URL and anon key are correct. Verify email/password provider is enabled in Supabase.
+- **RLS errors (permission denied):** Ensure both SQL migration files were run in the correct order (functions first, then schema).
+- **OAuth redirect issues:** Add `dev-time-tracker://callback` to your Supabase project's redirect URLs.
 
 ---
 

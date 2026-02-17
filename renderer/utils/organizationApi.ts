@@ -12,6 +12,9 @@ import type {
   UserProfile,
   OrgJoinRequest,
   OrgJoinRequestWithUser,
+  OrgInviteCode,
+  CreateInviteCodeData,
+  JoinWithCodeResult,
   CloudProject,
   CloudProjectWithManager,
   ProjectMember,
@@ -54,6 +57,14 @@ export async function createTeamOrganization(
   data: CreateOrganizationData,
 ): Promise<Organization> {
   return await safeIpcInvoke<Organization>("org:create-team", [data]);
+}
+
+export async function createPersonalOrganization(
+  orgName: string,
+): Promise<{ org_id: string }> {
+  return await safeIpcInvoke<{ org_id: string }>("org:create-personal", [
+    orgName,
+  ]);
 }
 
 export async function updateOrganization(
@@ -125,6 +136,36 @@ export async function rejectJoinRequest(requestId: string): Promise<void> {
 
 export async function cancelJoinRequest(requestId: string): Promise<void> {
   return await safeIpcInvoke<void>("org:cancel-request", [requestId]);
+}
+
+// =====================================================
+// INVITE CODES
+// =====================================================
+
+export async function generateInviteCode(
+  data: CreateInviteCodeData = {},
+): Promise<OrgInviteCode> {
+  return await safeIpcInvoke<OrgInviteCode>("org:generate-invite-code", [data]);
+}
+
+export async function listInviteCodes(orgId: string): Promise<OrgInviteCode[]> {
+  return await safeIpcInvoke<OrgInviteCode[]>(
+    "org:list-invite-codes",
+    [orgId],
+    {
+      fallback: [],
+    },
+  );
+}
+
+export async function revokeInviteCode(codeId: string): Promise<boolean> {
+  return await safeIpcInvoke<boolean>("org:revoke-invite-code", [codeId]);
+}
+
+export async function joinWithInviteCode(
+  code: string,
+): Promise<JoinWithCodeResult> {
+  return await safeIpcInvoke<JoinWithCodeResult>("org:join-with-code", [code]);
 }
 
 // =====================================================

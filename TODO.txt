@@ -365,18 +365,17 @@
 ### Step 6.2: Documentation Updates
 - [x] Update README.md with new architecture
 - [x] Document Supabase setup steps
-- [ ] Document RLS policies
-- [ ] Add API documentation for Supabase functions
-- [ ] Update development setup guide
+- [x] Document RLS policies
+- [x] Add API documentation for Supabase functions
+- [x] Update development setup guide
 
 ### Step 6.3: Complete Authentication Features
-- [ ] Organization setup wizard (on first login)
-- [ ] Email verification flow
-- [ ] Password reset email templates
-- [ ] OAuth providers (GitHub)
-- [ ] Session timeout handling
+- [x] Email verification flow
+- [x] OAuth providers (GitHub)
+- [x] Session timeout handling
 
-### Step 6.4: Complete Profile Integration (Sprint 5)
+### Step 6.4: Complete Profile Integration
+- [ ] Organization setup wizard (on first login)
 - [ ] Add organization section to Profile tab
 - [ ] Show current organization details
 - [ ] Allow organization switching (if member of multiple)
@@ -438,3 +437,4 @@
 ## ═══════════════════════════════════════════════════════════════════
 
 - Move Connection Status indicator to the bottom right instead of top
+- Password reset email templates

@@ -130,6 +130,26 @@ export async function createTeamOrganization(
 }
 
 /**
+ * Create a personal organization for a user (no permissions needed)
+ * Used when user has no org yet
+ */
+export async function createPersonalOrganization(
+  userId: string,
+  orgName: string,
+): Promise<{ org_id: string }> {
+  const { data: result, error } = await (supabase.rpc as any)(
+    "create_personal_organization",
+    {
+      user_id: userId,
+      org_name: orgName,
+    },
+  );
+
+  if (error) throw error;
+  return { org_id: result as string };
+}
+
+/**
  * Update organization details (admin only)
  */
 export async function updateOrganization(

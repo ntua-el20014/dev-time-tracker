@@ -8,6 +8,7 @@ import {
   getCurrentOrganization,
   getOrganizationMembers,
   createTeamOrganization,
+  createPersonalOrganization,
   requestToJoinOrganization,
   getPendingJoinRequests,
   approveJoinRequest,
@@ -23,11 +24,16 @@ import {
   assignMemberToProject,
   removeMemberFromProject,
   updateProjectMemberRole,
+  generateInviteCode,
+  listInviteCodes,
+  revokeInviteCode,
+  joinWithInviteCode,
 } from "./utils/organizationApi";
 import type {
   Organization,
   UserProfile,
   OrgJoinRequestWithUser,
+  OrgInviteCode,
   CloudProjectWithManager,
   ProjectMemberWithUser,
 } from "../src/types/organization.types";
@@ -36,6 +42,7 @@ let currentOrg: Organization | null = null;
 let currentUserProfile: UserProfile | null = null;
 let orgMembers: UserProfile[] = [];
 let pendingRequests: OrgJoinRequestWithUser[] = [];
+let inviteCodes: OrgInviteCode[] = [];
 let cloudProjects: CloudProjectWithManager[] = [];
 let cleanupFunctions: (() => void)[] = [];
 let isMemberModalOpen = false;
@@ -65,10 +72,147 @@ export async function renderOrganizationTab() {
 
     if (!currentOrg || !currentUserProfile) {
       container.innerHTML = `
-        <div class="org-error">
-          <h3>No organization found</h3>
+        <div id="org-inner">
+          <h1 class="org-title">Organization Management</h1>
+          <div class="org-section">
+            <h2>🏢 No Organization</h2>
+            <div class="org-join-card">
+              <p>You're not part of an organization yet. Create your own or join one with an invite code.</p>
+
+              <div style="margin-top: 1.5rem;">
+                <h3 style="margin-bottom: 0.75rem;">Create Organization</h3>
+                <div class="org-join-form">
+                  <input type="text" id="new-org-name-input" class="org-input" placeholder="Organization name" />
+                  <button id="create-org-btn" class="btn btn-primary">Create</button>
+                </div>
+              </div>
+
+              <div class="join-methods-divider">or</div>
+
+              <div>
+                <h3 style="margin-bottom: 0.75rem;">Join with Invite Code</h3>
+                <div class="join-with-code-form">
+                  <input type="text" id="join-code-input" class="join-code-input" placeholder="Enter invite code (e.g. XXXX-XXXX-XXXX)" maxlength="14" />
+                  <button id="join-code-btn" class="btn btn-primary">Join</button>
+                </div>
+              </div>
+
+              <div class="join-methods-divider">or</div>
+
+              <div>
+                <h3 style="margin-bottom: 0.75rem;">Request to Join</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">If you have an organization's UUID, you can request to join it:</p>
+                <div class="org-join-form">
+                  <input type="text" id="join-org-input" class="org-input" placeholder="Enter Organization UUID" />
+                  <button id="join-org-btn" class="btn btn-secondary">Request to Join</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       `;
+
+      // Create org handler
+      const createBtn = document.getElementById("create-org-btn");
+      const createInput = document.getElementById(
+        "new-org-name-input",
+      ) as HTMLInputElement;
+      if (createBtn && createInput) {
+        const handleCreate = async () => {
+          const name = createInput.value.trim();
+          if (!name) {
+            showNotification("Please enter an organization name");
+            return;
+          }
+          try {
+            createBtn.setAttribute("disabled", "true");
+            createBtn.textContent = "Creating...";
+            await createPersonalOrganization(name);
+            showNotification("Organization created successfully!");
+            await renderOrganizationTab();
+          } catch (error) {
+            showNotification(
+              `Failed to create organization: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+            createBtn.removeAttribute("disabled");
+            createBtn.textContent = "Create";
+          }
+        };
+        createBtn.addEventListener("click", handleCreate);
+        createInput.addEventListener("keypress", (e: KeyboardEvent) => {
+          if (e.key === "Enter") handleCreate();
+        });
+      }
+
+      // Join with code handler
+      const joinCodeBtn = document.getElementById("join-code-btn");
+      const joinCodeInput = document.getElementById(
+        "join-code-input",
+      ) as HTMLInputElement;
+      if (joinCodeBtn && joinCodeInput) {
+        const handleJoinCode = async () => {
+          const code = joinCodeInput.value.trim();
+          if (!code) {
+            showNotification("Please enter an invite code");
+            return;
+          }
+          try {
+            joinCodeBtn.setAttribute("disabled", "true");
+            joinCodeBtn.textContent = "Joining...";
+            const result = await joinWithInviteCode(code);
+            showNotification(
+              result?.org_name
+                ? `Successfully joined ${result.org_name}!`
+                : "Successfully joined!",
+            );
+            await renderOrganizationTab();
+          } catch (error) {
+            showNotification(
+              `Failed to join: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+            joinCodeBtn.removeAttribute("disabled");
+            joinCodeBtn.textContent = "Join";
+          }
+        };
+        joinCodeBtn.addEventListener("click", handleJoinCode);
+        joinCodeInput.addEventListener("keypress", (e: KeyboardEvent) => {
+          if (e.key === "Enter") handleJoinCode();
+        });
+      }
+
+      // Join with UUID handler
+      const joinOrgBtn = document.getElementById("join-org-btn");
+      const joinOrgInput = document.getElementById(
+        "join-org-input",
+      ) as HTMLInputElement;
+      if (joinOrgBtn && joinOrgInput) {
+        const handleJoinOrg = async () => {
+          const orgId = joinOrgInput.value.trim();
+          if (!orgId) {
+            showNotification("Please enter an organization ID");
+            return;
+          }
+          try {
+            joinOrgBtn.setAttribute("disabled", "true");
+            joinOrgBtn.textContent = "Requesting...";
+            await requestToJoinOrganization(orgId);
+            showNotification("Join request sent! Waiting for approval.");
+            joinOrgInput.value = "";
+          } catch (error) {
+            showNotification(
+              `Failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          } finally {
+            joinOrgBtn.removeAttribute("disabled");
+            joinOrgBtn.textContent = "Request to Join";
+          }
+        };
+        joinOrgBtn.addEventListener("click", handleJoinOrg);
+        joinOrgInput.addEventListener("keypress", (e: KeyboardEvent) => {
+          if (e.key === "Enter") handleJoinOrg();
+        });
+      }
+
       return;
     }
 
@@ -76,6 +220,11 @@ export async function renderOrganizationTab() {
     orgMembers = await getOrganizationMembers(currentOrg.id);
     if (isAdmin()) {
       pendingRequests = await getPendingJoinRequests();
+    }
+
+    // Fetch invite codes if user can manage them
+    if (isAdmin() || isManager()) {
+      inviteCodes = await listInviteCodes(currentOrg.id);
     }
 
     // Fetch cloud projects if user can manage them
@@ -89,6 +238,7 @@ export async function renderOrganizationTab() {
         <h1 class="org-title">Organization Management</h1>
         <div id="org-info-section"></div>
         <div id="org-members-section"></div>
+        <div id="org-invite-codes-section"></div>
         <div id="org-projects-section"></div>
         <div id="org-join-section"></div>
         <div id="org-requests-section"></div>
@@ -98,6 +248,7 @@ export async function renderOrganizationTab() {
     renderOrganizationInfo();
     renderMembersList();
     if (isAdmin() || isManager()) {
+      renderInviteCodes();
       renderCloudProjects();
     }
     renderJoinForm();
@@ -299,6 +450,199 @@ function renderMembersList() {
 }
 
 /**
+ * Render invite codes section (admin/manager only)
+ */
+function renderInviteCodes() {
+  const container = document.getElementById("org-invite-codes-section");
+  if (!container || (!isAdmin() && !isManager())) return;
+
+  const activeInviteCodes = inviteCodes.filter((c) => {
+    if (!c.is_active) return false;
+    if (c.expires_at && new Date(c.expires_at) < new Date()) return false;
+    if (c.max_uses !== null && c.use_count >= c.max_uses) return false;
+    return true;
+  });
+  const inactiveInviteCodes = inviteCodes.filter(
+    (c) => !activeInviteCodes.includes(c),
+  );
+
+  container.innerHTML = `
+    <div class="org-section">
+      <h2>🔑 Invite Codes</h2>
+      <div class="invite-codes-card">
+        <div class="invite-codes-header">
+          <p>Generate invite codes to let others join your organization instantly.</p>
+        </div>
+
+        <div class="generate-code-form">
+          <div class="form-group">
+            <label for="invite-max-uses">Max Uses</label>
+            <select id="invite-max-uses">
+              <option value="">Unlimited</option>
+              <option value="1">1 use</option>
+              <option value="5">5 uses</option>
+              <option value="10">10 uses</option>
+              <option value="25">25 uses</option>
+              <option value="50">50 uses</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="invite-expiry">Expires In</label>
+            <select id="invite-expiry">
+              <option value="">Never</option>
+              <option value="1">1 day</option>
+              <option value="7" selected>7 days</option>
+              <option value="30">30 days</option>
+              <option value="90">90 days</option>
+            </select>
+          </div>
+          <button id="generate-invite-btn" class="btn btn-primary">Generate Code</button>
+        </div>
+
+        ${
+          activeInviteCodes.length > 0
+            ? `
+          <table class="invite-codes-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Uses</th>
+                <th>Expires</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${activeInviteCodes
+                .map(
+                  (code) => `
+                <tr>
+                  <td>
+                    <span class="invite-code-display">
+                      ${escapeHtml(code.code)}
+                      <button class="invite-code-copy-btn copy-invite-code-btn" data-code="${escapeHtml(
+                        code.code,
+                      )}" title="Copy code">📋</button>
+                    </span>
+                  </td>
+                  <td>
+                    <span class="uses-counter">
+                      <span class="current">${code.use_count}</span>${
+                        code.max_uses !== null
+                          ? ` / <span class="max">${code.max_uses}</span>`
+                          : ' / <span class="max">∞</span>'
+                      }
+                    </span>
+                  </td>
+                  <td>${
+                    code.expires_at
+                      ? formatExpiryDate(code.expires_at)
+                      : "Never"
+                  }</td>
+                  <td><span class="code-status active">Active</span></td>
+                  <td>
+                    <button class="btn btn-danger btn-sm revoke-invite-btn" data-code-id="${
+                      code.id
+                    }">Revoke</button>
+                  </td>
+                </tr>
+              `,
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `
+            : '<p class="text-muted" style="margin-top: 0.5rem;">No active invite codes. Generate one above to invite members.</p>'
+        }
+
+        ${
+          inactiveInviteCodes.length > 0
+            ? `
+          <details style="margin-top: 1rem;">
+            <summary style="cursor: pointer; color: var(--text-secondary); font-size: 0.9rem;">
+              Show expired/revoked codes (${inactiveInviteCodes.length})
+            </summary>
+            <table class="invite-codes-table" style="margin-top: 0.5rem;">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Uses</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${inactiveInviteCodes
+                  .map(
+                    (code) => `
+                  <tr>
+                    <td style="opacity: 0.6;">
+                      <span class="invite-code-display">${escapeHtml(
+                        code.code,
+                      )}</span>
+                    </td>
+                    <td>
+                      <span class="uses-counter">
+                        <span class="current">${code.use_count}</span>${
+                          code.max_uses !== null
+                            ? ` / <span class="max">${code.max_uses}</span>`
+                            : ""
+                        }
+                      </span>
+                    </td>
+                    <td><span class="code-status ${getInviteCodeStatusClass(
+                      code,
+                    )}">${getInviteCodeStatusLabel(code)}</span></td>
+                  </tr>
+                `,
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </details>
+        `
+            : ""
+        }
+      </div>
+    </div>
+  `;
+
+  // Setup event listeners
+  const generateBtn = document.getElementById("generate-invite-btn");
+  if (generateBtn) {
+    const handleGenerate = () => handleGenerateInviteCode();
+    generateBtn.addEventListener("click", handleGenerate);
+    cleanupFunctions.push(() =>
+      generateBtn.removeEventListener("click", handleGenerate),
+    );
+  }
+
+  const copyButtons = container.querySelectorAll(".copy-invite-code-btn");
+  copyButtons.forEach((btn) => {
+    const handleCopy = () => {
+      const code = (btn as HTMLElement).getAttribute("data-code");
+      if (code) {
+        navigator.clipboard.writeText(code).then(
+          () => showNotification("Invite code copied to clipboard!"),
+          () => showNotification("Failed to copy invite code"),
+        );
+      }
+    };
+    btn.addEventListener("click", handleCopy);
+    cleanupFunctions.push(() => btn.removeEventListener("click", handleCopy));
+  });
+
+  const revokeButtons = container.querySelectorAll(".revoke-invite-btn");
+  revokeButtons.forEach((btn) => {
+    const handleRevoke = () => {
+      const codeId = (btn as HTMLElement).getAttribute("data-code-id");
+      if (codeId) handleRevokeInviteCode(codeId);
+    };
+    btn.addEventListener("click", handleRevoke);
+    cleanupFunctions.push(() => btn.removeEventListener("click", handleRevoke));
+  });
+}
+
+/**
  * Render join organization form
  */
 function renderJoinForm() {
@@ -309,15 +653,46 @@ function renderJoinForm() {
     <div class="org-section">
       <h2>🔗 Join Organization</h2>
       <div class="org-join-card">
+        <p>Have an invite code? Enter it below to join instantly:</p>
+        <div class="join-with-code-form">
+          <input type="text" id="join-code-input" class="join-code-input" placeholder="Enter invite code (e.g. XXXX-XXXX-XXXX)" maxlength="14" />
+          <button id="join-code-btn" class="btn btn-primary">Join with Code</button>
+        </div>
+
+        <div class="join-methods-divider">or</div>
+
         <p>Enter an organization ID to request to join:</p>
         <div class="org-join-form">
           <input type="text" id="join-org-input" class="org-input" placeholder="Enter Organization UUID" />
-          <button id="join-org-btn" class="btn btn-primary">Join</button>
+          <button id="join-org-btn" class="btn btn-secondary">Request to Join</button>
         </div>
       </div>
     </div>
   `;
 
+  // Join with invite code
+  const joinCodeBtn = document.getElementById("join-code-btn");
+  const joinCodeInput = document.getElementById(
+    "join-code-input",
+  ) as HTMLInputElement;
+
+  if (joinCodeBtn && joinCodeInput) {
+    const handleJoinWithCode = () =>
+      handleJoinWithInviteCode(joinCodeInput.value.trim());
+    joinCodeBtn.addEventListener("click", handleJoinWithCode);
+
+    const handleCodeKeyPress = (e: KeyboardEvent) => {
+      if (e.key === "Enter") handleJoinWithCode();
+    };
+    joinCodeInput.addEventListener("keypress", handleCodeKeyPress);
+
+    cleanupFunctions.push(() => {
+      joinCodeBtn.removeEventListener("click", handleJoinWithCode);
+      joinCodeInput.removeEventListener("keypress", handleCodeKeyPress);
+    });
+  }
+
+  // Join with org ID
   const joinBtn = document.getElementById("join-org-btn");
   const joinInput = document.getElementById(
     "join-org-input",
@@ -861,6 +1236,112 @@ async function handleRejectRequest(requestId: string) {
         error instanceof Error ? error.message : "Unknown error"
       }`,
     );
+  }
+}
+
+// =====================================================
+// INVITE CODE EVENT HANDLERS
+// =====================================================
+
+async function handleGenerateInviteCode() {
+  const maxUsesSelect = document.getElementById(
+    "invite-max-uses",
+  ) as HTMLSelectElement;
+  const expirySelect = document.getElementById(
+    "invite-expiry",
+  ) as HTMLSelectElement;
+  const generateBtn = document.getElementById(
+    "generate-invite-btn",
+  ) as HTMLButtonElement;
+
+  const maxUses = maxUsesSelect.value ? parseInt(maxUsesSelect.value) : null;
+  const expiresInDays = expirySelect.value
+    ? parseInt(expirySelect.value)
+    : null;
+
+  try {
+    generateBtn.disabled = true;
+    generateBtn.textContent = "Generating...";
+
+    const result = await generateInviteCode({
+      max_uses: maxUses,
+      expires_in_days: expiresInDays,
+    });
+
+    if (result?.code) {
+      // Copy to clipboard automatically
+      await navigator.clipboard.writeText(result.code);
+      showNotification(
+        `Invite code ${result.code} generated and copied to clipboard!`,
+      );
+    } else {
+      showNotification("Invite code generated!");
+    }
+
+    await renderOrganizationTab(); // Refresh to show new code
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    showNotification(`Failed to generate invite code: ${errorMsg}`);
+  } finally {
+    generateBtn.disabled = false;
+    generateBtn.textContent = "Generate Code";
+  }
+}
+
+async function handleRevokeInviteCode(codeId: string) {
+  showConfirmationModal({
+    title: "Revoke Invite Code",
+    message:
+      "Are you sure you want to revoke this invite code? It will no longer be usable.",
+    confirmText: "Revoke",
+    confirmClass: "btn btn-danger",
+    onConfirm: async () => {
+      try {
+        await revokeInviteCode(codeId);
+        showNotification("Invite code revoked");
+        await renderOrganizationTab(); // Refresh
+      } catch (error) {
+        showNotification(
+          `Failed to revoke invite code: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+        );
+      }
+    },
+  });
+}
+
+async function handleJoinWithInviteCode(code: string) {
+  if (!code) {
+    showNotification("Please enter an invite code");
+    return;
+  }
+
+  const joinBtn = document.getElementById("join-code-btn") as HTMLButtonElement;
+  const joinInput = document.getElementById(
+    "join-code-input",
+  ) as HTMLInputElement;
+
+  try {
+    joinBtn.disabled = true;
+    joinBtn.textContent = "Joining...";
+
+    const result = await joinWithInviteCode(code);
+
+    if (result?.org_name) {
+      showNotification(`Successfully joined ${result.org_name}!`);
+    } else {
+      showNotification("Successfully joined the organization!");
+    }
+
+    joinInput.value = "";
+    await renderOrganizationTab(); // Refresh to show new org
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    showNotification(`Failed to join: ${errorMsg}`);
+  } finally {
+    joinBtn.disabled = false;
+    joinBtn.textContent = "Join with Code";
   }
 }
 
@@ -1510,4 +1991,36 @@ function formatTimeAgo(timestamp: string): string {
   if (diffHours < 24)
     return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
   return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
+}
+
+function formatExpiryDate(expiresAt: string): string {
+  const expiry = new Date(expiresAt);
+  const now = new Date();
+  const diffMs = expiry.getTime() - now.getTime();
+
+  if (diffMs <= 0) return "Expired";
+
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffDays > 0) return `${diffDays}d remaining`;
+  if (diffHours > 0) return `${diffHours}h remaining`;
+  return "< 1h remaining";
+}
+
+function getInviteCodeStatusClass(code: OrgInviteCode): string {
+  if (!code.is_active) return "revoked";
+  if (code.expires_at && new Date(code.expires_at) < new Date())
+    return "expired";
+  if (code.max_uses !== null && code.use_count >= code.max_uses) return "maxed";
+  return "active";
+}
+
+function getInviteCodeStatusLabel(code: OrgInviteCode): string {
+  if (!code.is_active) return "Revoked";
+  if (code.expires_at && new Date(code.expires_at) < new Date())
+    return "Expired";
+  if (code.max_uses !== null && code.use_count >= code.max_uses)
+    return "Max uses reached";
+  return "Active";
 }

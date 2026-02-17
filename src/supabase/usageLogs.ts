@@ -371,7 +371,9 @@ export async function getLoggedDaysOfMonth(
   month: number,
 ) {
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-  const endDate = `${year}-${String(month).padStart(2, "0")}-31`;
+  // Get the actual last day of the month (handles Feb, 30-day months, leap years)
+  const lastDay = new Date(year, month, 0).getDate();
+  const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
   const { data, error } = await supabase
     .from("daily_usage_summary")

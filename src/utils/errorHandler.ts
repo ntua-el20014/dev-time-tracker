@@ -12,7 +12,7 @@
 export type ErrorCategory = "auth" | "network" | "unknown";
 
 export function classifyError(error: unknown): ErrorCategory {
-  const message = error instanceof Error ? error.message : String(error ?? "");
+  const message = extractMessage(error);
   const lower = message.toLowerCase();
 
   if (
@@ -46,6 +46,24 @@ export function classifyError(error: unknown): ErrorCategory {
   return "unknown";
 }
 
+/**
+ * Extract a human-readable message from any thrown value.
+ */
+function extractMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null) {
+    if ("message" in error && typeof (error as any).message === "string") {
+      return (error as any).message;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return Object.prototype.toString.call(error);
+    }
+  }
+  return String(error ?? "Unknown error");
+}
+
 // ── Logging ─────────────────────────────────────────────────────────
 
 /**
@@ -54,8 +72,7 @@ export function classifyError(error: unknown): ErrorCategory {
  */
 export function logError(context: string, error: unknown): void {
   const category = classifyError(error);
-  const message =
-    error instanceof Error ? error.message : String(error ?? "Unknown error");
+  const message = extractMessage(error);
   const timestamp = new Date().toISOString();
 
   // eslint-disable-next-line no-console

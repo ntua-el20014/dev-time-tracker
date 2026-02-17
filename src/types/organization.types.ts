@@ -114,3 +114,27 @@ export interface AssignProjectMemberData {
 }
 
 export type UserRole = "admin" | "manager" | "employee";
+
+// Invite Codes
+export interface OrgInviteCode {
+  id: string;
+  org_id: string;
+  code: string;
+  created_by: string;
+  max_uses: number | null;
+  use_count: number;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateInviteCodeData {
+  max_uses?: number | null;
+  expires_in_days?: number | null;
+}
+
+export interface JoinWithCodeResult {
+  org_id: string;
+  org_name: string;
+}

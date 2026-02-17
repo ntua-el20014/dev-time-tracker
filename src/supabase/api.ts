@@ -43,7 +43,7 @@ export async function signInWithEmail(email: string, password: string) {
 export async function signUpWithEmail(
   email: string,
   password: string,
-  username: string
+  username: string,
 ) {
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -89,6 +89,19 @@ export async function resetPasswordForEmail(email: string) {
   // The link will redirect user to handle password reset
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: "dev-time-tracker://oauth-callback", // Redirects back to the app
+  });
+  if (error) {
+    throw error;
+  }
+}
+
+export async function resendVerificationEmail(email: string) {
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email,
+    options: {
+      emailRedirectTo: "dev-time-tracker://oauth-callback",
+    },
   });
   if (error) {
     throw error;
@@ -181,7 +194,16 @@ export async function checkAuthStatus(): Promise<boolean> {
 }
 
 // Listen for auth state changes
-export function onAuthStateChange(callback: (session: any) => void) {
+export function onAuthStateChange(
+  callback: (session: any) => void,
+  onTokenRefreshed?: (session: any) => void,
+  onTokenRefreshFailed?: () => void,
+) {
+  // Note: TOKEN_REFRESHED failures are not emitted as events by Supabase.
+  // Instead, failed refreshes result in SIGNED_OUT events, which we already handle.
+  // The onTokenRefreshFailed callback is kept for future use if needed.
+  void onTokenRefreshFailed;
+
   return supabase.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_IN" && session) {
       callback(session);
@@ -189,6 +211,11 @@ export function onAuthStateChange(callback: (session: any) => void) {
       // Clear local storage on sign out
       localStorage.removeItem("currentUserId");
       callback(null);
+    } else if (event === "TOKEN_REFRESHED" && session) {
+      // Keep main process in sync when tokens are auto-refreshed
+      if (onTokenRefreshed) {
+        onTokenRefreshed(session);
+      }
     }
   });
 }

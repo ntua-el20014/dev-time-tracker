@@ -5,6 +5,7 @@ import {
   signUpWithEmail,
   getCurrentSession,
   resetPasswordForEmail,
+  resendVerificationEmail,
 } from "../../src/supabase/api";
 import {
   validatePassword,
@@ -288,7 +289,11 @@ async function showAuthModal(
         }
       } catch (error: any) {
         const errorMessage = getAuthErrorMessage(error);
-        if (onError) {
+        if (errorMessage === "EMAIL_NOT_CONFIRMED") {
+          // Show verification needed message with resend option
+          const email = (values as unknown as AuthFormData).email;
+          showEmailVerificationPrompt(email);
+        } else if (onError) {
           onError(errorMessage);
         } else {
           showInAppNotification(errorMessage);
@@ -333,6 +338,72 @@ async function showPasswordResetModal() {
   });
 }
 
+function showEmailVerificationPrompt(email: string) {
+  showModal({
+    title: "Email Verification Required",
+    fields: [
+      {
+        name: "info",
+        label: "",
+        type: "custom" as const,
+        render: () => {
+          const container = document.createElement("div");
+          container.style.cssText =
+            "text-align: center; padding: 10px 0; line-height: 1.6;";
+          container.innerHTML = `
+            <p style="margin-bottom: 12px;">Your email address <strong>${email}</strong> has not been verified yet.</p>
+            <p style="margin-bottom: 16px; color: var(--text-secondary);">Please check your inbox (and spam folder) for the verification link.</p>
+          `;
+
+          const resendBtn = document.createElement("button");
+          resendBtn.type = "button";
+          resendBtn.className = "oauth-button";
+          resendBtn.style.cssText =
+            "width: 100%; justify-content: center; margin-top: 4px;";
+          resendBtn.innerHTML = `<span>📧</span><span>Resend Verification Email</span>`;
+          resendBtn.onclick = async () => {
+            resendBtn.disabled = true;
+            resendBtn.innerHTML = `<span>⏳</span><span>Sending...</span>`;
+            try {
+              await resendVerificationEmail(email);
+              showInAppNotification(
+                "Verification email sent! Please check your inbox.",
+              );
+              resendBtn.innerHTML = `<span>✅</span><span>Email Sent!</span>`;
+              setTimeout(() => {
+                resendBtn.disabled = false;
+                resendBtn.innerHTML = `<span>📧</span><span>Resend Verification Email</span>`;
+              }, 30000); // Re-enable after 30 seconds
+            } catch (err: any) {
+              resendBtn.disabled = false;
+              resendBtn.innerHTML = `<span>📧</span><span>Resend Verification Email</span>`;
+              if (
+                err.message?.includes("rate limit") ||
+                err.message?.includes("60 seconds")
+              ) {
+                showInAppNotification(
+                  "Please wait before requesting another email.",
+                );
+              } else {
+                showInAppNotification(
+                  `Error: ${err.message || "Failed to resend email"}`,
+                );
+              }
+            }
+          };
+
+          container.appendChild(resendBtn);
+          return container;
+        },
+      },
+    ],
+    submitText: "OK",
+    onSubmit: () => {
+      // Just dismiss the modal
+    },
+  });
+}
+
 function getAuthErrorMessage(error: any): string {
   if (!error.message) return "Authentication failed";
 
@@ -352,7 +423,7 @@ function getAuthErrorMessage(error: any): string {
   if (error.message.includes("Invalid login credentials")) {
     return "Invalid email or password";
   } else if (error.message.includes("Email not confirmed")) {
-    return "Please verify your email address before logging in";
+    return "EMAIL_NOT_CONFIRMED";
   } else if (error.message.includes("User already registered")) {
     return "An account with this email already exists";
   } else if (error.message.includes("Password should be at least")) {

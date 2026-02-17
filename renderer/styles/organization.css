@@ -95,7 +95,9 @@
   font-size: 1rem;
   padding: 0.25rem;
   opacity: 0.7;
-  transition: opacity 0.2s, transform 0.1s;
+  transition:
+    opacity 0.2s,
+    transform 0.1s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -365,6 +367,267 @@
 @media (prefers-color-scheme: dark) {
   .role-select {
     background: var(--bg-secondary);
+  }
+}
+
+/* ============================================
+   INVITE CODES SECTION
+   ============================================ */
+
+.invite-codes-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.invite-codes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.invite-codes-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+/* Generate Code Form */
+.generate-code-form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.generate-code-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.generate-code-form .form-group label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.generate-code-form .form-group input,
+.generate-code-form .form-group select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  min-width: 100px;
+}
+
+.generate-code-form .form-group input:focus,
+.generate-code-form .form-group select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Invite Code Table */
+.invite-codes-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+
+.invite-codes-table th,
+.invite-codes-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.invite-codes-table th {
+  background: var(--bg-secondary);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.invite-codes-table tr:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.02));
+}
+
+/* Invite Code Display */
+.invite-code-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--accent);
+}
+
+.invite-code-copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.2rem;
+  opacity: 0.7;
+  transition:
+    opacity 0.2s,
+    transform 0.1s;
+}
+
+.invite-code-copy-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+/* Code Status Badges */
+.code-status {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.code-status.active {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.code-status.expired {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.code-status.revoked {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.code-status.maxed {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+/* Uses counter */
+.uses-counter {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.uses-counter .current {
+  font-weight: 600;
+}
+
+.uses-counter .max {
+  color: var(--text-secondary);
+}
+
+/* Join With Code Form */
+.join-with-code-form {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.join-code-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 1.1rem;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.join-code-input::placeholder {
+  letter-spacing: normal;
+  text-transform: none;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.join-code-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb, 0, 122, 255), 0.2);
+}
+
+.join-methods-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.join-methods-divider::before,
+.join-methods-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .invite-codes-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .generate-code-form {
+    flex-direction: column;
+  }
+
+  .generate-code-form .form-group {
+    width: 100%;
+  }
+
+  .generate-code-form .form-group input,
+  .generate-code-form .form-group select {
+    width: 100%;
+  }
+
+  .invite-codes-table {
+    font-size: 0.875rem;
+  }
+
+  .invite-codes-table th,
+  .invite-codes-table td {
+    padding: 0.5rem;
+  }
+
+  .join-with-code-form {
+    flex-direction: column;
+  }
+
+  .join-code-input {
+    min-width: 100%;
   }
 }
 

@@ -6,6 +6,7 @@
 import { ipcMain } from "electron";
 import * as orgApi from "../supabase/organizations";
 import * as orgRequestsApi from "../supabase/orgRequests";
+import * as orgInviteCodesApi from "../supabase/orgInviteCodes";
 import * as cloudProjectsApi from "../supabase/cloudProjects";
 import { getCurrentUser } from "../supabase/api";
 import type {
@@ -13,6 +14,7 @@ import type {
   CreateCloudProjectData,
   UpdateCloudProjectData,
   AssignProjectMemberData,
+  CreateInviteCodeData,
 } from "../types/organization.types";
 import { logError } from "../utils/errorHandler";
 
@@ -72,6 +74,20 @@ ipcMain.handle(
     }
   },
 );
+
+/**
+ * Create a personal organization (for users with no org)
+ */
+ipcMain.handle("org:create-personal", async (_event, orgName: string) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Not authenticated");
+    return await orgApi.createPersonalOrganization(user.id, orgName);
+  } catch (err) {
+    logError("org:create-personal", err);
+    throw err;
+  }
+});
 
 /**
  * Update organization
@@ -215,6 +231,62 @@ ipcMain.handle("org:cancel-request", async (_event, requestId: string) => {
   } catch (err) {
     logError("org:cancel-request", err);
     return false;
+  }
+});
+
+// =====================================================
+// INVITE CODES
+// =====================================================
+
+/**
+ * Generate a new invite code for the user's organization
+ */
+ipcMain.handle(
+  "org:generate-invite-code",
+  async (_event, data: CreateInviteCodeData) => {
+    try {
+      return await orgInviteCodesApi.generateInviteCode(data);
+    } catch (err) {
+      logError("org:generate-invite-code", err);
+      throw err;
+    }
+  },
+);
+
+/**
+ * List invite codes for an organization
+ */
+ipcMain.handle("org:list-invite-codes", async (_event, orgId: string) => {
+  try {
+    return await orgInviteCodesApi.listInviteCodes(orgId);
+  } catch (err) {
+    logError("org:list-invite-codes", err);
+    return [];
+  }
+});
+
+/**
+ * Revoke an invite code
+ */
+ipcMain.handle("org:revoke-invite-code", async (_event, codeId: string) => {
+  try {
+    await orgInviteCodesApi.revokeInviteCode(codeId);
+    return true;
+  } catch (err) {
+    logError("org:revoke-invite-code", err);
+    return false;
+  }
+});
+
+/**
+ * Join an organization with an invite code
+ */
+ipcMain.handle("org:join-with-code", async (_event, code: string) => {
+  try {
+    return await orgInviteCodesApi.joinWithInviteCode(code);
+  } catch (err) {
+    logError("org:join-with-code", err);
+    throw err;
   }
 });
 

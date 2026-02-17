@@ -203,7 +203,6 @@ function setupRecordAndPauseBtns() {
       }
       updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
     } catch (err) {
-      console.error("Tracking toggle failed:", err);
       showInAppNotification(
         "Failed to toggle tracking. Please try again.",
         3500,
@@ -223,7 +222,6 @@ function setupRecordAndPauseBtns() {
       }
       updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
     } catch (err) {
-      console.error("Pause toggle failed:", err);
       showInAppNotification(
         "Failed to toggle pause. Please try again.",
         3500,
@@ -630,6 +628,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Start daily goal checker after user is authenticated
     startDailyGoalChecker();
 
+    // Start periodic session health check
+    startSessionHealthCheck();
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).showMainUIForUser = showMainUIForUser;
   }
@@ -716,54 +717,76 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Listen for auth state changes
-  onAuthStateChange(async (session: any) => {
-    try {
-      if (session) {
-        // Sync session tokens to main process so IPC handlers can authenticate
+  onAuthStateChange(
+    // Main callback: sign-in / sign-out
+    async (session: any) => {
+      try {
+        if (session) {
+          // Sync session tokens to main process so IPC handlers can authenticate
+          await ipcRenderer.invoke("sync-auth-session", {
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
+          // User signed in
+          showMainUIForUser(session.user.id);
+          if (landing) landing.style.display = "none";
+        } else {
+          // Auto-save active recording before clearing session
+          await autoSaveRecordingOnTimeout();
+
+          // Clear session in main process
+          await ipcRenderer.invoke("sync-auth-session", null);
+          // User signed out or session expired - reset the initialization flag
+          isMainUIInitialized = false;
+          destroyConnectionStatus();
+          stopSessionHealthCheck();
+          if (dailyGoalCheckInterval) {
+            clearInterval(dailyGoalCheckInterval);
+            dailyGoalCheckInterval = null;
+          }
+          localStorage.removeItem("currentUserId");
+          if (mainUI) mainUI.style.display = "none";
+          if (landing) {
+            landing.style.display = "";
+            renderLandingPage(landing, async (newSession: any) => {
+              try {
+                await ipcRenderer.invoke("sync-auth-session", {
+                  access_token: newSession.access_token,
+                  refresh_token: newSession.refresh_token,
+                });
+                showMainUIForUser(newSession.user.id);
+                landing.style.display = "none";
+              } catch {
+                showInAppNotification(
+                  "Sign-in failed. Please try again.",
+                  3500,
+                  "error",
+                );
+              }
+            });
+          }
+        }
+      } catch (err) {
+        showInAppNotification(
+          "Authentication error. Please try again.",
+          3500,
+          "error",
+        );
+      }
+    },
+    // Token refreshed callback: keep main process in sync
+    async (session: any) => {
+      try {
         await ipcRenderer.invoke("sync-auth-session", {
           access_token: session.access_token,
           refresh_token: session.refresh_token,
         });
-        // User signed in
-        showMainUIForUser(session.user.id);
-        if (landing) landing.style.display = "none";
-      } else {
-        // Clear session in main process
-        await ipcRenderer.invoke("sync-auth-session", null);
-        // User signed out - reset the initialization flag
-        isMainUIInitialized = false;
-        destroyConnectionStatus();
-        localStorage.removeItem("currentUserId");
-        if (mainUI) mainUI.style.display = "none";
-        if (landing) {
-          landing.style.display = "";
-          renderLandingPage(landing, async (newSession: any) => {
-            try {
-              await ipcRenderer.invoke("sync-auth-session", {
-                access_token: newSession.access_token,
-                refresh_token: newSession.refresh_token,
-              });
-              showMainUIForUser(newSession.user.id);
-              landing.style.display = "none";
-            } catch {
-              showInAppNotification(
-                "Sign-in failed. Please try again.",
-                3500,
-                "error",
-              );
-            }
-          });
-        }
+      } catch {
+        // Token sync failed — will be retried on next refresh
+        console.warn("Failed to sync refreshed token to main process");
       }
-    } catch (err) {
-      console.error("Auth state change handling failed:", err);
-      showInAppNotification(
-        "Authentication error. Please try again.",
-        3500,
-        "error",
-      );
-    }
-  });
+    },
+  );
 });
 
 function renderMainUI() {
@@ -812,4 +835,82 @@ function startDailyGoalChecker() {
   if (dailyGoalCheckInterval) clearInterval(dailyGoalCheckInterval);
   checkDailyGoalProgress();
   dailyGoalCheckInterval = setInterval(checkDailyGoalProgress, 60 * 1000);
+}
+
+// ── Session Health Check ──────────────────────────────────────────
+// Periodically verify the auth session is still valid.
+// If the session has expired and auto-refresh failed, redirect to login.
+let sessionHealthInterval: NodeJS.Timeout | null = null;
+const SESSION_HEALTH_CHECK_MS = 15 * 60 * 1000; // Every 15 minutes
+
+async function checkSessionHealth() {
+  try {
+    const session = await getCurrentSession();
+    if (!session) {
+      // Session is gone — auto-refresh must have failed
+
+      // If actively recording, auto-save the session before signing out
+      await autoSaveRecordingOnTimeout();
+
+      showInAppNotification(
+        "Your session has expired. Please sign in again.",
+        5000,
+        "warning",
+      );
+      // Trigger sign-out flow which will show the landing page
+      const { signOut } = await import("../src/supabase/api");
+      await signOut();
+    }
+  } catch {
+    // Network error during health check — ignore, will retry next interval
+  }
+}
+
+function startSessionHealthCheck() {
+  stopSessionHealthCheck();
+  sessionHealthInterval = setInterval(
+    checkSessionHealth,
+    SESSION_HEALTH_CHECK_MS,
+  );
+}
+
+function stopSessionHealthCheck() {
+  if (sessionHealthInterval) {
+    clearInterval(sessionHealthInterval);
+    sessionHealthInterval = null;
+  }
+}
+
+/**
+ * If the user is actively recording, auto-save the session via the main process
+ * before signing out / session expiry clears the auth state.
+ * Uses stop-tracking which will prompt for session info (with a 30s timeout fallback).
+ */
+async function autoSaveRecordingOnTimeout() {
+  if ((window as any).isRecording) {
+    try {
+      // stop-tracking in main process will save the session (if >= 10s)
+      // with a 30s timeout fallback for the session-info dialog
+      await ipcRenderer.invoke("stop-tracking");
+    } catch (err) {
+      console.error("Failed to auto-save recording on timeout:", err);
+    }
+
+    // Reset renderer-side recording state
+    (window as any).isRecording = false;
+    (window as any).isPaused = false;
+
+    const recordBtn = document.getElementById("recordBtn") as HTMLButtonElement;
+    const recordIcon = document.getElementById(
+      "recordIcon",
+    ) as HTMLImageElement;
+    const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
+
+    if (recordBtn && recordIcon) {
+      updateRecordBtn(recordBtn, recordIcon, false);
+    }
+    if (pauseBtn) {
+      pauseBtn.style.display = "none";
+    }
+  }
 }
