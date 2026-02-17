@@ -188,30 +188,48 @@ function setupRecordAndPauseBtns() {
   if (!recordBtn || !recordIcon || !pauseBtn || !pauseIcon) return;
 
   recordBtn.addEventListener("click", async () => {
-    if (!(window as any).isRecording) {
-      (window as any).isRecording = true;
-      (window as any).isPaused = false;
-      pauseBtn.style.display = "";
-      updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
-      await ipcRenderer.invoke("start-tracking");
-    } else {
-      (window as any).isRecording = false;
-      (window as any).isPaused = false;
-      pauseBtn.style.display = "none";
-      await ipcRenderer.invoke("stop-tracking");
+    try {
+      if (!(window as any).isRecording) {
+        (window as any).isRecording = true;
+        (window as any).isPaused = false;
+        pauseBtn.style.display = "";
+        updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
+        await ipcRenderer.invoke("start-tracking");
+      } else {
+        (window as any).isRecording = false;
+        (window as any).isPaused = false;
+        pauseBtn.style.display = "none";
+        await ipcRenderer.invoke("stop-tracking");
+      }
+      updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
+    } catch (err) {
+      console.error("Tracking toggle failed:", err);
+      showInAppNotification(
+        "Failed to toggle tracking. Please try again.",
+        3500,
+        "error",
+      );
     }
-    updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
   });
 
   pauseBtn.addEventListener("click", async () => {
-    if (!(window as any).isPaused) {
-      (window as any).isPaused = true;
-      await ipcRenderer.invoke("pause-tracking");
-    } else {
-      (window as any).isPaused = false;
-      await ipcRenderer.invoke("resume-tracking");
+    try {
+      if (!(window as any).isPaused) {
+        (window as any).isPaused = true;
+        await ipcRenderer.invoke("pause-tracking");
+      } else {
+        (window as any).isPaused = false;
+        await ipcRenderer.invoke("resume-tracking");
+      }
+      updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
+    } catch (err) {
+      console.error("Pause toggle failed:", err);
+      showInAppNotification(
+        "Failed to toggle pause. Please try again.",
+        3500,
+        "error",
+      );
     }
-    updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
   });
 
   updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
@@ -524,7 +542,10 @@ ipcRenderer.on(
 
 export async function applyAccentColor() {
   const theme = document.body.classList.contains("light") ? "light" : "dark";
-  const accentColor = await ipcRenderer.invoke("get-accent-color", theme);
+  const accentColor = await safeIpcInvoke<string>("get-accent-color", [theme], {
+    fallback: "#6366f1",
+    showNotification: false,
+  });
 
   if (theme === "light") {
     document.body.style.setProperty("--accent", accentColor);
@@ -539,9 +560,14 @@ export async function applyAccentColor() {
 }
 
 async function applyUserTheme() {
-  const savedTheme = (await ipcRenderer.invoke("get-user-theme")) as
-    | "light"
-    | "dark";
+  const savedTheme = await safeIpcInvoke<"light" | "dark">(
+    "get-user-theme",
+    [],
+    {
+      fallback: "dark",
+      showNotification: false,
+    },
+  );
   if (savedTheme === "light") {
     document.body.classList.add("light");
   } else {
@@ -598,7 +624,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Check for scheduled session notifications 5 seconds after user logs in
     setTimeout(() => {
-      ipcRenderer.invoke("check-notifications");
+      ipcRenderer.invoke("check-notifications").catch(() => {});
     }, 5000);
 
     // Start daily goal checker after user is authenticated
@@ -638,12 +664,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (mainUI) mainUI.style.display = "none";
         landing.style.display = "";
         renderLandingPage(landing, async (session: any) => {
-          await ipcRenderer.invoke("sync-auth-session", {
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-          });
-          showMainUIForUser(session.user.id);
-          if (landing) landing.style.display = "none";
+          try {
+            await ipcRenderer.invoke("sync-auth-session", {
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            });
+            showMainUIForUser(session.user.id);
+            if (landing) landing.style.display = "none";
+          } catch {
+            showInAppNotification(
+              "Sign-in failed. Please try again.",
+              3500,
+              "error",
+            );
+          }
         });
       }
     }
@@ -662,12 +696,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (mainUI) mainUI.style.display = "none";
         landing.style.display = "";
         renderLandingPage(landing, async (session: any) => {
-          await ipcRenderer.invoke("sync-auth-session", {
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-          });
-          showMainUIForUser(session.user.id);
-          landing.style.display = "none";
+          try {
+            await ipcRenderer.invoke("sync-auth-session", {
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            });
+            showMainUIForUser(session.user.id);
+            landing.style.display = "none";
+          } catch {
+            showInAppNotification(
+              "Sign-in failed. Please try again.",
+              3500,
+              "error",
+            );
+          }
         });
       }
     }
@@ -675,34 +717,51 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Listen for auth state changes
   onAuthStateChange(async (session: any) => {
-    if (session) {
-      // Sync session tokens to main process so IPC handlers can authenticate
-      await ipcRenderer.invoke("sync-auth-session", {
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-      });
-      // User signed in
-      showMainUIForUser(session.user.id);
-      if (landing) landing.style.display = "none";
-    } else {
-      // Clear session in main process
-      await ipcRenderer.invoke("sync-auth-session", null);
-      // User signed out - reset the initialization flag
-      isMainUIInitialized = false;
-      destroyConnectionStatus();
-      localStorage.removeItem("currentUserId");
-      if (mainUI) mainUI.style.display = "none";
-      if (landing) {
-        landing.style.display = "";
-        renderLandingPage(landing, async (newSession: any) => {
-          await ipcRenderer.invoke("sync-auth-session", {
-            access_token: newSession.access_token,
-            refresh_token: newSession.refresh_token,
-          });
-          showMainUIForUser(newSession.user.id);
-          landing.style.display = "none";
+    try {
+      if (session) {
+        // Sync session tokens to main process so IPC handlers can authenticate
+        await ipcRenderer.invoke("sync-auth-session", {
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
         });
+        // User signed in
+        showMainUIForUser(session.user.id);
+        if (landing) landing.style.display = "none";
+      } else {
+        // Clear session in main process
+        await ipcRenderer.invoke("sync-auth-session", null);
+        // User signed out - reset the initialization flag
+        isMainUIInitialized = false;
+        destroyConnectionStatus();
+        localStorage.removeItem("currentUserId");
+        if (mainUI) mainUI.style.display = "none";
+        if (landing) {
+          landing.style.display = "";
+          renderLandingPage(landing, async (newSession: any) => {
+            try {
+              await ipcRenderer.invoke("sync-auth-session", {
+                access_token: newSession.access_token,
+                refresh_token: newSession.refresh_token,
+              });
+              showMainUIForUser(newSession.user.id);
+              landing.style.display = "none";
+            } catch {
+              showInAppNotification(
+                "Sign-in failed. Please try again.",
+                3500,
+                "error",
+              );
+            }
+          });
+        }
       }
+    } catch (err) {
+      console.error("Auth state change handling failed:", err);
+      showInAppNotification(
+        "Authentication error. Please try again.",
+        3500,
+        "error",
+      );
     }
   });
 });
@@ -735,7 +794,9 @@ async function checkDailyGoalProgress() {
     );
 
     if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {
-      await ipcRenderer.invoke("complete-daily-goal", today);
+      await safeIpcInvoke("complete-daily-goal", [today], {
+        showNotification: false,
+      });
       showNotification("🎉 Daily goal achieved!");
       // Optionally, re-render dashboard/logs
       renderDashboard();

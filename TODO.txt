@@ -353,37 +353,35 @@
       Only scripts/generate-icon-data-uris.js remains (still needed)
 
 ## ═══════════════════════════════════════════════════════════════════
-## PHASE 6: OPTIMIZATION & POLISH
+## PHASE 6: POLISH
 ## ═══════════════════════════════════════════════════════════════════
 
-### Step 6.1: Add Caching Strategy
-- [ ] Implement in-memory cache for recent sessions
-- [ ] Cache today's usage logs in localStorage
-- [ ] Cache user preferences in localStorage
-- [ ] Add cache invalidation strategy
-- [ ] Reduce redundant Supabase calls
+### Step 6.1: Error Handling & Offline Support
+- [x] Add global error handler for Supabase errors
+- [x] Show user-friendly error messages
+- [x] Detect offline status
+- [x] Retry failed requests with exponential backoff
 
-### Step 6.2: Error Handling & Offline Support
-- [ ] Add global error handler for Supabase errors
-- [ ] Show user-friendly error messages
-- [ ] Detect offline status
-- [ ] Queue critical writes when offline (optional)
-      Decision: Start without queue, add if needed
-- [ ] Retry failed requests with exponential backoff
+### Step 6.2: Documentation Updates
+- [x] Update README.md with new architecture
+- [x] Document Supabase setup steps
+- [ ] Document RLS policies
+- [ ] Add API documentation for Supabase functions
+- [ ] Update development setup guide
 
-### Step 6.3: Performance Optimization
-- [ ] Add pagination for large data sets
-- [ ] Implement lazy loading for calendar/summary
-- [ ] Optimize Supabase queries (add indexes if needed)
-- [ ] Add loading indicators for slow operations
-- [ ] Profile and optimize render performance
+### Step 6.3: Complete Authentication Features
+- [ ] Organization setup wizard (on first login)
+- [ ] Email verification flow
+- [ ] Password reset email templates
+- [ ] OAuth providers (GitHub)
+- [ ] Session timeout handling
 
-### Step 6.4: Real-time Features (Future)
-- [ ] Set up Supabase Realtime subscriptions
-- [ ] Listen for session updates
-- [ ] Listen for organization changes
-- [ ] Update UI reactively when data changes
-- [ ] Add presence indicators for team members
+### Step 6.4: Complete Profile Integration (Sprint 5)
+- [ ] Add organization section to Profile tab
+- [ ] Show current organization details
+- [ ] Allow organization switching (if member of multiple)
+- [ ] Show permission/role information
+- [ ] Add leave organization option
 
 ### Step 6.5: Testing & Validation
 - [ ] Test all CRUD operations for each table
@@ -393,32 +391,33 @@
 - [ ] Test with multiple users in same organization
 - [ ] Verify no data leaks between organizations
 
-### Step 6.6: Documentation Updates
-- [ ] Update README.md with new architecture
-- [ ] Document Supabase setup steps
-- [ ] Document RLS policies
-- [ ] Add API documentation for Supabase functions
-- [ ] Update development setup guide
-
 ## ═══════════════════════════════════════════════════════════════════
-## PHASE 7: REMAINING FEATURES & ENHANCEMENTS
+## PHASE 7: ENHANCEMENTS
 ## ═══════════════════════════════════════════════════════════════════
 
-### Step 7.1: Complete Authentication Features
-- [ ] Organization setup wizard (on first login)
-- [ ] Email verification flow
-- [ ] Password reset email templates
-- [ ] OAuth providers (GitHub, Google)
-- [ ] Session timeout handling
+### Step 7.1: Performance Optimization
+- [ ] Add pagination for large data sets
+- [ ] Implement lazy loading for calendar/summary
+- [ ] Optimize Supabase queries (add indexes if needed)
+- [ ] Add loading indicators for slow operations
+- [ ] Profile and optimize render performance
 
-### Step 7.2: Complete Profile Integration (Sprint 5)
-- [ ] Add organization section to Profile tab
-- [ ] Show current organization details
-- [ ] Allow organization switching (if member of multiple)
-- [ ] Show permission/role information
-- [ ] Add leave organization option
+### Step 7.2: Add Caching Strategy
+- [ ] Implement in-memory cache for recent sessions
+- [ ] Cache today's usage logs in localStorage
+- [ ] Cache user preferences in localStorage
+- [ ] Add cache invalidation strategy
+- [ ] Reduce redundant Supabase calls
 
-### Step 7.3: Advanced Features
+### Step 7.3: Real-time Features (Future)
+- [ ] Set up Supabase Realtime subscriptions
+- [ ] Listen for session updates
+- [ ] Listen for organization changes
+- [ ] Update UI reactively when data changes
+- [ ] Add presence indicators for team members
+
+### Step 7.4: Advanced Features
+- [ ] Queue critical writes when offline
 - [ ] Team dashboard (organization-wide analytics)
 - [ ] Activity feed (recent team activity)
 - [ ] Notifications system
@@ -426,7 +425,7 @@
 - [ ] Advanced analytics and reporting
 - [ ] Export individual reports (PDF, CSV)
 
-### Step 7.4: Production Ready
+### Step 7.5: Production Ready
 - [ ] Set up proper error logging (Sentry?)
 - [ ] Add analytics (usage tracking)
 - [ ] Optimize bundle size
@@ -435,56 +434,7 @@
 - [ ] Multi-language support (i18n)
 
 ## ═══════════════════════════════════════════════════════════════════
-## MIGRATION DECISIONS LOG
+## NOTES
 ## ═══════════════════════════════════════════════════════════════════
 
-DECISION 1: User Model
-  OLD: Multiple local users, switch between them
-  NEW: One authenticated Supabase user per app instance
-  IMPACT: Simpler auth flow, remove user switching UI
-
-DECISION 2: Projects
-  OLD: Local projects (SQLite) + Cloud projects (Supabase)
-  NEW: All projects in cloud_projects with scope field (personal/org)
-  IMPACT: Unified project management, simpler codebase
-
-DECISION 3: Offline Support
-  OLD: Full offline with sync queue
-  NEW: Require internet, graceful degradation with caching
-  IMPACT: Simpler architecture, assume devs are online
-
-DECISION 4: Data Export
-  OLD: Full database export/import
-  NEW: Session-level exports, rely on Supabase backups
-  IMPACT: Remove admin backup features, Supabase handles backups
-
-DECISION 5: App Settings
-  OLD: localStorage + SQLite app_settings table
-  NEW: Supabase user_preferences table with localStorage cache
-  IMPACT: Settings sync across devices
-
-## ═══════════════════════════════════════════════════════════════════
-## NOTES & CONSIDERATIONS
-## ═══════════════════════════════════════════════════════════════════
-
-PERFORMANCE:
-- Supabase is fast but not instant like SQLite
-- Use caching aggressively for better UX
-- Batch requests where possible
-- Optimize queries with proper indexes
-
-SECURITY:
-- RLS policies are critical - test thoroughly
-- Never expose Supabase anon key in public repos (use env vars)
-- Validate all inputs server-side
-- Audit organization access carefully
-
-COSTS:
-- Supabase free tier: 500MB database, 2GB bandwidth, 50,000 monthly active users
-- Should be sufficient for MVP and early users
-- Monitor usage as app grows
-
-DATA MIGRATION:
-- For existing users: Create migration script to export SQLite → import to Supabase
-- Not a priority for current development (no production users yet)
-- Keep as future task if needed
+- Move Connection Status indicator to the bottom right instead of top

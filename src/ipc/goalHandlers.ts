@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import * as goals from "../supabase/goals";
 import { getCurrentUser } from "../supabase/api";
+import { logError } from "../utils/errorHandler";
 
 /**
  * Set or update a daily goal
@@ -18,7 +19,7 @@ ipcMain.handle(
       await goals.setDailyGoal(user.id, date, time, description);
       return true;
     } catch (err) {
-      // Error setting daily goal
+      logError("set-daily-goal", err);
       return false;
     }
   },
@@ -37,7 +38,7 @@ ipcMain.handle("get-daily-goal", async (_event, date: string) => {
 
     return await goals.getDailyGoal(user.id, date);
   } catch (err) {
-    // Error getting daily goal
+    logError("get-daily-goal", err);
     return null;
   }
 });
@@ -56,7 +57,7 @@ ipcMain.handle("delete-daily-goal", async (_event, date: string) => {
     await goals.deleteDailyGoal(user.id, date);
     return true;
   } catch (err) {
-    // Error deleting daily goal
+    logError("delete-daily-goal", err);
     return false;
   }
 });
@@ -74,7 +75,7 @@ ipcMain.handle("get-total-time-for-day", async (_event, date: string) => {
 
     return await goals.getTotalTimeForDay(user.id, date);
   } catch (err) {
-    // Error getting total time
+    logError("get-total-time-for-day", err);
     return 0;
   }
 });
@@ -93,7 +94,7 @@ ipcMain.handle("complete-daily-goal", async (_event, date: string) => {
     await goals.completeDailyGoal(user.id, date);
     return true;
   } catch (err) {
-    // Error completing daily goal
+    logError("complete-daily-goal", err);
     return false;
   }
 });
@@ -111,7 +112,7 @@ ipcMain.handle("get-all-daily-goals", async (_event) => {
 
     return await goals.getAllDailyGoals(user.id);
   } catch (err) {
-    // Error getting all daily goals
+    logError("get-all-daily-goals", err);
     return [];
   }
 });

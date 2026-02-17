@@ -357,30 +357,3 @@ ipcMain.handle(
     }
   },
 );
-
-// ========== Data Migration Handlers (Deprecated) ==========
-// These handlers are kept for backwards compatibility but return empty data
-
-/**
- * Get all projects data (for migration)
- * Deprecated: No longer needed with Supabase
- */
-ipcMain.handle("get-all-projects-data", async (_event) => {
-  return [];
-});
-
-/**
- * Clear all projects (for migration)
- * Deprecated: No longer needed with Supabase
- */
-ipcMain.handle("clear-projects", async (_event) => {
-  return true;
-});
-
-/**
- * Import projects (for migration)
- * Deprecated: No longer needed with Supabase
- */
-ipcMain.handle("import-projects", async (_event, _projectsArr: any[]) => {
-  return true;
-});

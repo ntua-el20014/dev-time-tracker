@@ -14,6 +14,7 @@ import type {
   UpdateCloudProjectData,
   AssignProjectMemberData,
 } from "../types/organization.types";
+import { logError } from "../utils/errorHandler";
 
 // =====================================================
 // ORGANIZATION MANAGEMENT
@@ -28,6 +29,7 @@ ipcMain.handle("org:get-current", async (_event) => {
     if (!user) return null;
     return await orgApi.getCurrentOrganization(user.id);
   } catch (err) {
+    logError("org:get-current", err);
     return null;
   }
 });
@@ -39,6 +41,7 @@ ipcMain.handle("org:get-by-id", async (_event, orgId: string) => {
   try {
     return await orgApi.getOrganizationById(orgId);
   } catch (err) {
+    logError("org:get-by-id", err);
     return null;
   }
 });
@@ -50,6 +53,7 @@ ipcMain.handle("org:get-members", async (_event, orgId: string) => {
   try {
     return await orgApi.getOrganizationMembers(orgId);
   } catch (err) {
+    logError("org:get-members", err);
     return [];
   }
 });
@@ -63,6 +67,7 @@ ipcMain.handle(
     try {
       return await orgApi.createTeamOrganization(data);
     } catch (err) {
+      logError("org:create-team", err);
       return null;
     }
   },
@@ -77,6 +82,7 @@ ipcMain.handle(
     try {
       return await orgApi.updateOrganization(orgId, updates);
     } catch (err) {
+      logError("org:update", err);
       return null;
     }
   },
@@ -92,6 +98,7 @@ ipcMain.handle(
       await orgApi.updateUserRole(userId, role);
       return true;
     } catch (err) {
+      logError("org:update-user-role", err);
       return false;
     }
   },
@@ -105,6 +112,7 @@ ipcMain.handle("org:remove-user", async (_event, userId: string) => {
     await orgApi.removeUserFromOrganization(userId);
     return true;
   } catch (err) {
+    logError("org:remove-user", err);
     return false;
   }
 });
@@ -118,6 +126,7 @@ ipcMain.handle("org:get-current-user-profile", async (_event) => {
     if (!user) return null;
     return await orgApi.getCurrentUserProfile(user.id);
   } catch (err) {
+    logError("org:get-current-user-profile", err);
     return null;
   }
 });
@@ -135,6 +144,7 @@ ipcMain.handle("org:request-join", async (_event, orgId: string) => {
     if (!user) return null;
     return await orgRequestsApi.requestToJoinOrganization(orgId, user.id);
   } catch (err) {
+    logError("org:request-join", err);
     return null;
   }
 });
@@ -148,6 +158,7 @@ ipcMain.handle("org:get-my-requests", async (_event) => {
     if (!user) return [];
     return await orgRequestsApi.getMyJoinRequests(user.id);
   } catch (err) {
+    logError("org:get-my-requests", err);
     return [];
   }
 });
@@ -161,6 +172,7 @@ ipcMain.handle("org:get-pending-requests", async (_event) => {
     if (!user) return [];
     return await orgRequestsApi.getPendingJoinRequests(user.id);
   } catch (err) {
+    logError("org:get-pending-requests", err);
     return [];
   }
 });
@@ -173,6 +185,7 @@ ipcMain.handle("org:approve-request", async (_event, requestId: string) => {
     await orgRequestsApi.approveJoinRequest(requestId);
     return true;
   } catch (err) {
+    logError("org:approve-request", err);
     return false;
   }
 });
@@ -185,6 +198,7 @@ ipcMain.handle("org:reject-request", async (_event, requestId: string) => {
     await orgRequestsApi.rejectJoinRequest(requestId);
     return true;
   } catch (err) {
+    logError("org:reject-request", err);
     return false;
   }
 });
@@ -199,6 +213,7 @@ ipcMain.handle("org:cancel-request", async (_event, requestId: string) => {
     await orgRequestsApi.cancelJoinRequest(requestId, user.id);
     return true;
   } catch (err) {
+    logError("org:cancel-request", err);
     return false;
   }
 });
@@ -216,6 +231,7 @@ ipcMain.handle("org:get-projects", async (_event) => {
     if (!user) return [];
     return await cloudProjectsApi.getOrganizationProjects(user.id);
   } catch (err) {
+    logError("org:get-projects", err);
     return [];
   }
 });
@@ -227,6 +243,7 @@ ipcMain.handle("org:get-project-by-id", async (_event, projectId: string) => {
   try {
     return await cloudProjectsApi.getCloudProjectById(projectId);
   } catch (err) {
+    logError("org:get-project-by-id", err);
     return null;
   }
 });
@@ -242,6 +259,7 @@ ipcMain.handle(
       if (!user) return null;
       return await cloudProjectsApi.createCloudProject(data, user.id);
     } catch (err) {
+      logError("org:create-project", err);
       return null;
     }
   },
@@ -256,6 +274,7 @@ ipcMain.handle(
     try {
       return await cloudProjectsApi.updateCloudProject(projectId, updates);
     } catch (err) {
+      logError("org:update-project", err);
       return null;
     }
   },
@@ -268,6 +287,7 @@ ipcMain.handle("org:get-project-members", async (_event, projectId: string) => {
   try {
     return await cloudProjectsApi.getProjectMembers(projectId);
   } catch (err) {
+    logError("org:get-project-members", err);
     return [];
   }
 });
@@ -281,6 +301,7 @@ ipcMain.handle(
     try {
       return await cloudProjectsApi.assignMemberToProject(data);
     } catch (err) {
+      logError("org:assign-project-member", err);
       return null;
     }
   },
@@ -296,6 +317,7 @@ ipcMain.handle(
       await cloudProjectsApi.removeMemberFromProject(projectId, userId);
       return true;
     } catch (err) {
+      logError("org:remove-project-member", err);
       return false;
     }
   },
@@ -319,6 +341,7 @@ ipcMain.handle(
         role,
       );
     } catch (err) {
+      logError("org:update-project-member-role", err);
       return null;
     }
   },

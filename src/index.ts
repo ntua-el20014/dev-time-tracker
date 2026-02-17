@@ -14,6 +14,7 @@ import {
 } from "./supabase/scheduledSessions";
 import { getCurrentUser } from "./supabase/api";
 import { supabase } from "./supabase/config";
+import { logError, withRetry } from "./utils/errorHandler";
 import "./ipc/sessionHandlers";
 import "./ipc/usageHandlers";
 import "./ipc/tagHandlers";
@@ -25,6 +26,16 @@ import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";
 import "./ipc/exportHandlers";
 import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
+
+// ── Process-level error handlers ──────────────────────────────────
+// Catch truly unhandled errors so the app doesn't crash silently.
+process.on("uncaughtException", (error) => {
+  logError("uncaughtException", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+  logError("unhandledRejection", reason);
+});
 
 // Sync auth session from renderer to main process
 // The renderer has localStorage and holds the Supabase session;
@@ -143,20 +154,23 @@ async function trackActiveWindow() {
     const langExt = langData?.extension || null;
 
     // Pass langExt to logUsage (Supabase version)
-    await logUsage(
-      user.id,
-      editor.name || "Unknown",
-      title,
-      language,
-      langExt,
-      icon,
-      intervalSeconds,
+    await withRetry(
+      () =>
+        logUsage(
+          user.id,
+          editor.name || "Unknown",
+          title,
+          language,
+          langExt,
+          icon,
+          intervalSeconds,
+        ),
+      { maxAttempts: 2, retryOn: ["network"] },
     );
 
     mainWindow?.webContents.send("window-tracked");
   } catch (err) {
-    // Handle tracking errors silently or log to a file if needed
-    // Error details: ${err}
+    logError("trackActiveWindow", err);
   }
 }
 
@@ -221,10 +235,15 @@ async function checkScheduledSessionNotifications() {
       }
 
       // Mark notification as sent for all notification types to prevent duplicates
-      await markNotificationSent(notification.id);
+      try {
+        await markNotificationSent(notification.id);
+      } catch (markErr) {
+        logError("markNotificationSent", markErr);
+        // Continue to next notification even if marking fails
+      }
     }
   } catch (err) {
-    // Handle notification error silently
+    logError("checkScheduledSessionNotifications", err);
   }
 }
 
@@ -352,7 +371,17 @@ ipcMain.handle("stop-tracking", async (_event) => {
           projectId?: number | string;
           isBillable?: boolean;
         }>((resolve) => {
+          const timeout = setTimeout(() => {
+            // Timeout after 30 seconds — auto-save with default title
+            ipcMain.removeAllListeners("session-info-reply");
+            resolve({
+              title: "Untitled Session",
+              description: "Session info dialog timed out — auto-saved.",
+            });
+          }, 30_000);
+
           ipcMain.once("session-info-reply", (_event, data) => {
+            clearTimeout(timeout);
             resolve(data);
           });
           mainWindow?.webContents.send("get-session-info");
@@ -467,9 +496,7 @@ app.on("before-quit", async (event) => {
         isPaused = false;
       }
     } catch (err) {
-      // Log error but don't block app close
-      // Error saving session on app close: ${err}
-      // Network errors or auth issues shouldn't prevent app from closing
+      logError("before-quit", err);
     } finally {
       // Allow app to quit now
       app.quit();

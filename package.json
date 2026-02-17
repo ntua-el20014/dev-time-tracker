@@ -17,8 +17,6 @@
     "type-check:renderer": "tsc --noEmit -p tsconfig.renderer.json",
     "rebuild": "electron-rebuild",
     "clean": "rimraf dist .webpack out",
-    "populate": "scripts\\populate-database.bat",
-    "backup-db": "node -e \"console.log('Run backup from within the app')\"",
     "build": "npm run type-check && electron-forge make"
   },
   "keywords": [],

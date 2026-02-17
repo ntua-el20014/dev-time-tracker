@@ -19,9 +19,6 @@ const getIpcRenderer = () => {
  * This handles the deep link callback after OAuth authentication
  */
 export function initializeOAuthListener(onSuccess: (session: any) => void) {
-  // eslint-disable-next-line no-console
-  console.log("Initializing OAuth listener");
-
   const ipcRenderer = getIpcRenderer();
   if (!ipcRenderer) {
     // eslint-disable-next-line no-console
@@ -34,9 +31,6 @@ export function initializeOAuthListener(onSuccess: (session: any) => void) {
 
   // Listen for OAuth callback from main process
   ipcRenderer.on("oauth-callback", async (_event: any, hash: string) => {
-    // eslint-disable-next-line no-console
-    console.log("OAuth callback received:", hash);
-
     try {
       // Parse the hash parameters
       const params = new URLSearchParams(hash);
@@ -45,24 +39,12 @@ export function initializeOAuthListener(onSuccess: (session: any) => void) {
       const code = params.get("code");
       const type = params.get("type");
 
-      // eslint-disable-next-line no-console
-      console.log("Parsed OAuth params:", {
-        access_token: !!access_token,
-        refresh_token: !!refresh_token,
-        code: !!code,
-        type,
-        allParams: Object.fromEntries(params.entries()),
-      });
-
       // Handle password recovery
       // Check for both 'recovery' type and if we're in a recovery flow
       if (
         (type === "recovery" || params.get("error_code") === "401") &&
         access_token
       ) {
-        // eslint-disable-next-line no-console
-        console.log("Password recovery detected - showing modal");
-
         // Set the session with the recovery token
         const { data, error } = await supabase.auth.setSession({
           access_token,
@@ -86,26 +68,14 @@ export function initializeOAuthListener(onSuccess: (session: any) => void) {
 
       // If we have an authorization code, exchange it for tokens
       if (code) {
-        // eslint-disable-next-line no-console
-        console.log("Exchanging authorization code for tokens...");
-
-        const { data, error } = await supabase.auth.exchangeCodeForSession(
-          code
-        );
+        const { data, error } =
+          await supabase.auth.exchangeCodeForSession(code);
 
         if (error) {
           throw error;
         }
 
         if (data.session) {
-          // eslint-disable-next-line no-console
-          console.log("Session established successfully!");
-          // eslint-disable-next-line no-console
-          console.log(
-            "Session user recovery:",
-            data.session.user.recovery_sent_at
-          );
-
           // Store user ID
           if (data.session.user?.id) {
             localStorage.setItem("currentUserId", data.session.user.id);
@@ -117,10 +87,6 @@ export function initializeOAuthListener(onSuccess: (session: any) => void) {
             type === "recovery" || data.session.user.recovery_sent_at;
 
           if (isRecovery) {
-            // eslint-disable-next-line no-console
-            console.log(
-              "Password recovery detected via code exchange - showing modal"
-            );
             showInAppNotification("Please enter your new password");
             await showPasswordUpdateModal();
 
@@ -146,9 +112,6 @@ export function initializeOAuthListener(onSuccess: (session: any) => void) {
       }
       // If we already have tokens (direct hash redirect), use them
       else if (access_token) {
-        // eslint-disable-next-line no-console
-        console.log("Setting session with access token...");
-
         // Set the session using the tokens
         const { data, error } = await supabase.auth.setSession({
           access_token,
@@ -171,10 +134,6 @@ export function initializeOAuthListener(onSuccess: (session: any) => void) {
             type === "recovery" || data.session.user.recovery_sent_at;
 
           if (isRecovery) {
-            // eslint-disable-next-line no-console
-            console.log(
-              "Password recovery detected via access token - showing modal"
-            );
             showInAppNotification("Please enter your new password");
             await showPasswordUpdateModal();
 
@@ -199,14 +158,14 @@ export function initializeOAuthListener(onSuccess: (session: any) => void) {
         }
       } else if (params.get("error")) {
         throw new Error(
-          params.get("error_description") || "OAuth authentication failed"
+          params.get("error_description") || "OAuth authentication failed",
         );
       }
     } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error("OAuth callback error:", error);
       showInAppNotification(
-        `OAuth Error: ${error.message || "Authentication failed"}`
+        `OAuth Error: ${error.message || "Authentication failed"}`,
       );
     }
   });
@@ -216,9 +175,6 @@ export function initializeOAuthListener(onSuccess: (session: any) => void) {
  * Sign in with GitHub using external browser
  */
 export async function signInWithGitHubElectron() {
-  // eslint-disable-next-line no-console
-  console.log("signInWithGitHubElectron called");
-
   try {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "github",
@@ -228,12 +184,7 @@ export async function signInWithGitHubElectron() {
       },
     });
 
-    // eslint-disable-next-line no-console
-    console.log("OAuth response:", { data, error });
-
     if (error) {
-      // eslint-disable-next-line no-console
-      console.error("OAuth error:", error);
       throw error;
     }
 
@@ -241,18 +192,11 @@ export async function signInWithGitHubElectron() {
     if (data.url) {
       const ipcRenderer = getIpcRenderer();
       if (ipcRenderer) {
-        // eslint-disable-next-line no-console
-        console.log("Opening OAuth URL:", data.url);
         await ipcRenderer.invoke("open-oauth-url", data.url);
         showInAppNotification("Opening GitHub in your browser...");
       } else {
-        // eslint-disable-next-line no-console
-        console.error("ipcRenderer not available");
         showInAppNotification("Error: Cannot open browser in this context");
       }
-    } else {
-      // eslint-disable-next-line no-console
-      console.warn("No OAuth URL received");
     }
 
     return data;
@@ -327,7 +271,7 @@ async function showPasswordUpdateModal(): Promise<void> {
           resolve();
         } catch (error: any) {
           showInAppNotification(
-            `Error: ${error.message || "Failed to update password"}`
+            `Error: ${error.message || "Failed to update password"}`,
           );
           reject(error);
         }
@@ -337,7 +281,7 @@ async function showPasswordUpdateModal(): Promise<void> {
     // Add real-time password validation using the reusable utility
     attachPasswordStrengthIndicator(
       'input[name="newPassword"]',
-      "passwordStrengthIndicator"
+      "passwordStrengthIndicator",
     );
   });
 }

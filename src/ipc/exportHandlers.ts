@@ -7,12 +7,18 @@ import { ipcMain, dialog } from "electron";
 import * as fs from "fs";
 import AdmZip from "adm-zip";
 import { addCsvToZip } from "../utils/fileOps";
+import { logError } from "../utils/errorHandler";
 
 // Show a save dialog and return the selected file path
 ipcMain.handle("show-save-dialog", async (_event, options) => {
-  const { canceled, filePath } = await dialog.showSaveDialog(options);
-  if (canceled || !filePath) return { canceled: true };
-  return { filePath };
+  try {
+    const { canceled, filePath } = await dialog.showSaveDialog(options);
+    if (canceled || !filePath) return { canceled: true };
+    return { filePath };
+  } catch (err) {
+    logError("show-save-dialog", err);
+    return { canceled: true };
+  }
 });
 
 // Export data as a ZIP of CSV files
@@ -31,6 +37,7 @@ ipcMain.handle(
       zip.writeZip(filePath);
       return { status: "success" };
     } catch (err) {
+      logError("export-custom-csv", err);
       return {
         status: "error",
         message: err instanceof Error ? err.message : String(err),
@@ -47,6 +54,7 @@ ipcMain.handle(
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
       return { status: "success" };
     } catch (err) {
+      logError("export-custom-json", err);
       return {
         status: "error",
         message: err instanceof Error ? err.message : String(err),

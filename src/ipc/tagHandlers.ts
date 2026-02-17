@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import * as tags from "../supabase/tags";
 import { getCurrentUser } from "../supabase/api";
+import { logError } from "../utils/errorHandler";
 
 /**
  * Get all tags for the current user
@@ -16,7 +17,7 @@ ipcMain.handle("get-all-tags", async (_event) => {
     const allTags = await tags.getAllTags(user.id);
     return allTags;
   } catch (err) {
-    // Error getting tags
+    logError("get-all-tags", err);
     return [];
   }
 });
@@ -47,7 +48,7 @@ ipcMain.handle(
 
       return true;
     } catch (err) {
-      // Error setting tag color
+      logError("set-tag-color", err);
       return false;
     }
   },
@@ -71,7 +72,7 @@ ipcMain.handle(
 
       return true;
     } catch (err) {
-      // Error setting session tags
+      logError("set-session-tags", err);
       return false;
     }
   },
@@ -97,7 +98,7 @@ ipcMain.handle("delete-tag", async (_event, name: string) => {
 
     return true;
   } catch (err) {
-    // Error deleting tag
+    logError("delete-tag", err);
     return false;
   }
 });

@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import * as userPreferences from "../supabase/userPreferences";
 import { getCurrentUser } from "../supabase/api";
 import { updateIdleTimeout } from "../index";
+import { logError } from "../utils/errorHandler";
 
 /**
  * Get all user preferences
@@ -15,7 +16,8 @@ ipcMain.handle("get-user-preferences", async (_event) => {
 
     return await userPreferences.getUserPreferences(user.id);
   } catch (err) {
-    // Error getting preferences - return defaults
+    logError("get-user-preferences", err);
+    // Return defaults on error
     return {
       theme: "dark",
       accent_color: { light: "#007acc", dark: "#f0db4f" },
@@ -45,7 +47,7 @@ ipcMain.handle(
       await userPreferences.updateUserPreferences(user.id, preferences);
       return true;
     } catch (err) {
-      // Error updating preferences
+      logError("update-user-preferences", err);
       return false;
     }
   },
@@ -63,7 +65,7 @@ ipcMain.handle("get-editor-colors", async (_event) => {
 
     return await userPreferences.getEditorColors(user.id);
   } catch (err) {
-    // Error getting editor colors
+    logError("get-editor-colors", err);
     return {};
   }
 });
@@ -83,7 +85,7 @@ ipcMain.handle(
       await userPreferences.setEditorColor(user.id, appName, color);
       return true;
     } catch (err) {
-      // Error setting editor color
+      logError("set-editor-color", err);
       return false;
     }
   },
@@ -101,7 +103,7 @@ ipcMain.handle("get-user-theme", async (_event) => {
 
     return await userPreferences.getTheme(user.id);
   } catch (err) {
-    // Error getting theme - return default
+    logError("get-user-theme", err);
     return "dark";
   }
 });
@@ -121,7 +123,7 @@ ipcMain.handle(
       await userPreferences.setTheme(user.id, theme);
       return true;
     } catch (err) {
-      // Error setting theme
+      logError("set-user-theme", err);
       return false;
     }
   },
@@ -141,7 +143,7 @@ ipcMain.handle(
 
       return await userPreferences.getAccentColor(user.id, themeMode);
     } catch (err) {
-      // Error getting accent color - return default
+      logError("get-accent-color", err);
       return themeMode === "dark" ? "#f0db4f" : "#007acc";
     }
   },
@@ -162,7 +164,7 @@ ipcMain.handle(
       await userPreferences.setAccentColor(user.id, color, themeMode);
       return true;
     } catch (err) {
-      // Error setting accent color
+      logError("set-accent-color", err);
       return false;
     }
   },
@@ -180,7 +182,8 @@ ipcMain.handle("get-notification-settings", async (_event) => {
 
     return await userPreferences.getNotificationSettings(user.id);
   } catch (err) {
-    // Error getting notification settings - return defaults
+    logError("get-notification-settings", err);
+    // Return defaults on error
     return {
       enabled: true,
       scheduledSessions: true,
@@ -204,7 +207,7 @@ ipcMain.handle(
       await userPreferences.setNotificationSettings(user.id, settings);
       return true;
     } catch (err) {
-      // Error updating notification settings
+      logError("set-notification-settings", err);
       return false;
     }
   },
@@ -222,7 +225,7 @@ ipcMain.handle("get-idle-timeout", async (_event) => {
 
     return await userPreferences.getIdleTimeout(user.id);
   } catch (err) {
-    // Error getting idle timeout - return default
+    logError("get-idle-timeout", err);
     return 300; // 5 minutes
   }
 });
@@ -244,7 +247,7 @@ ipcMain.handle("set-idle-timeout", async (_event, seconds: number) => {
 
     return true;
   } catch (err) {
-    // Error setting idle timeout
+    logError("set-idle-timeout", err);
     return false;
   }
 });

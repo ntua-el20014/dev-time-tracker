@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import * as usageLogs from "../supabase/usageLogs";
 import { getCurrentUser } from "../supabase/api";
 import type { DailySummaryFilters } from "@shared/types";
+import { logError } from "../utils/errorHandler";
 
 /**
  * Get usage logs/summary for a specific date
@@ -17,7 +18,7 @@ ipcMain.handle("get-logs", async (_event, date?: string) => {
     const dateStr = date || new Date().toISOString().split("T")[0];
     return await usageLogs.getUsageSummary(user.id, dateStr);
   } catch (err) {
-    // Error getting logs
+    logError("get-logs", err);
     return [];
   }
 });
@@ -37,7 +38,7 @@ ipcMain.handle(
 
       return await usageLogs.getLoggedDaysOfMonth(user.id, year, month);
     } catch (err) {
-      // Error getting logged days
+      logError("get-logged-days-of-month", err);
       return [];
     }
   },
@@ -56,7 +57,7 @@ ipcMain.handle("get-editor-usage", async (_event) => {
 
     return await usageLogs.getEditorUsage(user.id);
   } catch (err) {
-    // Error getting editor usage
+    logError("get-editor-usage", err);
     return [];
   }
 });
@@ -85,7 +86,7 @@ ipcMain.handle(
 
       return await usageLogs.getDailySummary(user.id, supabaseFilters);
     } catch (err) {
-      // Error getting daily summary
+      logError("get-daily-summary", err);
       return [];
     }
   },
@@ -104,7 +105,7 @@ ipcMain.handle("get-language-usage", async (_event) => {
 
     return await usageLogs.getLanguageUsage(user.id);
   } catch (err) {
-    // Error getting language usage
+    logError("get-language-usage", err);
     return [];
   }
 });
@@ -128,7 +129,7 @@ ipcMain.handle(
         endDate,
       );
     } catch (err) {
-      // Error getting language summary
+      logError("get-language-summary-by-date-range", err);
       return [];
     }
   },
@@ -149,7 +150,7 @@ ipcMain.handle(
 
       return await usageLogs.getUsageDetailsForAppDate(user.id, app, date);
     } catch (err) {
-      // Error getting usage details
+      logError("get-usage-details-for-app-date", err);
       return [];
     }
   },
@@ -171,7 +172,7 @@ ipcMain.handle(
       const sessionIdStr = String(sessionId);
       return await usageLogs.getUsageDetailsForSession(user.id, sessionIdStr);
     } catch (err) {
-      // Error getting usage details
+      logError("get-usage-details-for-session", err);
       return null;
     }
   },
@@ -190,7 +191,7 @@ ipcMain.handle("get-user-editors", async (_event) => {
 
     return await usageLogs.getUserEditors(user.id);
   } catch (err) {
-    // Error getting user editors
+    logError("get-user-editors", err);
     return [];
   }
 });
@@ -208,7 +209,7 @@ ipcMain.handle("get-user-lang-exts", async (_event) => {
 
     return await usageLogs.getUserLangExts(user.id);
   } catch (err) {
-    // Error getting language extensions
+    logError("get-user-lang-exts", err);
     return [];
   }
 });

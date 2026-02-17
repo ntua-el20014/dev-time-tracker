@@ -3,6 +3,7 @@ import * as timeTracking from "../supabase/timeTracking";
 import * as tags from "../supabase/tags";
 import { getCurrentUser } from "../supabase/api";
 import { supabase } from "../supabase/config";
+import { logError } from "../utils/errorHandler";
 
 /**
  * Enrich raw Supabase session rows with derived fields the renderer expects:
@@ -102,7 +103,7 @@ ipcMain.handle(
       );
       return await enrichSessions(rawSessions);
     } catch (err) {
-      // Error getting sessions - return empty array
+      logError("get-sessions", err);
       return [];
     }
   },
@@ -160,7 +161,7 @@ ipcMain.handle(
 
       return true;
     } catch (err) {
-      // Error editing session
+      logError("edit-session", err);
       return false;
     }
   },
@@ -175,7 +176,7 @@ ipcMain.handle("delete-session", async (_event, id: string | number) => {
     await timeTracking.deleteSession(sessionId);
     return true;
   } catch (err) {
-    // Error deleting session
+    logError("delete-session", err);
     return false;
   }
 });
@@ -196,6 +197,7 @@ ipcMain.handle(
         await timeTracking.getSmallSessions(user.id, maxDurationSeconds),
       );
     } catch (err) {
+      logError("get-small-sessions", err);
       return [];
     }
   },
@@ -212,6 +214,7 @@ ipcMain.handle(
       await timeTracking.deleteSessions(ids);
       return true;
     } catch (err) {
+      logError("delete-sessions", err);
       return false;
     }
   },

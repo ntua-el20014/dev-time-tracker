@@ -6,9 +6,6 @@ export const APP_VERSION = "1.0.0";
 export const DEFAULT_TRACKING_INTERVAL_SECONDS = 10;
 export const DEFAULT_IDLE_TIMEOUT_SECONDS = 300; // 5 minutes
 
-// Database
-export const DB_NAME = "usage.db";
-
 // UI Constants
 export const CHART_COLORS = [
   "#ff6384",

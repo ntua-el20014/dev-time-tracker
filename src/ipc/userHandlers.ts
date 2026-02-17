@@ -12,6 +12,7 @@ import {
   getCurrentUserProfile,
 } from "../supabase/organizations";
 import type { UserRole } from "../../shared/types";
+import { logError } from "../utils/errorHandler";
 
 /**
  * Get or create default users (Supabase version)
@@ -27,19 +28,9 @@ ipcMain.handle("get-or-create-default-users", async (_event) => {
 
     return [profile];
   } catch (err) {
+    logError("get-or-create-default-users", err);
     return [];
   }
-});
-
-/**
- * Create a new user
- * Note: In Supabase, user creation is handled through signUp in the auth flow
- * This handler is kept for backwards compatibility but doesn't create users
- */
-ipcMain.handle("create-user", async (_event, _data: any) => {
-  // User creation is handled through Supabase Auth signup
-  // This handler is deprecated but kept for compatibility
-  return null;
 });
 
 /**
@@ -59,19 +50,9 @@ ipcMain.handle("get-all-users", async (_event) => {
 
     return await getOrganizationMembers(org.id);
   } catch (err) {
+    logError("get-all-users", err);
     return [];
   }
-});
-
-/**
- * Set current user (Supabase version)
- * In Supabase, the current user is always the authenticated user
- * This handler is kept for backwards compatibility but doesn't change the user
- */
-ipcMain.handle("set-current-user", async (_event) => {
-  // In Supabase, current user is determined by authentication
-  // This handler is deprecated but kept for compatibility
-  return true;
 });
 
 /**
@@ -85,6 +66,7 @@ ipcMain.handle("get-current-user", async (_event) => {
 
     return await getCurrentUserProfile(user.id);
   } catch (err) {
+    logError("get-current-user", err);
     return null;
   }
 });
@@ -98,6 +80,7 @@ ipcMain.handle("get-current-user-id", async (_event) => {
     const user = await getCurrentUser();
     return user?.id || null;
   } catch (err) {
+    logError("get-current-user-id", err);
     return null;
   }
 });
@@ -111,6 +94,7 @@ ipcMain.handle("delete-user", async (_event, userId: number | string) => {
     await removeUserFromOrganization(String(userId));
     return true;
   } catch (err) {
+    logError("delete-user", err);
     return false;
   }
 });
@@ -123,6 +107,7 @@ ipcMain.handle("set-user-avatar", async (_event, avatar: string) => {
     await updateUserProfileData({ avatar });
     return true;
   } catch (err) {
+    logError("set-user-avatar", err);
     return false;
   }
 });
@@ -147,6 +132,7 @@ ipcMain.handle(
       await updateUserRole(String(userId), orgRole);
       return true;
     } catch (err) {
+      logError("set-user-role", err);
       return false;
     }
   },
@@ -159,6 +145,7 @@ ipcMain.handle("get-user-info", async (_event, userId: number | string) => {
   try {
     return await getUserProfile(String(userId));
   } catch (err) {
+    logError("get-user-info", err);
     return null;
   }
 });
@@ -171,6 +158,7 @@ ipcMain.handle("is-user-admin", async (_event, userId: number | string) => {
     const profile = await getUserProfile(String(userId));
     return profile?.role === "admin";
   } catch (err) {
+    logError("is-user-admin", err);
     return false;
   }
 });
@@ -185,6 +173,7 @@ ipcMain.handle(
       const profile = await getUserProfile(String(userId));
       return profile?.role === "admin" || profile?.role === "manager";
     } catch (err) {
+      logError("is-user-manager-or-admin", err);
       return false;
     }
   },
@@ -198,6 +187,7 @@ ipcMain.handle("get-user-role", async (_event, userId: number | string) => {
     const profile = await getUserProfile(String(userId));
     return profile?.role || null;
   } catch (err) {
+    logError("get-user-role", err);
     return null;
   }
 });

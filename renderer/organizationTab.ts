@@ -143,15 +143,15 @@ function renderOrganizationInfo() {
           <div class="org-info-item">
             <label>Members:</label>
             <span>${stats.total} (${stats.admins} admin, ${
-    stats.managers
-  } manager, ${stats.employees} employee)</span>
+              stats.managers
+            } manager, ${stats.employees} employee)</span>
           </div>
           <div class="org-info-item">
             <label>Organization ID:</label>
             <span class="org-uuid-wrapper">
               <span class="org-uuid" title="${currentOrg.id}">${
-    currentOrg.id
-  }</span>
+                currentOrg.id
+              }</span>
               <button id="copy-org-id-btn" class="copy-icon-btn" title="Copy Organization ID">
                 📋
               </button>
@@ -175,7 +175,7 @@ function renderOrganizationInfo() {
     const handleCreate = () => showCreateOrgModal();
     createBtn.addEventListener("click", handleCreate);
     cleanupFunctions.push(() =>
-      createBtn.removeEventListener("click", handleCreate)
+      createBtn.removeEventListener("click", handleCreate),
     );
   }
 
@@ -184,7 +184,7 @@ function renderOrganizationInfo() {
     const handleCopy = () => copyOrgId();
     copyBtn.addEventListener("click", handleCopy);
     cleanupFunctions.push(() =>
-      copyBtn.removeEventListener("click", handleCopy)
+      copyBtn.removeEventListener("click", handleCopy),
     );
   }
 }
@@ -253,7 +253,7 @@ function renderMembersList() {
                         ? `<button class="btn btn-danger btn-sm remove-member-btn" data-user-id="${
                             member.id
                           }" data-username="${escapeHtml(
-                            member.username
+                            member.username,
                           )}">Remove</button>`
                         : `<span class="text-muted">You</span>`
                     }
@@ -262,7 +262,7 @@ function renderMembersList() {
                     : ""
                 }
               </tr>
-            `
+            `,
               )
               .join("")}
           </tbody>
@@ -279,7 +279,7 @@ function renderMembersList() {
         handleRoleChange(e.target as HTMLSelectElement);
       select.addEventListener("change", handleChange);
       cleanupFunctions.push(() =>
-        select.removeEventListener("change", handleChange)
+        select.removeEventListener("change", handleChange),
       );
     });
 
@@ -288,11 +288,11 @@ function renderMembersList() {
       const handleRemove = () =>
         handleRemoveMember(
           btn.getAttribute("data-user-id")!,
-          btn.getAttribute("data-username")!
+          btn.getAttribute("data-username")!,
         );
       btn.addEventListener("click", handleRemove);
       cleanupFunctions.push(() =>
-        btn.removeEventListener("click", handleRemove)
+        btn.removeEventListener("click", handleRemove),
       );
     });
   }
@@ -320,7 +320,7 @@ function renderJoinForm() {
 
   const joinBtn = document.getElementById("join-org-btn");
   const joinInput = document.getElementById(
-    "join-org-input"
+    "join-org-input",
   ) as HTMLInputElement;
 
   if (joinBtn && joinInput) {
@@ -388,7 +388,7 @@ function renderJoinRequests() {
                   }">✕ Reject</button>
                 </td>
               </tr>
-            `
+            `,
               )
               .join("")}
           </tbody>
@@ -404,7 +404,7 @@ function renderJoinRequests() {
       handleApproveRequest(btn.getAttribute("data-request-id")!);
     btn.addEventListener("click", handleApprove);
     cleanupFunctions.push(() =>
-      btn.removeEventListener("click", handleApprove)
+      btn.removeEventListener("click", handleApprove),
     );
   });
 
@@ -476,7 +476,7 @@ function renderCloudProjects() {
     const handleNewProject = () => showCreateCloudProjectModal();
     newProjectBtn.addEventListener("click", handleNewProject);
     cleanupFunctions.push(() =>
-      newProjectBtn.removeEventListener("click", handleNewProject)
+      newProjectBtn.removeEventListener("click", handleNewProject),
     );
   }
 
@@ -492,7 +492,7 @@ function renderCloudProjects() {
 
       const activeSection = document.getElementById("active-cloud-projects");
       const archivedSection = document.getElementById(
-        "archived-cloud-projects"
+        "archived-cloud-projects",
       );
 
       if (tabType === "active") {
@@ -505,7 +505,7 @@ function renderCloudProjects() {
     };
     btn.addEventListener("click", handleTabClick);
     cleanupFunctions.push(() =>
-      btn.removeEventListener("click", handleTabClick)
+      btn.removeEventListener("click", handleTabClick),
     );
   });
 
@@ -521,7 +521,7 @@ function renderCloudProjects() {
   });
 
   const manageMembersButtons = container.querySelectorAll(
-    ".manage-cloud-members-btn"
+    ".manage-cloud-members-btn",
   );
   manageMembersButtons.forEach((btn) => {
     const handleManage = () => {
@@ -533,7 +533,7 @@ function renderCloudProjects() {
   });
 
   const archiveButtons = container.querySelectorAll(
-    ".archive-cloud-project-btn"
+    ".archive-cloud-project-btn",
   );
   archiveButtons.forEach((btn) => {
     const handleArchive = () => {
@@ -542,12 +542,12 @@ function renderCloudProjects() {
     };
     btn.addEventListener("click", handleArchive);
     cleanupFunctions.push(() =>
-      btn.removeEventListener("click", handleArchive)
+      btn.removeEventListener("click", handleArchive),
     );
   });
 
   const restoreButtons = container.querySelectorAll(
-    ".restore-cloud-project-btn"
+    ".restore-cloud-project-btn",
   );
   restoreButtons.forEach((btn) => {
     const handleRestore = () => {
@@ -556,7 +556,7 @@ function renderCloudProjects() {
     };
     btn.addEventListener("click", handleRestore);
     cleanupFunctions.push(() =>
-      btn.removeEventListener("click", handleRestore)
+      btn.removeEventListener("click", handleRestore),
     );
   });
 }
@@ -617,7 +617,7 @@ function renderProjectCard(project: CloudProjectWithManager): string {
         ${
           project.description
             ? `<p class="project-description">${escapeHtml(
-                project.description
+                project.description,
               )}</p>`
             : `<p class="project-description empty">No description provided</p>`
         }
@@ -639,16 +639,6 @@ function renderProjectCard(project: CloudProjectWithManager): string {
               ${project.is_active ? "Active" : "Archived"}
             </span>
           </div>
-          ${
-            project.local_id
-              ? `
-            <div class="project-meta-item">
-              <span class="meta-label">Linked:</span>
-              <span class="meta-value">✓ Local Project</span>
-            </div>
-          `
-              : ""
-          }
         </div>
       </div>
     </div>
@@ -679,7 +669,7 @@ async function showCreateOrgModal() {
   document.body.appendChild(modal);
 
   const confirmBtn = document.getElementById(
-    "create-org-confirm-btn"
+    "create-org-confirm-btn",
   ) as HTMLButtonElement;
   const cancelBtn = document.getElementById("create-org-cancel-btn");
   const input = document.getElementById("org-name-input") as HTMLInputElement;
@@ -709,7 +699,7 @@ async function showCreateOrgModal() {
       showNotification(
         `Failed to create organization: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
       confirmBtn.disabled = false;
       confirmBtn.textContent = "Create";
@@ -729,11 +719,9 @@ function copyOrgId() {
     () => {
       showNotification("Organization ID copied to clipboard!");
     },
-    (err) => {
-      // eslint-disable-next-line no-console
-      console.error("Failed to copy:", err);
+    () => {
       showNotification("Failed to copy Organization ID");
-    }
+    },
   );
 }
 
@@ -745,7 +733,7 @@ async function handleJoinOrganization(orgId: string) {
 
   const joinBtn = document.getElementById("join-org-btn") as HTMLButtonElement;
   const joinInput = document.getElementById(
-    "join-org-input"
+    "join-org-input",
   ) as HTMLInputElement;
 
   try {
@@ -761,12 +749,10 @@ async function handleJoinOrganization(orgId: string) {
 
     await requestToJoinOrganization(orgId);
     showNotification(
-      `Join request sent to ${targetOrg.name}. Waiting for approval.`
+      `Join request sent to ${targetOrg.name}. Waiting for approval.`,
     );
     joinInput.value = "";
   } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("Error joining organization:", error);
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     showNotification(`Failed to join organization: ${errorMsg}`);
   } finally {
@@ -787,7 +773,7 @@ async function handleRoleChange(select: HTMLSelectElement) {
     const adminCount = orgMembers.filter((m) => m.role === "admin").length;
     if (adminCount <= 1) {
       showNotification(
-        "Cannot change role: Organization must have at least one admin"
+        "Cannot change role: Organization must have at least one admin",
       );
       select.value = currentRole;
       return;
@@ -800,12 +786,10 @@ async function handleRoleChange(select: HTMLSelectElement) {
     showNotification("User role updated successfully");
     await renderOrganizationTab(); // Refresh
   } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("Error updating role:", error);
     showNotification(
       `Failed to update role: ${
         error instanceof Error ? error.message : "Unknown error"
-      }`
+      }`,
     );
     select.value = currentRole || "";
     select.disabled = false;
@@ -837,12 +821,10 @@ async function handleRemoveMember(userId: string, username: string) {
           await renderOrganizationTab(); // Refresh
           resolve();
         } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error("Error removing member:", error);
           showNotification(
             `Failed to remove member: ${
               error instanceof Error ? error.message : "Unknown error"
-            }`
+            }`,
           );
           resolve();
         }
@@ -860,12 +842,10 @@ async function handleApproveRequest(requestId: string) {
     showNotification("Join request approved");
     await renderOrganizationTab(); // Refresh
   } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("Error approving request:", error);
     showNotification(
       `Failed to approve request: ${
         error instanceof Error ? error.message : "Unknown error"
-      }`
+      }`,
     );
   }
 }
@@ -876,12 +856,10 @@ async function handleRejectRequest(requestId: string) {
     showNotification("Join request rejected");
     await renderOrganizationTab(); // Refresh
   } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("Error rejecting request:", error);
     showNotification(
       `Failed to reject request: ${
         error instanceof Error ? error.message : "Unknown error"
-      }`
+      }`,
     );
   }
 }
@@ -952,10 +930,10 @@ async function showCreateCloudProjectModal() {
 
   const form = document.getElementById("cloudProjectForm") as HTMLFormElement;
   const nameInput = document.getElementById(
-    "cloud-project-name"
+    "cloud-project-name",
   ) as HTMLInputElement;
   const cancelBtn = document.getElementById(
-    "cloudProjectCancelBtn"
+    "cloudProjectCancelBtn",
   ) as HTMLButtonElement;
   const closeBtn = modal.querySelector(".modal-close-btn") as HTMLButtonElement;
 
@@ -979,10 +957,8 @@ async function showCreateCloudProjectModal() {
       modal.remove();
       overlay.remove();
       await renderOrganizationTab(); // Refresh
-    } catch (error) {
+    } catch {
       showNotification("Failed to create project");
-      // eslint-disable-next-line no-console
-      console.error("Error creating cloud project:", error);
     }
   };
 
@@ -1054,14 +1030,14 @@ async function showEditCloudProjectModal(projectId: string) {
         <div style="margin-bottom: 15px;">
           <label for="cloud-project-edit-name">Project Name *</label><br>
           <input id="cloud-project-edit-name" name="name" type="text" value="${escapeHtml(
-            project.name
+            project.name,
           )}" required>
         </div>
         
         <div style="margin-bottom: 15px;">
           <label for="cloud-project-edit-description">Description</label><br>
           <textarea id="cloud-project-edit-description" name="description">${escapeHtml(
-            project.description || ""
+            project.description || "",
           )}</textarea>
         </div>
         
@@ -1085,13 +1061,13 @@ async function showEditCloudProjectModal(projectId: string) {
   document.body.appendChild(modal);
 
   const form = document.getElementById(
-    "cloudProjectEditForm"
+    "cloudProjectEditForm",
   ) as HTMLFormElement;
   const nameInput = document.getElementById(
-    "cloud-project-edit-name"
+    "cloud-project-edit-name",
   ) as HTMLInputElement;
   const cancelBtn = document.getElementById(
-    "cloudProjectEditCancelBtn"
+    "cloudProjectEditCancelBtn",
   ) as HTMLButtonElement;
   const closeBtn = modal.querySelector(".modal-close-btn") as HTMLButtonElement;
 
@@ -1113,10 +1089,8 @@ async function showEditCloudProjectModal(projectId: string) {
       modal.remove();
       overlay.remove();
       await renderOrganizationTab(); // Refresh
-    } catch (error) {
+    } catch {
       showNotification("Failed to update project");
-      // eslint-disable-next-line no-console
-      console.error("Error updating cloud project:", error);
     }
   };
 
@@ -1164,10 +1138,8 @@ async function archiveCloudProject(projectId: string) {
         await updateCloudProject(projectId, { is_active: false });
         showNotification("Project archived successfully!");
         await renderOrganizationTab();
-      } catch (error) {
+      } catch {
         showNotification("Failed to archive project");
-        // eslint-disable-next-line no-console
-        console.error("Error archiving project:", error);
       }
     },
   });
@@ -1186,10 +1158,8 @@ async function restoreCloudProject(projectId: string) {
         await updateCloudProject(projectId, { is_active: true });
         showNotification("Project restored successfully!");
         await renderOrganizationTab();
-      } catch (error) {
+      } catch {
         showNotification("Failed to restore project");
-        // eslint-disable-next-line no-console
-        console.error("Error restoring project:", error);
       }
     },
   });
@@ -1208,7 +1178,7 @@ async function showManageCloudMembersModal(projectId: string) {
       // Filter org members who aren't already project members
       const projectMemberIds = freshMembers.map((m) => m.user_id);
       const availableMembers = orgMembers.filter(
-        (m) => !projectMemberIds.includes(m.id)
+        (m) => !projectMemberIds.includes(m.id),
       );
 
       const membersList = freshMembers
@@ -1242,7 +1212,7 @@ async function showManageCloudMembersModal(projectId: string) {
       const userOptions = availableMembers
         .map(
           (user) =>
-            `<option value="${user.id}">${escapeHtml(user.username)}</option>`
+            `<option value="${user.id}">${escapeHtml(user.username)}</option>`,
         )
         .join("");
 
@@ -1291,7 +1261,7 @@ async function showManageCloudMembersModal(projectId: string) {
               await updateProjectMemberRole(
                 projectId,
                 userId!,
-                newRole as "manager" | "member"
+                newRole as "manager" | "member",
               );
               showNotification("Role updated successfully!");
               setTimeout(async () => {
@@ -1302,8 +1272,6 @@ async function showManageCloudMembersModal(projectId: string) {
               }, 500);
             } catch (error) {
               showNotification(`Failed to update role: ${error}`);
-              // eslint-disable-next-line no-console
-              console.error("Error updating member role:", error);
             }
           },
         });
@@ -1364,7 +1332,7 @@ async function showManageCloudMembersModal(projectId: string) {
 
       // Add member button
       const addMemberBtn = modal.querySelector(
-        "#addMemberBtn"
+        "#addMemberBtn",
       ) as HTMLButtonElement;
       if (addMemberBtn) {
         addMemberBtn.onclick = async () => {
@@ -1386,10 +1354,8 @@ async function showManageCloudMembersModal(projectId: string) {
                 document.getElementById("customModalOverlay")?.remove();
                 isMemberModalOpen = false;
               }, 500);
-            } catch (error) {
+            } catch {
               showNotification("Failed to add member");
-              // eslint-disable-next-line no-console
-              console.error("Error adding member:", error);
             }
           }
         };
@@ -1421,8 +1387,6 @@ async function showManageCloudMembersModal(projectId: string) {
                 await renderOrganizationTab();
               } catch (error) {
                 showNotification(`Failed to remove member: ${error}`);
-                // eslint-disable-next-line no-console
-                console.error("Error removing member:", error);
               }
             },
           });
@@ -1499,8 +1463,6 @@ async function showManageCloudMembersModal(projectId: string) {
   } catch (error) {
     isMemberModalOpen = false;
     showNotification("Failed to load project members");
-    // eslint-disable-next-line no-console
-    console.error("Error in showManageCloudMembersModal:", error);
   }
 }
 

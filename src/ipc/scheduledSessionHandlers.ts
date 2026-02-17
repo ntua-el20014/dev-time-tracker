@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import * as scheduledSessions from "../supabase/scheduledSessions";
 import { getCurrentUser } from "../supabase/api";
 import type { ScheduledSessionData } from "../supabase/scheduledSessions";
+import { logError } from "../utils/errorHandler";
 
 /**
  * Create a new scheduled session
@@ -21,7 +22,7 @@ ipcMain.handle(
         scheduledSession,
       );
     } catch (err) {
-      // Error creating scheduled session
+      logError("create-scheduled-session", err);
       return null;
     }
   },
@@ -69,7 +70,7 @@ ipcMain.handle(
         supabaseFilters,
       );
     } catch (err) {
-      // Error getting scheduled sessions
+      logError("get-scheduled-sessions", err);
       return [];
     }
   },
@@ -96,7 +97,7 @@ ipcMain.handle(
       await scheduledSessions.updateScheduledSession(sessionId, updates);
       return true;
     } catch (err) {
-      // Error updating scheduled session
+      logError("update-scheduled-session", err);
       return false;
     }
   },
@@ -119,7 +120,7 @@ ipcMain.handle(
       await scheduledSessions.deleteScheduledSession(sessionId);
       return true;
     } catch (err) {
-      // Error deleting scheduled session
+      logError("delete-scheduled-session", err);
       return false;
     }
   },
@@ -151,7 +152,7 @@ ipcMain.handle(
       );
       return true;
     } catch (err) {
-      // Error marking session as completed
+      logError("mark-scheduled-session-completed", err);
       return false;
     }
   },
@@ -170,7 +171,7 @@ ipcMain.handle("get-upcoming-session-notifications", async (_event) => {
 
     return await scheduledSessions.getUpcomingSessionNotifications(user.id);
   } catch (err) {
-    // Error getting notifications
+    logError("get-upcoming-session-notifications", err);
     return [];
   }
 });
@@ -186,7 +187,7 @@ ipcMain.handle(
       await scheduledSessions.markNotificationSent(sessionIdStr);
       return true;
     } catch (err) {
-      // Error marking notification as sent
+      logError("mark-notification-sent", err);
       return false;
     }
   },

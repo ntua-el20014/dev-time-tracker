@@ -6,6 +6,32 @@ import { ipcRenderer } from "electron";
 import { showInAppNotification } from "../components/Notifications";
 
 /**
+ * Notification throttle — prevent duplicate error notifications
+ * within a short window (e.g., many IPC calls failing at once).
+ */
+const NOTIFICATION_COOLDOWN_MS = 5_000;
+const recentNotifications = new Map<string, number>();
+
+function shouldShowNotification(message: string): boolean {
+  const now = Date.now();
+  const lastShown = recentNotifications.get(message);
+  if (lastShown && now - lastShown < NOTIFICATION_COOLDOWN_MS) {
+    return false;
+  }
+  recentNotifications.set(message, now);
+
+  // Clean up old entries periodically
+  if (recentNotifications.size > 50) {
+    for (const [key, ts] of recentNotifications) {
+      if (now - ts > NOTIFICATION_COOLDOWN_MS) {
+        recentNotifications.delete(key);
+      }
+    }
+  }
+  return true;
+}
+
+/**
  * Error types that can occur during IPC calls to Supabase-backed handlers.
  */
 export type IpcErrorType = "network" | "auth" | "not-found" | "unknown";
@@ -118,7 +144,10 @@ export async function safeIpcInvoke<T = unknown>(
 
     if (notify) {
       const msg = errorMessage || classified.message;
-      showInAppNotification(msg);
+      if (shouldShowNotification(msg)) {
+        const notifType = classified.type === "network" ? "warning" : "error";
+        showInAppNotification(msg, 3500, notifType);
+      }
     }
 
     if (rethrow) {
