@@ -241,6 +241,26 @@
   flex: 1;
 }
 
+.project-scope-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.project-scope-badge.scope-personal {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+.project-scope-badge.scope-organization {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
 .project-actions {
   display: flex;
   gap: 8px;

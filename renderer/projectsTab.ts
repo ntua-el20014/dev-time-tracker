@@ -142,6 +142,7 @@ function renderProjectCard(project: ProjectWithMembers): string {
           project.color || "#3b82f6"
         }"></div>
         <h3 class="project-name">${escapeHtml(project.name)}</h3>
+        <span class="project-scope-badge scope-${(project as any).scope || "personal"}">${(project as any).scope === "organization" ? "Org" : "Personal"}</span>
         <div class="project-actions">
           <button class="project-action-btn edit-project-btn" data-project-id="${
             project.id

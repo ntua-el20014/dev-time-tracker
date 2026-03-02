@@ -28,7 +28,9 @@ import {
   listInviteCodes,
   revokeInviteCode,
   joinWithInviteCode,
+  leaveOrganization,
 } from "./utils/organizationApi";
+import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
 import type {
   Organization,
   UserProfile,
@@ -315,6 +317,7 @@ function renderOrganizationInfo() {
               ? '<button id="create-team-org-btn" class="btn btn-primary">Create Team Organization</button>'
               : ""
           }
+          <button id="leave-org-btn" class="btn btn-danger">Leave Organization</button>
         </div>
       </div>
     </div>
@@ -336,6 +339,36 @@ function renderOrganizationInfo() {
     copyBtn.addEventListener("click", handleCopy);
     cleanupFunctions.push(() =>
       copyBtn.removeEventListener("click", handleCopy),
+    );
+  }
+
+  const leaveBtn = document.getElementById("leave-org-btn");
+  if (leaveBtn && currentOrg) {
+    const orgName = currentOrg.name;
+    const handleLeave = () => {
+      showConfirmationModal({
+        title: "Leave Organization",
+        message: `Are you sure you want to leave "${escapeHtml(orgName)}"? This cannot be undone.`,
+        confirmText: "Leave",
+        confirmClass: "btn-delete",
+        onConfirm: async () => {
+          try {
+            await leaveOrganization();
+            showNotification("You have left the organization.");
+            resetOrgWizardDismissed();
+            await renderOrganizationTab();
+            setTimeout(() => showOrgSetupWizard(), 800);
+          } catch (error) {
+            showNotification(
+              `Failed to leave: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          }
+        },
+      });
+    };
+    leaveBtn.addEventListener("click", handleLeave);
+    cleanupFunctions.push(() =>
+      leaveBtn.removeEventListener("click", handleLeave),
     );
   }
 }

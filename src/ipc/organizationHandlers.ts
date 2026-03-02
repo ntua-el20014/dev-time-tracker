@@ -147,6 +147,21 @@ ipcMain.handle("org:get-current-user-profile", async (_event) => {
   }
 });
 
+/**
+ * Leave current organization (self-service)
+ */
+ipcMain.handle("org:leave", async (_event) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Not authenticated");
+    await orgApi.leaveOrganization(user.id);
+    return true;
+  } catch (err) {
+    logError("org:leave", err);
+    throw err;
+  }
+});
+
 // =====================================================
 // JOIN REQUESTS
 // =====================================================

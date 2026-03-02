@@ -25,7 +25,12 @@ import {
 } from "../src/supabase/api";
 import { initializeOAuthListener } from "./utils/oauthHandler";
 import { loadUserLangMap } from "../src/utils/extractData";
-import { showOnboarding, shouldShowOnboarding } from "./components";
+import {
+  showOnboarding,
+  shouldShowOnboarding,
+  shouldShowOrgSetupWizard,
+  showOrgSetupWizard,
+} from "./components";
 import {
   initConnectionStatus,
   destroyConnectionStatus,
@@ -51,6 +56,7 @@ import "./styles/userRoleManager.css";
 import "./styles/auth.css";
 import "./styles/organization.css";
 import "./styles/connection-status.css";
+import "./styles/org-wizard.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
 function setupTabs() {
@@ -434,7 +440,7 @@ ipcRenderer.on("get-session-info", async () => {
       ipcRenderer.send("session-info-reply", {
         title: (formData.get("title") as string) || "Coding Session",
         description: formData.get("description") as string,
-        projectId: projectId ? parseInt(projectId) : undefined,
+        projectId: projectId || undefined,
         isBillable: isBillable,
       });
 
@@ -618,6 +624,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Show onboarding for new users
     if (shouldShowOnboarding()) {
       setTimeout(() => showOnboarding(), 500);
+    } else {
+      // Show org setup wizard if user has no org and hasn't dismissed
+      shouldShowOrgSetupWizard().then((show) => {
+        if (show) setTimeout(() => showOrgSetupWizard(), 1000);
+      });
     }
 
     // Check for scheduled session notifications 5 seconds after user logs in

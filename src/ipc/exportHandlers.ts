@@ -1,7 +1,6 @@
 /**
  * Export handlers for session-level data exports.
  * These are generic file I/O handlers used by the renderer's SessionExporter.
- * Extracted from the old dbHandler.ts (which handled SQLite-specific operations).
  */
 import { ipcMain, dialog } from "electron";
 import * as fs from "fs";

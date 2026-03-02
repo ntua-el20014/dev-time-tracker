@@ -8,7 +8,7 @@ export interface DailySummaryRow {
 }
 
 export interface SessionRow {
-  id: number;
+  id: string;
   timestamp: string;
   start_time: string;
   duration: number;
@@ -115,6 +115,7 @@ export interface Project {
   name: string;
   description?: string;
   color?: string;
+  scope?: "personal" | "organization";
   is_active: number;
   manager_id: number;
   org_id?: number;

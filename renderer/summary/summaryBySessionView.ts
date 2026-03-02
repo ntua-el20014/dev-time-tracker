@@ -44,7 +44,7 @@ export async function renderBySessionView(
   const allTags: Tag[] = await safeIpcInvoke("get-all-tags", [], {
     fallback: [],
   });
-  const allProjects = await safeIpcInvoke("get-user-projects", [], {
+  const allProjects: Project[] = await safeIpcInvoke("get-user-projects", [], {
     fallback: [],
   });
   let sessions: SessionRow[];
@@ -390,7 +390,7 @@ export function renderSessionPage(
         showDetailsModal({
           type: "session",
           data: {
-            sessionId: parseInt(sessionId),
+            sessionId: String(sessionId),
             title: session.title,
           },
         });

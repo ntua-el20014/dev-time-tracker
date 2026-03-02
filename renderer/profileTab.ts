@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { applyAccentColor } from "./renderer";
 import {
   renderPercentBar,
@@ -6,6 +5,7 @@ import {
   showColorGridPicker,
   showAvatarPicker,
   showConfirmationModal,
+  showNotification,
   renderAdminPanel,
   showOnboarding,
 } from "./components";
@@ -19,10 +19,15 @@ import {
   isCurrentUserAdmin,
   safeIpcInvoke,
 } from "./utils";
+import {
+  getCurrentOrganization,
+  getCurrentUserProfile,
+  leaveOrganization,
+} from "./utils/organizationApi";
+import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
 import { getLangIconUrl } from "../src/utils/extractData";
 import type { Tag } from "@shared/types";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function escapeHtml(text: string) {
   const div = document.createElement("div");
   div.textContent = text;
@@ -599,6 +604,97 @@ async function renderDailyGoalHistory(container: HTMLElement) {
   `;
 }
 
+async function renderOrganizationSection(container: HTMLElement) {
+  const profile = await getCurrentUserProfile();
+  const org = await getCurrentOrganization();
+
+  if (!profile) {
+    container.innerHTML = `<h2>Organization</h2><p>Could not load your profile.</p>`;
+    return;
+  }
+
+  const roleBadgeClass = `role-badge role-${profile.role || "employee"}`;
+  const roleLabel = profile.role
+    ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
+    : "Employee";
+
+  container.innerHTML = `
+    <h2>Organization</h2>
+    <div class="org-profile-section">
+      <div class="org-profile-card">
+        <div class="org-profile-row">
+          <label>Username:</label>
+          <span>${escapeHtml(profile.username)}</span>
+        </div>
+        <div class="org-profile-row">
+          <label>Email:</label>
+          <span>${escapeHtml(profile.email || "N/A")}</span>
+        </div>
+        <div class="org-profile-row">
+          <label>Role:</label>
+          <span class="${roleBadgeClass}">${roleLabel}</span>
+        </div>
+        <div class="org-profile-row">
+          <label>Organization:</label>
+          <span>${org ? escapeHtml(org.name) : '<span style="color:var(--text-secondary);">None</span>'}</span>
+        </div>
+        ${
+          org
+            ? `
+        <div class="org-profile-row">
+          <label>Org ID:</label>
+          <span class="org-uuid" title="${org.id}" style="font-size:0.85em;opacity:0.7;">${org.id}</span>
+        </div>
+        `
+            : ""
+        }
+      </div>
+      ${
+        org
+          ? `
+      <div style="margin-top: 1.5rem;">
+        <button id="leaveOrgBtn" class="btn btn-danger">Leave Organization</button>
+      </div>
+      <div class="info-note" style="margin-top:0.75rem;">
+        Leaving will remove you from this organization. You can create a new one or join another afterwards.
+      </div>
+      `
+          : `
+      <div class="info-note" style="margin-top:1rem;">
+        You're not in an organization. Go to the <b>Organization</b> tab to create or join one.
+      </div>
+      `
+      }
+    </div>
+  `;
+
+  // Leave org handler
+  const leaveBtn = container.querySelector("#leaveOrgBtn") as HTMLButtonElement;
+  if (leaveBtn && org) {
+    leaveBtn.addEventListener("click", () => {
+      showConfirmationModal({
+        title: "Leave Organization",
+        message: `Are you sure you want to leave "${escapeHtml(org.name)}"? This cannot be undone.`,
+        confirmText: "Leave",
+        confirmClass: "btn-delete",
+        onConfirm: async () => {
+          try {
+            await leaveOrganization();
+            showNotification("You have left the organization.");
+            resetOrgWizardDismissed();
+            renderOrganizationSection(container);
+            setTimeout(() => showOrgSetupWizard(), 800);
+          } catch (error) {
+            showNotification(
+              `Failed to leave: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          }
+        },
+      });
+    });
+  }
+}
+
 export async function refreshProfile() {
   const profileDiv = document.getElementById("profileContent");
   if (!profileDiv) return;
@@ -615,6 +711,7 @@ export async function refreshProfile() {
         <li><button class="profile-chapter-btn" data-chapter="goals">Daily Goals</button></li>
         <li><button class="profile-chapter-btn" data-chapter="settings">Settings</button></li>
         <li><button class="profile-chapter-btn" data-chapter="hotkeys">Hotkeys</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="organization">Organization</button></li>
         ${
           isAdmin
             ? '<li><button class="profile-chapter-btn" data-chapter="admin">Admin</button></li>'
@@ -645,6 +742,8 @@ export async function refreshProfile() {
       await renderHotkeys(contentDiv);
     } else if (chapter === "goals") {
       await renderDailyGoalHistory(contentDiv);
+    } else if (chapter === "organization") {
+      await renderOrganizationSection(contentDiv);
     } else if (chapter === "admin") {
       await renderAdminPanel(contentDiv);
     }

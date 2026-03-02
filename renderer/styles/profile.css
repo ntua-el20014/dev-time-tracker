@@ -30,7 +30,9 @@
   color: color-mix(in srgb, var(--fg) 80%, #000 20%);
   background: none;
   border-radius: 8px;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 .profile-chapter-btn.active,
 .profile-chapter-btn:hover {
@@ -54,7 +56,9 @@
   font-weight: bold;
   cursor: pointer;
   box-shadow: 0 2px 8px #0002;
-  transition: background 0.2s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
   outline: none;
 }
 .logout-btn:active,
@@ -419,6 +423,33 @@
 .avatar-picker-menu .regular-avatar:hover {
   border-color: #2980b9 !important;
   box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+/* --- Organization Profile Section --- */
+.org-profile-section {
+  max-width: 500px;
+}
+.org-profile-card {
+  background: var(--card-bg, #23232b);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border, #333);
+}
+.org-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border, #333);
+}
+.org-profile-row:last-child {
+  border-bottom: none;
+}
+.org-profile-row label {
+  min-width: 110px;
+  font-weight: 600;
+  color: var(--text-secondary, #aaa);
+  font-size: 0.95em;
 }
 
 /* --- Responsive --- */

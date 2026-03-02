@@ -375,18 +375,30 @@
 - [x] Session timeout handling
 
 ### Step 6.4: Complete Profile Integration
-- [ ] Organization setup wizard (on first login)
-- [ ] Add organization section to Profile tab
-- [ ] Show current organization details
-- [ ] Allow organization switching (if member of multiple)
-- [ ] Show permission/role information
-- [ ] Add leave organization option
+- [x] Organization setup wizard (on first login)
+- [x] Add organization section to Profile tab
+- [x] Show current organization details
+- [x] Show permission/role information
+- [x] Add leave organization option
 
 ### Step 6.5: Testing & Validation
+-     Start/stop/resume tracking
+-     Dashboard data loading
+-     Logs tab (daily goals, usage logs)
+-     Calendar tab
+-     Summary tab (both views)
+-     Projects tab (create, archive, members)
+-     Profile tab (preferences, editor colors, idle timeout)
+-     Session review panel
+-     Scheduled sessions
+-     Tags (create, assign, filter)
+-     Organization features
+-     Export (CSV/JSON)
+
 - [ ] Test all CRUD operations for each table
 - [ ] Test RLS policies with different user roles
 - [ ] Test organization-level data access
-- [ ] Test error scenarios (network failures, auth errors)
+- [x] Test error scenarios (network failures, auth errors)
 - [ ] Test with multiple users in same organization
 - [ ] Verify no data leaks between organizations
 
@@ -423,6 +435,7 @@
 - [ ] Gamification (goals, badges, leaderboards)
 - [ ] Advanced analytics and reporting
 - [ ] Export individual reports (PDF, CSV)
+- [ ] Allow organization switching (if member of multiple)
 
 ### Step 7.5: Production Ready
 - [ ] Set up proper error logging (Sentry?)

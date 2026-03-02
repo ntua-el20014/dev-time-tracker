@@ -234,3 +234,18 @@ export async function getCurrentUserProfile(
   }
   return null;
 }
+
+/**
+ * Leave the current organization (self-service)
+ * Sets user's org_id to null and role to 'employee'
+ */
+export async function leaveOrganization(userId: string): Promise<void> {
+  // @ts-ignore - Supabase RLS typing limitation
+  const result = await supabase
+    .from("user_profiles")
+    // @ts-ignore
+    .update({ org_id: null, role: "employee" })
+    .eq("id", userId);
+
+  if (result.error) throw result.error;
+}

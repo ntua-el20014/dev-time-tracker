@@ -1,4 +1,3 @@
-import { ipcRenderer } from "electron";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
 import { escapeHtml, prettyDate, prettyTime, safeIpcInvoke } from "../utils";
 
@@ -7,7 +6,7 @@ export interface DetailsModalConfig {
   data: {
     app?: string;
     date?: string;
-    sessionId?: number;
+    sessionId?: string;
     title?: string;
   };
   onClose?: () => void;

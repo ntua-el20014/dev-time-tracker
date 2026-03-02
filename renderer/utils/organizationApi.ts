@@ -90,6 +90,10 @@ export async function removeUserFromOrganization(
   return await safeIpcInvoke<void>("org:remove-user", [userId]);
 }
 
+export async function leaveOrganization(): Promise<boolean> {
+  return await safeIpcInvoke<boolean>("org:leave", []);
+}
+
 export async function getCurrentUserProfile(): Promise<UserProfile | null> {
   return await safeIpcInvoke<UserProfile | null>(
     "org:get-current-user-profile",
