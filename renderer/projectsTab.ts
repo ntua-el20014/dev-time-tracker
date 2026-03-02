@@ -3,7 +3,9 @@ import { ProjectWithMembers } from "@shared/types";
 import {
   getCurrentUserId,
   isCurrentUserManagerOrAdmin,
+  getCurrentUserRole,
   safeIpcInvoke,
+  withLoading,
 } from "./utils";
 import {
   showInAppNotification,
@@ -32,12 +34,10 @@ export async function renderProjects() {
     return;
   }
 
-  // Show loading while projects load
-  projectsContainer.innerHTML =
-    '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading projects…</span></div>';
-
-  // Load projects data
-  await loadProjects();
+  // Load projects data (with loading indicator)
+  await withLoading(projectsContainer, "Loading projects…", async () => {
+    await loadProjects();
+  });
 
   projectsContainer.innerHTML = `
     <div class="projects-container">
@@ -89,11 +89,8 @@ export async function renderProjects() {
 
 async function loadProjects() {
   try {
-    // Get projects based on user role - admins see all, managers see only their projects
-    const currentUserId = getCurrentUserId();
-    const userRole = await safeIpcInvoke("get-user-role", [currentUserId], {
-      fallback: "member",
-    });
+    // Get projects based on user role — uses cached role to avoid redundant IPC call
+    const userRole = await getCurrentUserRole();
 
     if (userRole === "admin") {
       currentProjects = await safeIpcInvoke(

@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { ipcRenderer } from "electron";
-import { getMonday, filterDailyDataForWeek, safeIpcInvoke } from "./utils";
+import {
+  getMonday,
+  filterDailyDataForWeek,
+  safeIpcInvoke,
+  withLoading,
+} from "./utils";
 import {
   renderTimelineChart,
   renderCustomChartsSection,
@@ -28,12 +33,11 @@ export async function renderSummary() {
   if (!summaryDiv) return;
   summaryDiv.innerHTML = "";
 
-  // Show loading spinner
-  summaryDiv.innerHTML =
-    '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading summary…</span></div>';
-
-  summaryState.allDailyData = await safeIpcInvoke("get-daily-summary", [], {
-    fallback: [],
+  // Fetch data with loading spinner
+  await withLoading(summaryDiv, "Loading summary…", async () => {
+    summaryState.allDailyData = await safeIpcInvoke("get-daily-summary", [], {
+      fallback: [],
+    });
   });
 
   summaryDiv.innerHTML = "";
@@ -151,6 +155,7 @@ export async function renderSummary() {
     byDateBtn.classList.remove("active");
     byDateContainer.style.display = "none";
     bySessionContainer.style.display = "";
+    summaryState.bySessionView.allSessions = [];
     summaryState.bySessionView.filteredSessions = [];
     // Reset sorting state and pagination for session view
     summaryState.bySessionView.sortState = { column: null, direction: "asc" };

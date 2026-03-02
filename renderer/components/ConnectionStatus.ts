@@ -1,6 +1,6 @@
 /**
  * Connection Status Indicator
- * Shows a small pill in the top-right corner of the main UI
+ * Shows a small pill in the bottom-right corner of the main UI
  * reflecting whether the app is online and can reach Supabase.
  */
 

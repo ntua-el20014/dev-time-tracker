@@ -382,43 +382,29 @@
 - [x] Add leave organization option
 
 ### Step 6.5: Testing & Validation
--     Start/stop/resume tracking
--     Dashboard data loading
--     Logs tab (daily goals, usage logs)
--     Calendar tab
--     Summary tab (both views)
--     Projects tab (create, archive, members)
--     Profile tab (preferences, editor colors, idle timeout)
--     Session review panel
--     Scheduled sessions
--     Tags (create, assign, filter)
--     Organization features
--     Export (CSV/JSON)
-
-- [ ] Test all CRUD operations for each table
-- [ ] Test RLS policies with different user roles
-- [ ] Test organization-level data access
+- [x] Test all CRUD operations for each table
+- [x] Test RLS policies with different user roles
+- [x] Test organization-level data access
 - [x] Test error scenarios (network failures, auth errors)
-- [ ] Test with multiple users in same organization
-- [ ] Verify no data leaks between organizations
+- [x] Test with multiple users in same organization
+- [x] Verify no data leaks between organizations
 
 ## ═══════════════════════════════════════════════════════════════════
 ## PHASE 7: ENHANCEMENTS
 ## ═══════════════════════════════════════════════════════════════════
 
 ### Step 7.1: Performance Optimization
-- [ ] Add pagination for large data sets
-- [ ] Implement lazy loading for calendar/summary
-- [ ] Optimize Supabase queries (add indexes if needed)
-- [ ] Add loading indicators for slow operations
-- [ ] Profile and optimize render performance
+- [x] Add pagination for large data sets
+- [x] Implement lazy loading for calendar/summary (dirty-flag system for all tabs)
+- [x] Optimize Supabase queries (.select() column restrictions, bounded daily-summary to 90 days)
+- [x] Add loading indicators for slow operations
+- [x] Profile and optimize render performance (DocumentFragment, event delegation, requestAnimationFrame)
 
 ### Step 7.2: Add Caching Strategy
-- [ ] Implement in-memory cache for recent sessions
-- [ ] Cache today's usage logs in localStorage
-- [ ] Cache user preferences in localStorage
-- [ ] Add cache invalidation strategy
-- [ ] Reduce redundant Supabase calls
+- [x] Cache today's usage logs in localStorage
+- [x] Cache user preferences in localStorage
+- [x] Add cache invalidation strategy
+- [x] Reduce redundant Supabase calls
 
 ### Step 7.3: Real-time Features (Future)
 - [ ] Set up Supabase Realtime subscriptions
@@ -449,5 +435,4 @@
 ## NOTES
 ## ═══════════════════════════════════════════════════════════════════
 
-- Move Connection Status indicator to the bottom right instead of top
 - Password reset email templates

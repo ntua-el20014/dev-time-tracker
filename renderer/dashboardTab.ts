@@ -1,4 +1,4 @@
-import { renderPercentBar, showInAppNotification } from "./components";
+import { renderPercentBar } from "./components";
 import {
   getMonday,
   getWeekDates,
@@ -6,6 +6,7 @@ import {
   filterDailyDataForWeek,
   safeIpcInvoke,
   withLoading,
+  getDailyGoalCached,
 } from "./utils";
 import { getLangIconUrl } from "../src/utils/extractData";
 import type { DailySummaryRow, SessionRow } from "@shared/types";
@@ -23,24 +24,9 @@ export async function renderDashboard() {
     </div>
   `;
 
-  // Show loading state in the quickstats area while data loads
-  const quickstatsDiv = document.getElementById("dashboard-quickstats");
-  if (quickstatsDiv) {
-    quickstatsDiv.innerHTML =
-      '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading dashboard…</span></div>';
-  }
-
   // --- Daily Goal Progress Bar ---
   const today = new Date().toLocaleDateString("en-CA");
-  const dailyGoal = await safeIpcInvoke("get-daily-goal", [today], {
-    fallback: null,
-    showNotification: false,
-  });
-  const totalMins = await safeIpcInvoke<number>(
-    "get-total-time-for-day",
-    [today],
-    { fallback: 0, showNotification: false },
-  );
+  const { goal: dailyGoal, totalMins } = await getDailyGoalCached(today);
 
   const goalDiv = document.getElementById("dashboard-goal-progress");
   if (goalDiv && dailyGoal) {
@@ -78,7 +64,12 @@ export async function renderDashboard() {
   }
 
   // --- Recent Activity Stats ---
-  await renderRecentActivity();
+  const quickstatsDiv = document.getElementById("dashboard-quickstats");
+  if (quickstatsDiv) {
+    await withLoading(quickstatsDiv, "Loading dashboard…", async () => {
+      await renderRecentActivity();
+    });
+  }
   /*
   // Recent activity chart (example: last 7 days total usage)
   const chartsDiv = document.getElementById('dashboard-charts');
@@ -133,7 +124,10 @@ async function renderCalendarWidget(): Promise<HTMLDivElement> {
     { fallback: [] },
   );
   const loggedDaysSet = new Set(
-    loggedDaysRaw.map((row) => Number(row.date.split("-")[2])),
+    loggedDaysRaw.map((row) => {
+      const dateStr = typeof row === "string" ? row : row.date;
+      return Number(dateStr.split("-")[2]);
+    }),
   );
 
   // Build calendar grid
@@ -227,14 +221,23 @@ async function renderRecentActivity() {
   const statsDiv = document.getElementById("dashboard-quickstats");
   if (!statsDiv) return;
 
+  // Only fetch last 90 days for streak calculation (avoids unbounded growth)
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const streakStartDate = getLocalDateString(ninetyDaysAgo);
+
   const dailySummary: DailySummaryRow[] = await safeIpcInvoke(
     "get-daily-summary",
-    [],
+    [{ startDate: streakStartDate }],
     { fallback: [] },
   );
-  const sessions: SessionRow[] = await safeIpcInvoke("get-sessions", [], {
-    fallback: [],
-  });
+  // Dashboard only needs this week's sessions — fetch with date range
+  const weekStart = getLocalDateString(getMonday(new Date()));
+  const sessions: SessionRow[] = await safeIpcInvoke(
+    "get-sessions",
+    [{ startDate: weekStart }],
+    { fallback: [] },
+  );
 
   // Get current week dates
   const monday = getMonday(new Date());

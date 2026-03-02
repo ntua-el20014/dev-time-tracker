@@ -1,4 +1,3 @@
-import { ipcRenderer } from "electron";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
 import { escapeHtml, prettyDate, safeIpcInvoke } from "../utils";
 import { showChartConfigModal, showDetailsModal } from "../components";
@@ -72,9 +71,7 @@ export async function renderByDateView(
       renderByDateTable(container, state.filteredData, state);
     },
     onClear: async () => {
-      state.filteredData = await safeIpcInvoke("get-daily-summary", [], {
-        fallback: [],
-      });
+      state.filteredData = allDailyData;
       renderByDateTable(container, state.filteredData, state);
     },
   });
@@ -101,11 +98,9 @@ export async function renderByDateView(
   detailsTitle.appendChild(createChartBtn);
   container.appendChild(detailsTitle);
 
-  // Initial data load
+  // Initial data load — use the already-fetched allDailyData instead of re-fetching
   if (!state.filteredData.length) {
-    state.filteredData = await safeIpcInvoke("get-daily-summary", [], {
-      fallback: [],
-    });
+    state.filteredData = allDailyData;
   }
   renderByDateTable(container, state.filteredData, state);
 }
@@ -262,28 +257,27 @@ export function renderByDatePage(
   detailsContainer.appendChild(table);
   container.appendChild(detailsContainer);
 
-  // Attach click handlers to sortable headers (both in thead and tbody)
-  container.querySelectorAll(".sortable-header").forEach((header) => {
-    header.addEventListener("click", () => {
-      const column = (header as HTMLElement).getAttribute("data-column");
-      if (column) {
-        handleByDateSort(container, column, state);
-      }
-    });
-  });
+  // Event delegation — single listener on the table handles all clicks
+  table.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
 
-  // Attach click handlers to clickable rows
-  table.querySelectorAll(".clickable-row").forEach((row) => {
-    row.addEventListener("click", () => {
-      const app = (row as HTMLElement).getAttribute("data-app");
-      const date = (row as HTMLElement).getAttribute("data-date");
+    // Sortable header click
+    const header = target.closest(".sortable-header") as HTMLElement | null;
+    if (header) {
+      const column = header.getAttribute("data-column");
+      if (column) handleByDateSort(container, column, state);
+      return;
+    }
+
+    // Clickable row click
+    const row = target.closest(".clickable-row") as HTMLElement | null;
+    if (row) {
+      const app = row.getAttribute("data-app");
+      const date = row.getAttribute("data-date");
       if (app && date) {
-        showDetailsModal({
-          type: "app-date",
-          data: { app, date },
-        });
+        showDetailsModal({ type: "app-date", data: { app, date } });
       }
-    });
+    }
   });
 }
 

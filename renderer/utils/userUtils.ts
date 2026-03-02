@@ -43,23 +43,48 @@ export async function getCurrentUserIdAsync(): Promise<string> {
   throw new Error("No user ID available — user is not authenticated");
 }
 
-// Role-based access control helpers
-export async function isCurrentUserAdmin(): Promise<boolean> {
+// ── Role Cache ──────────────────────────────────────────────────────
+// Avoids re-fetching the user's role on every tab switch / render.
+// Cached per userId with a short TTL (30 s). Invalidated on sign-out.
+interface RoleCacheEntry {
+  role: string; // "admin" | "manager" | "member" | …
+  ts: number;
+}
+
+const ROLE_CACHE_TTL = 30_000; // 30 seconds
+let _roleCache: RoleCacheEntry | null = null;
+
+/** Clear the cached role (call on sign-out or role change). */
+export function clearRoleCache(): void {
+  _roleCache = null;
+}
+
+/** Get the current user's role, using a short-lived cache. */
+export async function getCurrentUserRole(): Promise<string> {
   const userId = getCurrentUserIdSafe();
-  if (!userId) return false;
-  return await safeIpcInvoke("is-user-admin", [userId], {
-    fallback: false,
+  if (!userId) return "member";
+
+  if (_roleCache && Date.now() - _roleCache.ts < ROLE_CACHE_TTL) {
+    return _roleCache.role;
+  }
+
+  const role = await safeIpcInvoke<string>("get-user-role", [userId], {
+    fallback: "member",
     showNotification: false,
   });
+  _roleCache = { role, ts: Date.now() };
+  return role;
+}
+
+// Role-based access control helpers
+export async function isCurrentUserAdmin(): Promise<boolean> {
+  const role = await getCurrentUserRole();
+  return role === "admin";
 }
 
 export async function isCurrentUserManagerOrAdmin(): Promise<boolean> {
-  const userId = getCurrentUserIdSafe();
-  if (!userId) return false;
-  return await safeIpcInvoke("is-user-manager-or-admin", [userId], {
-    fallback: false,
-    showNotification: false,
-  });
+  const role = await getCurrentUserRole();
+  return role === "admin" || role === "manager";
 }
 
 export async function getCurrentUserInfo() {

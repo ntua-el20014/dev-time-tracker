@@ -38,7 +38,7 @@ export function showSessionReviewPanel(onComplete?: () => void) {
 
   const modal = document.createElement("div");
   modal.id = "sessionReviewModal";
-  modal.className = "active";
+  modal.className = "session-modal active";
   modal.innerHTML = `
     <div class="session-modal-content session-review-panel">
       <button class="modal-close-btn">&times;</button>

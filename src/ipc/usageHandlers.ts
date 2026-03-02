@@ -82,6 +82,8 @@ ipcMain.handle(
         if (filters.endDate) supabaseFilters.endDate = filters.endDate;
         if (filters.app) supabaseFilters.app = filters.app;
         if (filters.language) supabaseFilters.language = filters.language;
+        if (filters.limit) supabaseFilters.limit = filters.limit;
+        if (filters.offset) supabaseFilters.offset = filters.offset;
       }
 
       return await usageLogs.getDailySummary(user.id, supabaseFilters);

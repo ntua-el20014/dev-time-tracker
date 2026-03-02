@@ -30,6 +30,7 @@ import {
   joinWithInviteCode,
   leaveOrganization,
 } from "./utils/organizationApi";
+import { withLoading } from "./utils";
 import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
 import type {
   Organization,
@@ -60,17 +61,20 @@ export async function renderOrganizationTab() {
   cleanupFunctions.forEach((cleanup) => cleanup());
   cleanupFunctions = [];
 
-  // Show loading state
-  container.innerHTML = `
-    <div class="org-loading">
-      <p>Loading organization...</p>
-    </div>
-  `;
-
   try {
-    // Fetch data
-    currentUserProfile = await getCurrentUserProfile();
-    currentOrg = await getCurrentOrganization();
+    // Fetch data (with loading indicator)
+    let fetchError = false;
+    await withLoading(container, "Loading organization…", async () => {
+      currentUserProfile = await getCurrentUserProfile();
+      currentOrg = await getCurrentOrganization();
+    }).catch(() => {
+      fetchError = true;
+    });
+    if (fetchError) {
+      container.innerHTML =
+        '<div class="org-loading"><p>Failed to load organization data.</p></div>';
+      return;
+    }
 
     if (!currentOrg || !currentUserProfile) {
       container.innerHTML = `

@@ -6,6 +6,10 @@ import pauseIconImg from "../assets/pause-button.png";
 import playIconImg from "../assets/play-button.png";
 import { applyAccentColor } from "./renderer";
 import { safeIpcInvoke } from "./utils/ipcHelpers";
+import {
+  getCachedTheme,
+  updateCachedPreference,
+} from "./utils/preferencesCache";
 
 // --- User Theme Preference Helpers ---
 
@@ -17,7 +21,9 @@ export async function initTheme() {
     toggleBtn.addEventListener("click", async () => {
       const isLight = !document.body.classList.contains("light");
       document.body.classList.toggle("light", isLight);
-      await safeIpcInvoke("set-user-theme", [isLight ? "light" : "dark"], {
+      const newTheme = isLight ? "light" : "dark";
+      updateCachedPreference("theme", newTheme);
+      await safeIpcInvoke("set-user-theme", [newTheme], {
         showNotification: false,
       });
       updateThemeIcon(themeIcon);
@@ -25,18 +31,29 @@ export async function initTheme() {
       window.dispatchEvent(new Event("theme-changed"));
     });
 
-    // Load theme from Supabase preferences
-    const savedTheme = (await safeIpcInvoke("get-user-theme", [], {
-      fallback: "dark",
-      showNotification: false,
-    })) as "light" | "dark";
-    if (savedTheme === "light") {
+    // Apply cached theme instantly (no round-trip)
+    const cachedTheme = getCachedTheme();
+    if (cachedTheme === "light") {
       document.body.classList.add("light");
     } else {
       document.body.classList.remove("light");
     }
     updateThemeIcon(themeIcon);
     applyAccentColor();
+
+    // Background refresh — update if server disagrees
+    safeIpcInvoke<"light" | "dark">("get-user-theme", [], {
+      fallback: cachedTheme as "light" | "dark",
+      showNotification: false,
+    }).then((serverTheme) => {
+      if (serverTheme !== cachedTheme) {
+        updateCachedPreference("theme", serverTheme);
+        document.body.classList.toggle("light", serverTheme === "light");
+        updateThemeIcon(themeIcon);
+        applyAccentColor();
+        window.dispatchEvent(new Event("theme-changed"));
+      }
+    });
   }
 }
 

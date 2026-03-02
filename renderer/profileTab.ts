@@ -18,6 +18,7 @@ import {
   removeCustomAvatar,
   isCurrentUserAdmin,
   safeIpcInvoke,
+  withLoading,
 } from "./utils";
 import {
   getCurrentOrganization,
@@ -730,23 +731,24 @@ export async function refreshProfile() {
   const buttons = profileDiv.querySelectorAll(".profile-chapter-btn");
 
   async function showChapter(chapter: string) {
-    contentDiv.innerHTML =
-      '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading…</span></div>';
-    if (chapter === "editor") {
-      await renderEditorUsage(contentDiv);
-    } else if (chapter === "language") {
-      await renderLanguageUsage(contentDiv);
-    } else if (chapter === "settings") {
-      await renderSettings(contentDiv);
-    } else if (chapter === "hotkeys") {
-      await renderHotkeys(contentDiv);
-    } else if (chapter === "goals") {
-      await renderDailyGoalHistory(contentDiv);
-    } else if (chapter === "organization") {
-      await renderOrganizationSection(contentDiv);
-    } else if (chapter === "admin") {
-      await renderAdminPanel(contentDiv);
-    }
+    contentDiv.innerHTML = "";
+    await withLoading(contentDiv, "Loading…", async () => {
+      if (chapter === "editor") {
+        await renderEditorUsage(contentDiv);
+      } else if (chapter === "language") {
+        await renderLanguageUsage(contentDiv);
+      } else if (chapter === "settings") {
+        await renderSettings(contentDiv);
+      } else if (chapter === "hotkeys") {
+        await renderHotkeys(contentDiv);
+      } else if (chapter === "goals") {
+        await renderDailyGoalHistory(contentDiv);
+      } else if (chapter === "organization") {
+        await renderOrganizationSection(contentDiv);
+      } else if (chapter === "admin") {
+        await renderAdminPanel(contentDiv);
+      }
+    });
     // Highlight active
     buttons.forEach((btn) => {
       btn.classList.toggle(

@@ -105,7 +105,9 @@ function aggregateSummaryRows(rows: any[], keyFn: (row: any) => string): any[] {
 export async function getUsageSummary(userId: string, date: string) {
   const { data, error } = await supabase
     .from("daily_usage_summary")
-    .select("*")
+    .select(
+      "date, app_name, icon_url, language, language_extension, time_spent_seconds",
+    )
     .eq("user_id", userId)
     .eq("date", date)
     .order("time_spent_seconds", { ascending: false });
@@ -138,7 +140,9 @@ export async function getUsageLogs(
 
   let query = supabase
     .from("usage_logs")
-    .select("*")
+    .select(
+      "app_name, window_title, icon_url, language, language_extension, time_spent_seconds, timestamp",
+    )
     .eq("user_id", userId)
     .gte("timestamp", startOfDay)
     .lte("timestamp", endOfDay)
@@ -178,11 +182,15 @@ export async function getDailySummary(
     endDate?: string;
     app?: string;
     language?: string;
+    limit?: number;
+    offset?: number;
   },
 ) {
   let query = supabase
     .from("daily_usage_summary")
-    .select("*")
+    .select(
+      "date, app_name, icon_url, language, language_extension, time_spent_seconds",
+    )
     .eq("user_id", userId)
     .order("date", { ascending: false });
 
@@ -197,6 +205,15 @@ export async function getDailySummary(
   }
   if (filters?.language) {
     query = query.eq("language", filters.language);
+  }
+  if (filters?.limit) {
+    query = query.limit(filters.limit);
+  }
+  if (filters?.offset) {
+    query = query.range(
+      filters.offset,
+      filters.offset + (filters.limit || 200) - 1,
+    );
   }
 
   const { data, error } = await query;
@@ -307,7 +324,9 @@ export async function getUsageDetailsForAppDate(
 
   const { data, error } = await supabase
     .from("usage_logs")
-    .select("*")
+    .select(
+      "app_name, window_title, icon_url, language, language_extension, time_spent_seconds, timestamp",
+    )
     .eq("user_id", userId)
     .eq("app_name", app)
     .gte("timestamp", startOfDay)
@@ -350,7 +369,9 @@ export async function getUsageDetailsForSession(
 
   const { data, error } = await supabase
     .from("usage_logs")
-    .select("*")
+    .select(
+      "app_name, window_title, icon_url, language, language_extension, time_spent_seconds, timestamp",
+    )
     .eq("user_id", userId)
     .gte("timestamp", startTime)
     .lte("timestamp", endTime)

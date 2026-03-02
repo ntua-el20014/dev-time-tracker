@@ -18,3 +18,12 @@ export * from "./performance";
 
 // IPC error handling utilities
 export * from "./ipcHelpers";
+
+// Daily goal cache
+export * from "./dailyGoalCache";
+
+// Preferences cache
+export * from "./preferencesCache";
+
+// Today's logs cache
+export * from "./logsCache";

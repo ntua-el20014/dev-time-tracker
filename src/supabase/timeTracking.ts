@@ -88,7 +88,9 @@ export async function getSmallSessions(
 ) {
   const { data, error } = await supabase
     .from("time_tracking_sessions")
-    .select("*")
+    .select(
+      "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
+    )
     .eq("user_id", userId)
     .lte("duration", maxDurationSeconds)
     .order("start_time", { ascending: false });
@@ -163,7 +165,9 @@ export async function getAllSessions(
     // Build query with session IDs filter
     let query = supabase
       .from("time_tracking_sessions")
-      .select("*")
+      .select(
+        "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
+      )
       .eq("user_id", userId)
       .in("id", sessionIds)
       .order("start_time", { ascending: false });
@@ -202,7 +206,9 @@ export async function getAllSessions(
   // No tag filter - proceed with regular query
   let query = supabase
     .from("time_tracking_sessions")
-    .select("*")
+    .select(
+      "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
+    )
     .eq("user_id", userId)
     .order("start_time", { ascending: false });
 
@@ -243,7 +249,9 @@ export async function getAllSessions(
 export async function getSessionById(sessionId: string) {
   const { data, error } = await supabase
     .from("time_tracking_sessions")
-    .select("*")
+    .select(
+      "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
+    )
     .eq("id", sessionId)
     .single();
 
@@ -351,7 +359,9 @@ export async function getSessionsInDateRange(
 ) {
   const { data, error } = await supabase
     .from("time_tracking_sessions")
-    .select("*")
+    .select(
+      "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
+    )
     .eq("user_id", userId)
     .gte("start_time", startDate)
     .lte("start_time", endDate)

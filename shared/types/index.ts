@@ -46,6 +46,8 @@ export type DailySummaryFilters = {
   app?: string;
   startDate?: string;
   endDate?: string;
+  limit?: number;
+  offset?: number;
 };
 
 export interface User {

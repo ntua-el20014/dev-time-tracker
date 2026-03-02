@@ -1,6 +1,11 @@
 import { formatTimeSpent } from "../src/utils/timeFormat";
-import type { LogEntry } from "@shared/types";
-import { safeIpcInvoke } from "./utils";
+import {
+  safeIpcInvoke,
+  withLoading,
+  getDailyGoalCached,
+  invalidateDailyGoalCache,
+  getLogsCached,
+} from "./utils";
 import { getLangIconUrl } from "../src/utils/extractData";
 import { showModal, showInAppNotification } from "./components";
 
@@ -26,10 +31,7 @@ export async function renderLogs(date?: string) {
   }
 
   const today = date || new Date().toLocaleDateString("en-CA");
-  const dailyGoal = await safeIpcInvoke("get-daily-goal", [today], {
-    fallback: null,
-    showNotification: false,
-  });
+  const { goal: dailyGoal } = await getDailyGoalCached(today);
 
   dailyGoalDiv.innerHTML = "";
 
@@ -50,6 +52,7 @@ export async function renderLogs(date?: string) {
       .querySelector("#deleteDailyGoalBtn")
       ?.addEventListener("click", async () => {
         await safeIpcInvoke("delete-daily-goal", [today], { fallback: null });
+        invalidateDailyGoalCache(today);
         showInAppNotification("Daily goal deleted.");
         renderLogs(date);
       });
@@ -94,6 +97,7 @@ export async function renderLogs(date?: string) {
             [today, mins, values.description || ""],
             { fallback: null },
           );
+          invalidateDailyGoalCache(today);
           showInAppNotification("Daily goal set!");
           renderLogs(date);
         },
@@ -118,36 +122,36 @@ export async function renderLogs(date?: string) {
   todayTitle.style.color = "var(--accent)";
   container.insertBefore(todayTitle, container.firstChild);
 
-  // Show loading while fetching logs
+  // Fetch logs with loading indicator
   const tbody = document.querySelector("#logTable tbody");
   if (!tbody) return;
-  tbody.innerHTML =
-    '<tr><td colspan="5"><div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading logs…</span></div></td></tr>';
+  const tbodyParent = tbody.parentElement!;
+  await withLoading(tbodyParent, "Loading logs…", async () => {
+    const logs = await getLogsCached(date);
 
-  const logs = await safeIpcInvoke<LogEntry[]>("get-logs", [date], {
-    fallback: [],
-  });
-
-  tbody.innerHTML = "";
-  logs.forEach((log) => {
-    const timeSpent = formatTimeSpent(log.time_spent);
-    const langIcon = getLangIconUrl(log.lang_ext);
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td><img src="${log.icon}" alt="${escapeHtml(
-        log.app,
-      )} icon" class="icon" /></td>
-      <td>${escapeHtml(log.app)}</td>
-      <td>${
-        langIcon
-          ? `<img src="${langIcon}" alt="${escapeHtml(
-              log.language,
-            )}" class="lang-icon" />`
-          : ""
-      }</td>
-      <td>${escapeHtml(log.language)}</td>
-      <td>${escapeHtml(timeSpent)}</td>
-    `;
-    tbody.appendChild(row);
+    tbody.innerHTML = "";
+    const fragment = document.createDocumentFragment();
+    logs.forEach((log) => {
+      const timeSpent = formatTimeSpent(log.time_spent);
+      const langIcon = getLangIconUrl(log.lang_ext);
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td><img src="${log.icon}" alt="${escapeHtml(
+          log.app,
+        )} icon" class="icon" /></td>
+        <td>${escapeHtml(log.app)}</td>
+        <td>${
+          langIcon
+            ? `<img src="${langIcon}" alt="${escapeHtml(
+                log.language,
+              )}" class="lang-icon" />`
+            : ""
+        }</td>
+        <td>${escapeHtml(log.language)}</td>
+        <td>${escapeHtml(timeSpent)}</td>
+      `;
+      fragment.appendChild(row);
+    });
+    tbody.appendChild(fragment);
   });
 }

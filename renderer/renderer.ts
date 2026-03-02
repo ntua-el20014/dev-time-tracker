@@ -16,7 +16,15 @@ import {
 } from "./components";
 import { renderLandingPage } from "./components";
 import { safeIpcInvoke } from "./utils";
-import { isCurrentUserManagerOrAdmin } from "./utils";
+import { isCurrentUserManagerOrAdmin, clearRoleCache } from "./utils";
+import { getDailyGoalCached, invalidateDailyGoalCache } from "./utils";
+import { invalidateLogsCache } from "./utils";
+import {
+  getCachedAccentColor,
+  updateCachedPreference,
+  forceRefreshPreferences,
+  invalidatePreferencesCache,
+} from "./utils";
 import {
   checkAuthStatus,
   onAuthStateChange,
@@ -59,6 +67,35 @@ import "./styles/connection-status.css";
 import "./styles/org-wizard.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
+// ── Tab dirty-flag system ──────────────────────────────────────────
+// Tracks whether each tab needs re-rendering. A tab is "dirty" when
+// underlying data has changed since it was last rendered.  On first
+// visit a tab is always rendered (it hasn't been initialised yet).
+
+const _tabDirty: Record<string, boolean> = {};
+const _tabRendered: Record<string, boolean> = {};
+
+/** Mark one or more tabs as needing re-render on next visit. */
+function markTabsDirty(...tabIds: string[]) {
+  for (const id of tabIds) _tabDirty[id] = true;
+}
+
+/** Returns true if the tab should re-render (first visit OR dirty). */
+function shouldRenderTab(tabId: string): boolean {
+  if (!_tabRendered[tabId]) return true; // first visit
+  return !!_tabDirty[tabId];
+}
+
+/** Call after a tab has been successfully rendered. */
+function markTabClean(tabId: string) {
+  _tabRendered[tabId] = true;
+  _tabDirty[tabId] = false;
+}
+
+// Expose for other renderer modules (e.g. logsTab goal mutations)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(window as any).markTabsDirty = markTabsDirty;
+
 function setupTabs() {
   const tabs = Array.from(
     document.querySelectorAll(".tab"),
@@ -90,18 +127,45 @@ function setupTabs() {
         content.style.display = "";
       }
 
-      // Force re-render on tab switch to ensure fresh content
-      if (tabId === "dashboard") renderDashboard();
-      if (tabId === "today") renderLogs();
+      // Re-render only if tab has new data (first visit or dirty)
+      if (tabId === "dashboard") {
+        if (shouldRenderTab("dashboard")) {
+          renderDashboard();
+          markTabClean("dashboard");
+        }
+      }
+      if (tabId === "today") {
+        if (shouldRenderTab("today")) {
+          renderLogs();
+          markTabClean("today");
+        }
+      }
       if (tabId === "profile") refreshProfile();
       if (tabId === "summary") {
-        // Force reset summary state to ensure fresh data
-        (window as any).__resetSummaryTabState = true;
-        renderSummary();
+        if (shouldRenderTab("summary")) {
+          (window as any).__resetSummaryTabState = true;
+          renderSummary();
+          markTabClean("summary");
+        }
       }
-      if (tabId === "calendar") renderCalendar();
-      if (tabId === "projects") renderProjects();
-      if (tabId === "organization") renderOrganizationTab();
+      if (tabId === "calendar") {
+        if (shouldRenderTab("calendar")) {
+          renderCalendar();
+          markTabClean("calendar");
+        }
+      }
+      if (tabId === "projects") {
+        if (shouldRenderTab("projects")) {
+          renderProjects();
+          markTabClean("projects");
+        }
+      }
+      if (tabId === "organization") {
+        if (shouldRenderTab("organization")) {
+          renderOrganizationTab();
+          markTabClean("organization");
+        }
+      }
     });
   });
 }
@@ -130,6 +194,9 @@ function initUI() {
   });
 
   ipcRenderer.on("window-tracked", () => {
+    // New usage data arrived — mark affected tabs dirty
+    markTabsDirty("dashboard", "today", "summary");
+
     // Only refresh logs if Today tab is active
     const todayTab = document.querySelector(
       '.tab[data-tab="today"]',
@@ -139,7 +206,9 @@ function initUI() {
       todayTab?.classList.contains("active") &&
       todayContent?.classList.contains("active")
     ) {
+      invalidateLogsCache();
       renderLogs(localToday);
+      markTabClean("today");
     }
   });
 
@@ -546,11 +615,32 @@ ipcRenderer.on(
 
 export async function applyAccentColor() {
   const theme = document.body.classList.contains("light") ? "light" : "dark";
-  const accentColor = await safeIpcInvoke<string>("get-accent-color", [theme], {
-    fallback: "#6366f1",
-    showNotification: false,
-  });
 
+  // Apply cached accent instantly (no round-trip)
+  const cachedAccent = getCachedAccentColor(theme);
+  applyAccentToDOM(theme, cachedAccent);
+
+  // Background refresh from Supabase
+  const serverAccent = await safeIpcInvoke<string>(
+    "get-accent-color",
+    [theme],
+    { fallback: cachedAccent, showNotification: false },
+  );
+
+  if (serverAccent !== cachedAccent) {
+    const updatedColors = {
+      ...(theme === "light"
+        ? { light: serverAccent, dark: getCachedAccentColor("dark") }
+        : { light: getCachedAccentColor("light"), dark: serverAccent }),
+    };
+    updateCachedPreference("accent_color", updatedColors);
+    applyAccentToDOM(theme, serverAccent);
+  }
+
+  await updateAccentTextColors();
+}
+
+function applyAccentToDOM(theme: "light" | "dark", accentColor: string): void {
   if (theme === "light") {
     document.body.style.setProperty("--accent", accentColor);
     document.documentElement.style.removeProperty("--accent");
@@ -558,29 +648,28 @@ export async function applyAccentColor() {
     document.documentElement.style.setProperty("--accent", accentColor);
     document.body.style.removeProperty("--accent");
   }
-
-  // Update text colors based on the new accent color
-  await updateAccentTextColors();
 }
 
 async function applyUserTheme() {
-  const savedTheme = await safeIpcInvoke<"light" | "dark">(
-    "get-user-theme",
-    [],
-    {
-      fallback: "dark",
-      showNotification: false,
-    },
-  );
-  if (savedTheme === "light") {
-    document.body.classList.add("light");
-  } else {
-    document.body.classList.remove("light");
-  }
-  // Optionally update theme icon if you use one
-  // updateThemeIcon(document.getElementById('themeIcon') as HTMLImageElement);
+  // Apply cached theme instantly, then verify with server
+  const { getCachedTheme } = await import("./utils/preferencesCache");
+  const cachedTheme = getCachedTheme() as "light" | "dark";
+  document.body.classList.toggle("light", cachedTheme === "light");
   await applyAccentColor();
   window.dispatchEvent(new Event("theme-changed"));
+
+  // Verify server agrees (non-blocking)
+  const serverTheme = await safeIpcInvoke<"light" | "dark">(
+    "get-user-theme",
+    [],
+    { fallback: cachedTheme, showNotification: false },
+  );
+  if (serverTheme !== cachedTheme) {
+    updateCachedPreference("theme", serverTheme);
+    document.body.classList.toggle("light", serverTheme === "light");
+    await applyAccentColor();
+    window.dispatchEvent(new Event("theme-changed"));
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -619,6 +708,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (landing) landing.style.display = "none";
 
     loadUserLangMap();
+    forceRefreshPreferences();
     applyUserTheme();
 
     // Show onboarding for new users
@@ -756,6 +846,22 @@ document.addEventListener("DOMContentLoaded", async () => {
             dailyGoalCheckInterval = null;
           }
           localStorage.removeItem("currentUserId");
+          clearRoleCache();
+          invalidateDailyGoalCache();
+          invalidatePreferencesCache();
+          invalidateLogsCache();
+          // Reset tab dirty flags so all tabs re-render on next login
+          markTabsDirty(
+            "dashboard",
+            "today",
+            "summary",
+            "calendar",
+            "projects",
+            "organization",
+          );
+          Object.keys(_tabRendered).forEach((k) => {
+            _tabRendered[k] = false;
+          });
           if (mainUI) mainUI.style.display = "none";
           if (landing) {
             landing.style.display = "";
@@ -812,29 +918,21 @@ let dailyGoalCheckInterval: NodeJS.Timeout | null = null;
 async function checkDailyGoalProgress() {
   try {
     const today = new Date().toLocaleDateString("en-CA");
-    const dailyGoal = await safeIpcInvoke<{
-      time: number;
-      isCompleted: boolean;
-    } | null>("get-daily-goal", [today], {
-      fallback: null,
-      showNotification: false,
-    });
+    const { goal: dailyGoal, totalMins } = await getDailyGoalCached(today);
     if (!dailyGoal) return;
-
-    const totalMins = await safeIpcInvoke<number>(
-      "get-total-time-for-day",
-      [today],
-      { fallback: 0, showNotification: false },
-    );
 
     if (!dailyGoal.isCompleted && totalMins >= dailyGoal.time) {
       await safeIpcInvoke("complete-daily-goal", [today], {
         showNotification: false,
       });
+      invalidateDailyGoalCache(today);
       showNotification("🎉 Daily goal achieved!");
-      // Optionally, re-render dashboard/logs
+      // Re-render dashboard/logs and mark clean since we just refreshed
+      markTabsDirty("dashboard", "today");
       renderDashboard();
+      markTabClean("dashboard");
       renderLogs(today);
+      markTabClean("today");
     }
   } catch (error) {
     // No user logged in yet, skip daily goal check

@@ -72,6 +72,8 @@ ipcMain.handle(
       endDate?: string;
       projectId?: number | string;
       billableOnly?: boolean;
+      limit?: number;
+      offset?: number;
     },
   ) => {
     try {
@@ -95,6 +97,8 @@ ipcMain.handle(
         if (filters.billableOnly !== undefined) {
           supabaseFilters.isBillable = filters.billableOnly;
         }
+        if (filters.limit) supabaseFilters.limit = filters.limit;
+        if (filters.offset) supabaseFilters.offset = filters.offset;
       }
 
       const rawSessions = await timeTracking.getAllSessions(

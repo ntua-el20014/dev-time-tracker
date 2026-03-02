@@ -1,5 +1,5 @@
 import { ScheduledSession } from "@shared/types";
-import { safeIpcInvoke } from "./utils";
+import { safeIpcInvoke, withLoading } from "./utils";
 import { showInAppNotification, showConfirmationModal } from "./components";
 
 // eslint-disable-next-line prefer-const
@@ -11,12 +11,10 @@ export async function renderCalendar() {
   const calendarContainer = document.getElementById("calendarContent");
   if (!calendarContainer) return;
 
-  // Show loading while scheduled sessions load
-  calendarContainer.innerHTML =
-    '<div class="tab-loading"><div class="tab-loading-spinner"></div><span class="tab-loading-text">Loading calendar…</span></div>';
-
-  // Load scheduled sessions for current month
-  await loadScheduledSessions();
+  // Load scheduled sessions for current month (with loading indicator)
+  await withLoading(calendarContainer, "Loading calendar…", async () => {
+    await loadScheduledSessions();
+  });
 
   calendarContainer.innerHTML = `
     <div class="calendar-container">
@@ -702,13 +700,10 @@ async function startSession(
   sessionId: string | number,
   session: ScheduledSession,
 ) {
-  // Close modal and refresh calendar to ensure clean state
+  // Close modal
   closeModal();
 
-  // Re-render calendar to reset any potential state issues
-  await renderCalendar();
-
-  // Wait for calendar re-render and modal cleanup to complete
+  // Wait for modal cleanup to complete
   setTimeout(() => {
     // Re-setup record and pause buttons to ensure fresh event listeners
     if ((window as any).setupRecordAndPauseBtns) {
@@ -724,7 +719,7 @@ async function startSession(
         recordBtn.click();
         showInAppNotification(`Started session: ${session.title}`);
 
-        // Optionally mark the scheduled session as completed
+        // Mark the scheduled session as completed and refresh calendar once
         (async () => {
           try {
             await safeIpcInvoke(
@@ -737,7 +732,16 @@ async function startSession(
               ],
               { fallback: null },
             );
-            // Re-render calendar after status update to show changes
+            // Update local state instead of full re-render
+            const idx = scheduledSessions.findIndex(
+              (s) => String(s.id) === String(sessionId),
+            );
+            if (idx >= 0) {
+              scheduledSessions[idx] = {
+                ...scheduledSessions[idx],
+                status: "completed",
+              };
+            }
             await renderCalendar();
           } catch (err) {
             // Silent fail - the session start is more important than updating status
@@ -747,7 +751,7 @@ async function startSession(
         showInAppNotification("Could not find record button");
       }
     }, 150);
-  }, 200); // Increased timeout to allow calendar re-render to complete
+  }, 200);
 }
 
 async function deleteScheduledSessionHandler(sessionId: string | number) {

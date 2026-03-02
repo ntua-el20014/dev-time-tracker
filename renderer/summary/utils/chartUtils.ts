@@ -52,7 +52,7 @@ export function getDatasetLabel(config: ChartConfig): string {
 // Function to add a custom chart
 export function addCustomChart(
   config: ChartConfig,
-  data: (DailySummaryRow | SessionRow)[]
+  data: (DailySummaryRow | SessionRow)[],
 ) {
   const chartId = `custom-chart-${Date.now()}-${Math.random()
     .toString(36)
@@ -101,11 +101,11 @@ export function renderCustomChartsSection() {
   });
 
   // Render all charts after DOM is ready
-  setTimeout(() => {
+  requestAnimationFrame(() => {
     customCharts.forEach((chartData) => {
       renderCustomChart(chartData.id, chartData.config, chartData.data);
     });
-  }, 100);
+  });
 
   // Add event listeners for chart actions
   chartsSection.querySelectorAll(".chart-action-btn").forEach((btn) => {
@@ -136,10 +136,9 @@ export function renderCustomChartsSection() {
       switch (action) {
         case "refresh": {
           // Get fresh data and re-render
-          // Note: This will need to be updated to use the current filtered data from the parent
-          setTimeout(() => {
+          requestAnimationFrame(() => {
             renderCustomChart(chartData.id, chartData.config, chartData.data);
-          }, 100);
+          });
           break;
         }
         case "duplicate": {
@@ -171,7 +170,7 @@ export function renderCustomChartsSection() {
 // render timeline
 export function renderTimelineChart(
   dailyData: DailySummaryRow[],
-  weekMonday: Date
+  weekMonday: Date,
 ) {
   const timelineContainer = document.createElement("div");
   timelineContainer.className = "timeline-container";
@@ -191,7 +190,7 @@ export function renderTimelineChart(
   const weekDateStrs = weekDays.map((d) => getLocalDateString(d));
   const maxSeconds = Math.max(
     1,
-    ...weekDateStrs.map((dateStr) => timeByDate[dateStr] || 0)
+    ...weekDateStrs.map((dateStr) => timeByDate[dateStr] || 0),
   );
   const maxBarHeight = 70;
 

@@ -19,6 +19,7 @@ import type { SessionRow, Tag, Project } from "@shared/types";
 
 // State for by-session view
 export interface BySessionViewState {
+  allSessions: SessionRow[];
   filteredSessions: SessionRow[];
   sortState: { column: string | null; direction: "asc" | "desc" };
   pagination: PaginationManager<SessionRow> | null;
@@ -28,6 +29,7 @@ const SESSIONS_PER_PAGE = 25;
 
 export function createBySessionViewState(): BySessionViewState {
   return {
+    allSessions: [],
     filteredSessions: [],
     sortState: { column: null, direction: "asc" },
     pagination: null,
@@ -54,6 +56,7 @@ export async function renderBySessionView(
     sessions = await safeIpcInvoke("get-sessions", [], {
       fallback: [],
     });
+    state.allSessions = sessions;
     state.filteredSessions = sessions;
   }
 
@@ -109,9 +112,7 @@ export async function renderBySessionView(
       renderSessionRows(container, filtered, state, allTags);
     },
     onClear: async () => {
-      state.filteredSessions = await safeIpcInvoke("get-sessions", [], {
-        fallback: [],
-      });
+      state.filteredSessions = state.allSessions;
       renderSessionRows(container, state.filteredSessions, state, allTags);
     },
   });
@@ -149,10 +150,12 @@ export async function renderBySessionView(
   reviewSessionsBtn.className = "create-chart-button";
   reviewSessionsBtn.onclick = () => {
     showSessionReviewPanel(async () => {
-      // Refresh session list after deletions
-      state.filteredSessions = await safeIpcInvoke("get-sessions", [], {
+      // Refresh session list after deletions — must re-fetch since sessions were deleted
+      const fresh = await safeIpcInvoke("get-sessions", [], {
         fallback: [],
       });
+      state.allSessions = fresh;
+      state.filteredSessions = fresh;
       renderSessionRows(container, state.filteredSessions, state, allTags);
     });
   };
@@ -178,14 +181,71 @@ export async function renderBySessionView(
   `;
   container.appendChild(sessionTable);
 
-  // Attach click handlers to sortable headers
-  sessionTable.querySelectorAll(".sortable-header").forEach((header) => {
-    header.addEventListener("click", () => {
-      const column = (header as HTMLElement).getAttribute("data-column");
-      if (column) {
-        handleSessionSort(container, column, state, allTags);
+  // Event delegation on the table — handles headers, rows, and edit buttons
+  // Added once here (not per-page) to avoid stacking listeners
+  sessionTable.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
+
+    // Sortable header click
+    const header = target.closest(".sortable-header") as HTMLElement | null;
+    if (header) {
+      const column = header.getAttribute("data-column");
+      if (column) handleSessionSort(container, column, state, allTags);
+      return;
+    }
+
+    // Edit button click
+    const editBtn = target.closest(".session-edit-btn") as HTMLElement | null;
+    if (editBtn) {
+      e.stopPropagation();
+      const tr = editBtn.closest("tr");
+      const sessionId = tr?.getAttribute("data-session-id");
+      const session = state.filteredSessions.find(
+        (s: SessionRow) => String(s.id) === String(sessionId),
+      );
+      if (session)
+        showEditSessionModal(session, allTags, async () => {
+          const updatedSessions = await safeIpcInvoke("get-sessions", [], {
+            fallback: [],
+          });
+          state.filteredSessions = updatedSessions;
+          const filterBar = container.querySelector(".summary-filter-bar");
+          if (filterBar) {
+            const tagSelect = filterBar.querySelector(
+              "#filter-tag-session",
+            ) as HTMLSelectElement;
+            const startInput = filterBar.querySelector(
+              "#filter-start-session",
+            ) as HTMLInputElement;
+            const endInput = filterBar.querySelector(
+              "#filter-end-session",
+            ) as HTMLInputElement;
+            if (tagSelect) tagSelect.value = "";
+            if (startInput) startInput.value = "";
+            if (endInput) endInput.value = "";
+          }
+          renderSessionRows(container, updatedSessions, state, allTags);
+        });
+      return;
+    }
+
+    // Row click for details
+    const row = target.closest(".clickable-row") as HTMLElement | null;
+    if (row) {
+      const sessionId = row.getAttribute("data-session-id");
+      const session = state.filteredSessions.find(
+        (s: SessionRow) => String(s.id) === String(sessionId),
+      );
+      if (session && sessionId) {
+        showDetailsModal({
+          type: "session",
+          data: {
+            sessionId: String(sessionId),
+            title: session.title,
+          },
+        });
       }
-    });
+    }
   });
 
   renderSessionRows(container, sessions, state, allTags);
@@ -342,61 +402,6 @@ export function renderSessionPage(
     `;
     })
     .join("");
-
-  // Attach edit button listeners
-  sessionTableBody.querySelectorAll(".session-edit-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const tr = (btn as HTMLElement).closest("tr");
-      const sessionId = tr?.getAttribute("data-session-id");
-      const session = state.filteredSessions.find(
-        (s: SessionRow) => String(s.id) === String(sessionId),
-      );
-      if (session)
-        showEditSessionModal(session, allTags, async () => {
-          const updatedSessions = await safeIpcInvoke("get-sessions", [], {
-            fallback: [],
-          });
-          state.filteredSessions = updatedSessions;
-          // Reset filter UI fields
-          const filterBar = container.querySelector(".summary-filter-bar");
-          if (filterBar) {
-            const tagSelect = filterBar.querySelector(
-              "#filter-tag-session",
-            ) as HTMLSelectElement;
-            const startInput = filterBar.querySelector(
-              "#filter-start-session",
-            ) as HTMLInputElement;
-            const endInput = filterBar.querySelector(
-              "#filter-end-session",
-            ) as HTMLInputElement;
-            if (tagSelect) tagSelect.value = "";
-            if (startInput) startInput.value = "";
-            if (endInput) endInput.value = "";
-          }
-          renderSessionRows(container, updatedSessions, state, allTags);
-        });
-    });
-  });
-
-  // Attach row click listeners for details
-  sessionTableBody.querySelectorAll(".clickable-row").forEach((row) => {
-    row.addEventListener("click", () => {
-      const sessionId = (row as HTMLElement).getAttribute("data-session-id");
-      const session = state.filteredSessions.find(
-        (s: SessionRow) => String(s.id) === String(sessionId),
-      );
-      if (session && sessionId) {
-        showDetailsModal({
-          type: "session",
-          data: {
-            sessionId: String(sessionId),
-            title: session.title,
-          },
-        });
-      }
-    });
-  });
 }
 
 export function updatePaginationControls(

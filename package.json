@@ -17,7 +17,9 @@
     "type-check:renderer": "tsc --noEmit -p tsconfig.renderer.json",
     "rebuild": "electron-rebuild",
     "clean": "rimraf dist .webpack out",
-    "build": "npm run type-check && electron-forge make"
+    "build": "npm run type-check && electron-forge make",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": {

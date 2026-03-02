@@ -37,6 +37,7 @@ export function resetSummaryState(state: SummaryState): void {
   state.byDateView.pagination = null;
 
   // Reset by-session view state
+  state.bySessionView.allSessions = [];
   state.bySessionView.filteredSessions = [];
   state.bySessionView.sortState = { column: null, direction: "asc" };
   state.bySessionView.pagination = null;
