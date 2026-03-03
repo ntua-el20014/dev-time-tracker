@@ -14,7 +14,15 @@ import {
 } from "./supabase/scheduledSessions";
 import { getCurrentUser } from "./supabase/api";
 import { supabase } from "./supabase/config";
-import { logError, withRetry } from "./utils/errorHandler";
+import { logError, withRetry, classifyError } from "./utils/errorHandler";
+import {
+  initOfflineQueue,
+  destroyOfflineQueue,
+  enqueueUsageLog,
+  enqueueSession,
+  flush as flushOfflineQueue,
+  getSyncStatus,
+} from "./utils/offlineQueue";
 import "./ipc/sessionHandlers";
 import "./ipc/usageHandlers";
 import "./ipc/tagHandlers";
@@ -29,12 +37,28 @@ import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
 
 // ── Process-level error handlers ──────────────────────────────────
 // Catch truly unhandled errors so the app doesn't crash silently.
+// Network/fetch errors are expected when offline — log only a short line.
 process.on("uncaughtException", (error) => {
-  logError("uncaughtException", error);
+  if (classifyError(error) === "network") {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[${new Date().toISOString()}] [NETWORK] uncaughtException: ${error.message}`,
+    );
+  } else {
+    logError("uncaughtException", error);
+  }
 });
 
 process.on("unhandledRejection", (reason) => {
-  logError("unhandledRejection", reason);
+  if (classifyError(reason) === "network") {
+    const msg = reason instanceof Error ? reason.message : String(reason);
+    // eslint-disable-next-line no-console
+    console.error(
+      `[${new Date().toISOString()}] [NETWORK] unhandledRejection: ${msg}`,
+    );
+  } else {
+    logError("unhandledRejection", reason);
+  }
 });
 
 // Sync auth session from renderer to main process
@@ -72,6 +96,8 @@ let sessionEnd: Date | null = null;
 let sessionActiveDuration = 0; // in seconds
 let lastActiveTimestamp: Date | null = null;
 let isPaused = false;
+/** Cached user ID so tracking can continue when the network is down. */
+let cachedUserId: string | null = null;
 let idleTimeoutSeconds = getIdleTimeoutSeconds(); // Default, updated when user logs in
 
 // Register custom protocol handler for OAuth
@@ -102,6 +128,9 @@ app.whenReady().then(() => {
   }
 
   // Note: User initialization is handled by Supabase auth
+
+  // Initialise the offline write queue (loads any persisted items from disk)
+  initOfflineQueue();
 
   // Listen for system idle (lock/unlock)
   powerMonitor.on("lock-screen", () => {
@@ -137,8 +166,21 @@ app.whenReady().then(() => {
 
 async function trackActiveWindow() {
   try {
-    const user = await getCurrentUser();
-    if (!user) return;
+    // Try to get the authenticated user; fall back to cached ID when offline
+    let userId: string | null = null;
+    try {
+      const user = await getCurrentUser();
+      if (user) {
+        userId = user.id;
+        cachedUserId = user.id; // keep cache fresh
+      }
+    } catch {
+      userId = cachedUserId; // network may be down — use last known ID
+    }
+    if (!userId) return;
+
+    // At this point userId is guaranteed non-null
+    const uid = userId;
 
     const window = activeWindow(); // Synchronous
     const icon = window.getIcon().data;
@@ -154,19 +196,40 @@ async function trackActiveWindow() {
     const langExt = langData?.extension || null;
 
     // Pass langExt to logUsage (Supabase version)
-    await withRetry(
-      () =>
-        logUsage(
-          user.id,
+    const logTimestamp = new Date().toISOString();
+    try {
+      await withRetry(
+        () =>
+          logUsage(
+            uid,
+            editor.name || "Unknown",
+            title,
+            language,
+            langExt,
+            icon,
+            intervalSeconds,
+            logTimestamp,
+          ),
+        { maxAttempts: 2, retryOn: ["network"] },
+      );
+    } catch (retryErr) {
+      // All retries exhausted — queue locally so data is never lost
+      if (classifyError(retryErr) === "network") {
+        enqueueUsageLog(
+          uid,
           editor.name || "Unknown",
           title,
           language,
           langExt,
           icon,
           intervalSeconds,
-        ),
-      { maxAttempts: 2, retryOn: ["network"] },
-    );
+          logTimestamp,
+        );
+      } else {
+        // Non-network error — log and move on
+        logError("trackActiveWindow (non-network)", retryErr);
+      }
+    }
 
     mainWindow?.webContents.send("window-tracked");
   } catch (err) {
@@ -176,8 +239,8 @@ async function trackActiveWindow() {
 
 async function checkScheduledSessionNotifications() {
   try {
-    // Get current user first
-    const user = await getCurrentUser();
+    // Skip entirely when offline — no point hammering the network
+    const user = await getCurrentUser().catch(() => null);
     if (!user) return;
 
     const notifications = await getUpcomingSessionNotifications(user.id);
@@ -243,7 +306,10 @@ async function checkScheduledSessionNotifications() {
       }
     }
   } catch (err) {
-    logError("checkScheduledSessionNotifications", err);
+    // Silently skip network errors — no need to spam the log every 60s
+    if (classifyError(err) !== "network") {
+      logError("checkScheduledSessionNotifications", err);
+    }
   }
 }
 
@@ -360,8 +426,17 @@ ipcMain.handle("stop-tracking", async (_event) => {
   if (sessionStart && sessionEnd) {
     if (duration >= 10) {
       // Only record if >= 10 seconds
-      const user = await getCurrentUser();
-      if (!user) return;
+      let uid: string | null = null;
+      try {
+        const user = await getCurrentUser();
+        if (user) {
+          uid = user.id;
+          cachedUserId = user.id;
+        }
+      } catch {
+        uid = cachedUserId;
+      }
+      if (!uid) return;
 
       // Ask renderer for session title/description
       const getSessionInfo = () =>
@@ -391,16 +466,33 @@ ipcMain.handle("stop-tracking", async (_event) => {
         await getSessionInfo();
       if (title && title.trim() !== "") {
         const start_time = sessionStart.toISOString();
-        await addSession(
-          user.id,
-          start_time,
-          duration,
-          title,
-          description,
-          undefined, // tags
-          projectId ? String(projectId) : undefined,
-          isBillable || false,
-        );
+        try {
+          await addSession(
+            uid,
+            start_time,
+            duration,
+            title,
+            description,
+            undefined, // tags
+            projectId ? String(projectId) : undefined,
+            isBillable || false,
+          );
+        } catch (sessionErr) {
+          if (classifyError(sessionErr) === "network") {
+            enqueueSession(
+              uid,
+              start_time,
+              duration,
+              title,
+              description,
+              undefined,
+              projectId ? String(projectId) : undefined,
+              isBillable || false,
+            );
+          } else {
+            logError("stop-tracking addSession", sessionErr);
+          }
+        }
       }
     }
   }
@@ -441,6 +533,14 @@ ipcMain.handle("check-notifications", async () => {
   await checkScheduledSessionNotifications();
 });
 
+// ── Offline queue IPC ────────────────────────────────────────────────
+ipcMain.handle("get-sync-status", () => getSyncStatus());
+
+ipcMain.handle("flush-offline-queue", async () => {
+  const flushed = await flushOfflineQueue();
+  return { flushed, status: getSyncStatus() };
+});
+
 // Handle OAuth redirect to open external browser
 ipcMain.handle("open-oauth-url", async (_event, url: string) => {
   const { shell } = require("electron");
@@ -454,10 +554,19 @@ app.on("before-quit", async (event) => {
     event.preventDefault(); // Prevent immediate quit
 
     try {
-      // Get current user
-      const user = await getCurrentUser();
+      // Get current user (fall back to cached ID when offline)
+      let quitUserId: string | null = null;
+      try {
+        const user = await getCurrentUser();
+        if (user) {
+          quitUserId = user.id;
+          cachedUserId = user.id;
+        }
+      } catch {
+        quitUserId = cachedUserId;
+      }
 
-      if (user) {
+      if (quitUserId) {
         // Calculate final duration
         let duration = sessionActiveDuration;
         if (!isPaused && lastActiveTimestamp) {
@@ -472,16 +581,30 @@ app.on("before-quit", async (event) => {
           const startTime = sessionStart.toISOString();
 
           // Auto-save session with default title
-          await addSession(
-            user.id,
-            startTime,
-            duration,
-            "Auto-saved session (app closed)",
-            "Session was automatically saved when the application closed",
-            undefined, // tags
-            undefined, // projectId
-            false, // isBillable
-          );
+          try {
+            await addSession(
+              quitUserId,
+              startTime,
+              duration,
+              "Auto-saved session (app closed)",
+              "Session was automatically saved when the application closed",
+              undefined, // tags
+              undefined, // projectId
+              false, // isBillable
+            );
+          } catch (saveErr) {
+            // Queue locally so the session is not lost
+            enqueueSession(
+              quitUserId,
+              startTime,
+              duration,
+              "Auto-saved session (app closed)",
+              "Session was automatically saved when the application closed",
+              undefined,
+              undefined,
+              false,
+            );
+          }
         }
 
         // Clean up tracking state
@@ -498,6 +621,8 @@ app.on("before-quit", async (event) => {
     } catch (err) {
       logError("before-quit", err);
     } finally {
+      // Persist the offline queue to disk before exiting
+      destroyOfflineQueue();
       // Allow app to quit now
       app.quit();
     }

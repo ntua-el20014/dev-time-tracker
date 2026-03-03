@@ -141,7 +141,7 @@ export async function getUsageLogs(
   let query = supabase
     .from("usage_logs")
     .select(
-      "app_name, window_title, icon_url, language, language_extension, time_spent_seconds, timestamp",
+      "app_name, window_title, icon_url, language, language_extension, timestamp",
     )
     .eq("user_id", userId)
     .gte("timestamp", startOfDay)
@@ -325,7 +325,7 @@ export async function getUsageDetailsForAppDate(
   const { data, error } = await supabase
     .from("usage_logs")
     .select(
-      "app_name, window_title, icon_url, language, language_extension, time_spent_seconds, timestamp",
+      "app_name, window_title, icon_url, language, language_extension, timestamp",
     )
     .eq("user_id", userId)
     .eq("app_name", app)
@@ -370,7 +370,7 @@ export async function getUsageDetailsForSession(
   const { data, error } = await supabase
     .from("usage_logs")
     .select(
-      "app_name, window_title, icon_url, language, language_extension, time_spent_seconds, timestamp",
+      "app_name, window_title, icon_url, language, language_extension, timestamp",
     )
     .eq("user_id", userId)
     .gte("timestamp", startTime)

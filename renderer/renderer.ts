@@ -43,6 +43,7 @@ import {
   initConnectionStatus,
   destroyConnectionStatus,
 } from "./components/ConnectionStatus";
+import { initSyncStatus, destroySyncStatus } from "./components/SyncStatus";
 import "./styles/base.css";
 import "./styles/accent-text.css";
 import "./styles/calendar.css";
@@ -64,6 +65,7 @@ import "./styles/userRoleManager.css";
 import "./styles/auth.css";
 import "./styles/organization.css";
 import "./styles/connection-status.css";
+import "./styles/sync-status.css";
 import "./styles/org-wizard.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
@@ -840,6 +842,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           // User signed out or session expired - reset the initialization flag
           isMainUIInitialized = false;
           destroyConnectionStatus();
+          destroySyncStatus();
           stopSessionHealthCheck();
           if (dailyGoalCheckInterval) {
             clearInterval(dailyGoalCheckInterval);
@@ -911,6 +914,7 @@ function renderMainUI() {
   applyAccentColor();
   setupHotkeys();
   initConnectionStatus();
+  initSyncStatus();
 }
 
 let dailyGoalCheckInterval: NodeJS.Timeout | null = null;

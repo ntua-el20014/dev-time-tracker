@@ -406,33 +406,106 @@
 - [x] Add cache invalidation strategy
 - [x] Reduce redundant Supabase calls
 
-### Step 7.3: Real-time Features (Future)
-- [ ] Set up Supabase Realtime subscriptions
-- [ ] Listen for session updates
-- [ ] Listen for organization changes
-- [ ] Update UI reactively when data changes
-- [ ] Add presence indicators for team members
+### Step 7.3: Offline Mode & Sync
+- [x] Queue critical writes (sessions, usage logs) locally when offline
+- [x] Detect reconnection and auto-flush queued writes to Supabase
+- [x] Show sync status indicator
+- [x] Handle conflict resolution
+- [x] Ensure tracking never stops just because the network is down
 
-### Step 7.4: Advanced Features
-- [ ] Queue critical writes when offline
-- [ ] Team dashboard (organization-wide analytics)
-- [ ] Activity feed (recent team activity)
-- [ ] Notifications system
-- [ ] Gamification (goals, badges, leaderboards)
-- [ ] Advanced analytics and reporting
-- [ ] Export individual reports (PDF, CSV)
-- [ ] Allow organization switching (if member of multiple)
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 8: DEVELOPER WORKFLOW AUTOMATIONS
+## ═══════════════════════════════════════════════════════════════════
 
-### Step 7.5: Production Ready
-- [ ] Set up proper error logging (Sentry?)
-- [ ] Add analytics (usage tracking)
-- [ ] Optimize bundle size
-- [ ] Add keyboard shortcuts
-- [ ] Accessibility improvements
-- [ ] Multi-language support (i18n)
+### Step 8.1: Git Branch Correlation
+- [ ] Detect active Git repo in the tracked project directory
+- [ ] Read current branch name via `git rev-parse --abbrev-ref HEAD`
+- [ ] Auto-tag sessions with the active branch name
+- [ ] Store branch info in session metadata (git_branch field)
+- [ ] Show per-branch time breakdown in Dashboard / Summary tabs
+- [ ] Allow filtering sessions by branch name
+
+### Step 8.2: Auto-Generated Standup Notes
+- [ ] Add "Generate Daily Summary" button to Dashboard
+- [ ] Aggregate yesterday's or selection of dates data: languages used, apps/editors,
+      branches, session durations, projects worked on
+- [ ] Format into a clean standup-style summary:
+      "Yesterday (or last week) I worked X hours on [branch] in [project], mostly in
+       TypeScript/Python. Focused on [top window titles]."
+- [ ] Allow one-click copy to clipboard
+
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 10: PRIVACY & CONTROL
+## ═══════════════════════════════════════════════════════════════════
+
+### Step 10.1: Incognito Mode (Instant Pause)
+- [ ] Add global keyboard shortcut (e.g., Ctrl+Shift+Pause) to toggle tracking
+- [ ] Add system tray icon with quick pause/resume action
+- [ ] When paused, show clear visual indicator ("Tracking Paused")
+- [ ] Do not record ANY data while incognito is active
+- [ ] Resume automatically after configurable timeout (optional)
+
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 11: BILLING & REPORTS
+## ═══════════════════════════════════════════════════════════════════
+
+### Step 11.1: Hourly Rate & Billable Hours
+- [ ] Add per-project hourly rate field (in project settings)
+- [ ] Mark sessions/time as billable or non-billable
+- [ ] Show billable hours summary per project on Dashboard
+- [ ] Display running total of earnings for current period
+
+### Step 11.2: Invoice Generation
+- [ ] Generate professional PDF invoices from billable hours
+      Include: client/project name, date range, hours, rate, total
+- [ ] Allow customization: logo, company name, payment terms, notes
+- [ ] Use a lightweight PDF library (e.g., pdfkit or jsPDF)
+- [ ] Export as PDF or copy invoice data as CSV
+- [ ] Store invoice history for reference
+
+### Step 11.3: Team Dashboard (Org Analytics)
+- [ ] Organization-wide analytics page for admins/managers
+- [ ] Show team member activity overview (hours tracked, projects, languages)
+- [ ] Aggregate stats: total org hours, most active projects, language breakdown
+- [ ] Allow filtering by date range, project, and team member
+
+## ═══════════════════════════════════════════════════════════════════
+## PHASE 12: POLISH & SHIP
+## ═══════════════════════════════════════════════════════════════════
+
+### Step 12.1: Keyboard Shortcuts
+- [ ] Add global shortcuts for common actions:
+      Start/stop tracking, open app, switch tabs, open review panel
+- [ ] Make shortcuts configurable in preferences
+- [ ] Show shortcut hints in tooltips and menu items
+
+### Step 12.2: Notifications System
+- [ ] In-app notification center (bell icon with unread count)
+- [ ] Notification types: goal completed, scheduled session reminder,
+      health alert, org invite, sync status
+- [ ] System tray notifications for critical events
+- [ ] Notification preferences (per-type enable/disable)
+
+### Step 12.3: Export & Reporting
+- [ ] Export individual reports as PDF (daily, weekly, monthly)
+- [ ] CSV export for any filtered data view
+- [ ] Allow organization switching (if member of multiple orgs)
+
+### Step 12.4: Quality & Release
+- [ ] Set up error logging service (Sentry or similar)
+- [ ] Add auto-update mechanism (electron-updater)
+- [ ] Code-sign the app for Windows/macOS
+- [ ] Write changelog and release notes
+- [ ] Publish v1.0
 
 ## ═══════════════════════════════════════════════════════════════════
 ## NOTES
 ## ═══════════════════════════════════════════════════════════════════
 
 - Password reset email templates
+- Consider Supabase Edge Functions for server-side standup generation (AI summaries)
+- Git branch detection only works when project dir contains a .git folder
+- Flow state / DND integration is OS-specific (Windows Focus Assist, macOS DND)
+- Invoice PDF generation adds ~200KB to bundle (jsPDF) — acceptable trade-off
+- Weekly review buffer requires careful RLS: org can only see "submitted" rows
+- Gamification?

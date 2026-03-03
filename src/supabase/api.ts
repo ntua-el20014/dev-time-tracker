@@ -11,15 +11,31 @@ export async function getCurrentSession() {
   return session;
 }
 
+/**
+ * Get the current authenticated user.
+ *
+ * Tries `getUser()` first (validates JWT with the server) but falls
+ * back to `getSession()` (reads from local memory — no network call)
+ * when the network is unreachable.  This keeps every caller working
+ * while offline without each one needing its own try/catch.
+ */
 export async function getCurrentUser() {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error) {
-    throw error;
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error) throw error;
+    return user;
+  } catch (err) {
+    // Network unreachable — try the locally-cached session instead
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.user) return session.user;
+    // No cached session at all — re-throw the original error
+    throw err;
   }
-  return user;
 }
 
 export async function signOut() {

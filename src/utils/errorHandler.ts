@@ -80,7 +80,8 @@ export function logError(context: string, error: unknown): void {
     `[${timestamp}] [${category.toUpperCase()}] ${context}: ${message}`,
   );
 
-  // In development, also log the stack trace for unknown errors
+  // Only print stack traces for truly unexpected (non-network) errors.
+  // Network failures are transient and their stacks are just noise.
   if (category === "unknown" && error instanceof Error && error.stack) {
     // eslint-disable-next-line no-console
     console.error(error.stack);
@@ -140,9 +141,10 @@ export async function withRetry<T>(
 
       if (attempt < maxAttempts) {
         const delay = Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs);
-        logError(
-          `${context} (attempt ${attempt}/${maxAttempts}, retrying in ${delay}ms)`,
-          error,
+        // Compact one-liner for transient retries — avoids flooding the console
+        // eslint-disable-next-line no-console
+        console.error(
+          `[${new Date().toISOString()}] [${category.toUpperCase()}] ${context} (attempt ${attempt}/${maxAttempts}, retrying in ${delay}ms): ${extractMessage(error)}`,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
       } else {
