@@ -26,7 +26,7 @@ import {
   leaveOrganization,
 } from "./utils/organizationApi";
 import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
-import { getLangIconUrl } from "../src/utils/extractData";
+import { getLangIconUrl } from "../src/utils/langIconUrl";
 import type { Tag } from "@shared/types";
 
 function escapeHtml(text: string) {
@@ -159,6 +159,28 @@ async function renderLanguageUsage(container: HTMLElement) {
       After saving, your changes will be applied automatically.
     </div>
   </div>
+  <div class="language-pie-info" style="margin-top: 16px;">
+    <b>How to add custom apps for tracking:</b><br>
+    Edit the file <code>custom-apps.json</code> in your app data folder:<br>
+    <div class="centered-btn">
+      <button id="openCustomAppsBtn" class="open-lang-json-btn">
+        Open custom-apps.json
+      </button>
+    </div>
+    Example content:
+    <pre>
+{
+  "editors": [
+    { "name": "My IDE", "execNames": ["myide", "myide.exe"] }
+  ],
+  "devTools": [],
+  "browsers": []
+}</pre>
+    <div class="info-note">
+      Add any app under <b>editors</b>, <b>devTools</b>, or <b>browsers</b>.<br>
+      Use the exact executable name (without path). Changes apply on next tracking tick.
+    </div>
+  </div>
   `;
 
   renderPieChartJS("languagePieChart", items, 420);
@@ -176,6 +198,13 @@ async function renderLanguageUsage(container: HTMLElement) {
       safeIpcInvoke("open-lang-json", [], { fallback: null });
     });
   }
+
+  const openCustomAppsBtn = container.querySelector("#openCustomAppsBtn");
+  if (openCustomAppsBtn) {
+    openCustomAppsBtn.addEventListener("click", () => {
+      safeIpcInvoke("open-custom-apps-json", [], { fallback: null });
+    });
+  }
 }
 
 async function renderSettings(container: HTMLElement) {
@@ -183,6 +212,12 @@ async function renderSettings(container: HTMLElement) {
     fallback: 60,
   });
   if (!idleTimeout || typeof idleTimeout !== "number") idleTimeout = 60;
+
+  let trackingInterval = await safeIpcInvoke("get-tracking-interval", [], {
+    fallback: 10,
+  });
+  if (!trackingInterval || typeof trackingInterval !== "number")
+    trackingInterval = 10;
 
   // Get current theme
   const currentTheme = document.body.classList.contains("light")
@@ -238,6 +273,11 @@ async function renderSettings(container: HTMLElement) {
       <span id="idleTimeoutValue" class="settings-range-value">${(
         idleTimeout / 60
       ).toFixed(1)} min</span>
+    </div>
+    <div class="settings-row">
+      <label for="trackingIntervalRange" class="settings-label">Tracking Interval:</label>
+      <input type="range" id="trackingIntervalRange" min="5" max="30" step="5" value="${trackingInterval}" class="settings-range">
+      <span id="trackingIntervalValue" class="settings-range-value">${trackingInterval}s</span>
     </div>
     <div class="settings-row">
       <label class="settings-label">Theme:</label>
@@ -347,6 +387,22 @@ async function renderSettings(container: HTMLElement) {
     });
   } else {
     // Idle timeout elements not found - skip event listener setup
+  }
+
+  const intervalRange = container.querySelector(
+    "#trackingIntervalRange",
+  ) as HTMLInputElement;
+  const intervalValueSpan = container.querySelector(
+    "#trackingIntervalValue",
+  ) as HTMLSpanElement;
+  if (intervalRange && intervalValueSpan) {
+    intervalRange.addEventListener("input", async () => {
+      const secs = parseInt(intervalRange.value, 10);
+      intervalValueSpan.textContent = secs + "s";
+      await safeIpcInvoke("set-tracking-interval", [secs], {
+        fallback: null,
+      });
+    });
   }
 
   container.querySelectorAll(".delete-tag-btn").forEach((btn) => {

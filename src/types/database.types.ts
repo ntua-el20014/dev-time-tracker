@@ -602,6 +602,7 @@ export interface Database {
           editor_colors: Json;
           notification_settings: Json;
           idle_timeout_seconds: number;
+          tracking_interval_seconds: number;
           created_at: TimestampString;
           updated_at: TimestampString;
         };
@@ -613,6 +614,7 @@ export interface Database {
           editor_colors?: Json;
           notification_settings?: Json;
           idle_timeout_seconds?: number;
+          tracking_interval_seconds?: number;
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
@@ -622,6 +624,7 @@ export interface Database {
           editor_colors?: Json;
           notification_settings?: Json;
           idle_timeout_seconds?: number;
+          tracking_interval_seconds?: number;
           updated_at?: TimestampString;
         };
         Relationships: [

@@ -8,7 +8,7 @@ import {
   withLoading,
   getDailyGoalCached,
 } from "./utils";
-import { getLangIconUrl } from "../src/utils/extractData";
+import { getLangIconUrl } from "../src/utils/langIconUrl";
 import type { DailySummaryRow, SessionRow } from "@shared/types";
 
 export async function renderDashboard() {

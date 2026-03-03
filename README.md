@@ -58,6 +58,21 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 
 ---
 
+## ⚠️ Platform Notes
+
+| Platform | Active Window Tracking | Notes |
+| --- | --- | --- |
+| **Windows** | ✅ Full support | Uses native Win32 APIs via `@miniben90/x-win` |
+| **macOS** | ✅ Full support | Requires Accessibility permission (prompted on first run) |
+| **Linux (X11)** | ✅ Works | X11 session required |
+| **Linux (Wayland)** | ❌ Not supported | `@miniben90/x-win` does not support the Wayland protocol. As a workaround, run the app under **XWayland** (e.g., launch with `GDK_BACKEND=x11`). Pure Wayland compositors without XWayland will not report active window data. |
+
+> **Custom Apps:** If your editor, terminal, or browser isn't recognized automatically, open  
+> **Profile → Language Usage → Open custom-apps.json** and add its executable name.  
+> Changes take effect on the next tracking tick—no restart required.
+
+---
+
 ## 🏗️ Architecture
 
 Dev Time Tracker is a **100% cloud-backed** Electron app. All data is stored in **Supabase (PostgreSQL)**.

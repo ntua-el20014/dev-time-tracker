@@ -6,7 +6,7 @@ import {
   invalidateDailyGoalCache,
   getLogsCached,
 } from "./utils";
-import { getLangIconUrl } from "../src/utils/extractData";
+import { getLangIconUrl } from "../src/utils/langIconUrl";
 import { showModal, showInAppNotification } from "./components";
 
 function escapeHtml(text: string) {

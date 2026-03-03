@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import * as userPreferences from "../supabase/userPreferences";
 import { getCurrentUser } from "../supabase/api";
-import { updateIdleTimeout } from "../index";
+import { updateIdleTimeout, updateTrackingInterval } from "../index";
 import { logError } from "../utils/errorHandler";
 
 /**
@@ -28,6 +28,7 @@ ipcMain.handle("get-user-preferences", async (_event) => {
         dailyGoals: true,
       },
       idle_timeout_seconds: 300,
+      tracking_interval_seconds: 10,
     };
   }
 });
@@ -248,6 +249,45 @@ ipcMain.handle("set-idle-timeout", async (_event, seconds: number) => {
     return true;
   } catch (err) {
     logError("set-idle-timeout", err);
+    return false;
+  }
+});
+
+/**
+ * Get tracking interval in seconds
+ */
+ipcMain.handle("get-tracking-interval", async (_event) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    return await userPreferences.getTrackingInterval(user.id);
+  } catch (err) {
+    logError("get-tracking-interval", err);
+    return 10; // default
+  }
+});
+
+/**
+ * Set tracking interval in seconds
+ */
+ipcMain.handle("set-tracking-interval", async (_event, seconds: number) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    await userPreferences.setTrackingInterval(user.id, seconds);
+
+    // Update the main process's tracking interval immediately
+    updateTrackingInterval(seconds);
+
+    return true;
+  } catch (err) {
+    logError("set-tracking-interval", err);
     return false;
   }
 });

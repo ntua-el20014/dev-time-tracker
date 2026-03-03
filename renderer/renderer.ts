@@ -32,7 +32,6 @@ import {
   getCurrentSession,
 } from "../src/supabase/api";
 import { initializeOAuthListener } from "./utils/oauthHandler";
-import { loadUserLangMap } from "../src/utils/extractData";
 import {
   showOnboarding,
   shouldShowOnboarding,
@@ -709,7 +708,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     if (landing) landing.style.display = "none";
 
-    loadUserLangMap();
     forceRefreshPreferences();
     applyUserTheme();
 

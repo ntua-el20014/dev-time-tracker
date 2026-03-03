@@ -30,6 +30,7 @@ export interface UserPreferences {
   editor_colors: EditorColors;
   notification_settings: NotificationSettings;
   idle_timeout_seconds: number;
+  tracking_interval_seconds: number;
 }
 
 /**
@@ -80,6 +81,10 @@ export async function updateUserPreferences(
   }
   if (preferences.idle_timeout_seconds !== undefined) {
     updateData.idle_timeout_seconds = preferences.idle_timeout_seconds;
+  }
+  if (preferences.tracking_interval_seconds !== undefined) {
+    updateData.tracking_interval_seconds =
+      preferences.tracking_interval_seconds;
   }
 
   const { data, error } = await (supabase as any)
@@ -208,6 +213,23 @@ export async function setIdleTimeout(userId: string, seconds: number) {
 }
 
 /**
+ * Get tracking interval in seconds.
+ */
+export async function getTrackingInterval(userId: string): Promise<number> {
+  const prefs = await getUserPreferences(userId);
+  return prefs.tracking_interval_seconds;
+}
+
+/**
+ * Set tracking interval in seconds.
+ */
+export async function setTrackingInterval(userId: string, seconds: number) {
+  await updateUserPreferences(userId, {
+    tracking_interval_seconds: seconds,
+  });
+}
+
+/**
  * Helper: Create default preferences for a new user.
  */
 async function createDefaultPreferences(
@@ -227,6 +249,7 @@ async function createDefaultPreferences(
       dailyGoals: true,
     } as any,
     idle_timeout_seconds: 300,
+    tracking_interval_seconds: 10,
   };
 
   const { data, error } = await (supabase as any)
@@ -259,5 +282,6 @@ function parsePreferences(data: UserPreferencesRow): UserPreferences {
       dailyGoals: true,
     },
     idle_timeout_seconds: data.idle_timeout_seconds || 300,
+    tracking_interval_seconds: data.tracking_interval_seconds || 10,
   };
 }

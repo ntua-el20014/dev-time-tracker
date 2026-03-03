@@ -1,7 +1,7 @@
 import * as linguistLanguages from "linguist-languages";
-import { getIconForFile } from "vscode-icons-js";
-import { ipcRenderer } from "electron";
-import { getCurrentUserId } from "../../renderer/utils/userUtils";
+import * as fs from "fs";
+import * as path from "path";
+import { app } from "electron";
 
 const preferredExtensionMap: Record<string, string> = {
   ".md": "Markdown",
@@ -12,27 +12,53 @@ const preferredExtensionMap: Record<string, string> = {
 
 let userLangMap: Record<string, string> = {};
 
-export async function loadUserLangMap() {
-  userLangMap = await ipcRenderer.invoke(
-    "get-user-lang-map",
-    getCurrentUserId(),
-  );
+/**
+ * Load the user's custom language map from disk (main-process safe).
+ * Call this whenever the authenticated user changes, or periodically.
+ */
+export function loadUserLangMapFromDisk(userId: string) {
+  if (!userId) return;
+  const langPath = path.join(app.getPath("userData"), `lang-${userId}.json`);
+  try {
+    if (fs.existsSync(langPath)) {
+      const raw = fs.readFileSync(langPath, "utf-8");
+      userLangMap = JSON.parse(raw) || {};
+    }
+  } catch {
+    userLangMap = {};
+  }
 }
 
-export function getLanguageDataFromTitle(title: string) {
-  // Gather all known extensions from linguist-languages
+/**
+ * Build a sorted array of all known file extensions from linguist-languages.
+ * Sorted longest-first so ".config.ts" beats ".ts" or ".fig".
+ * Cached after first call.
+ */
+let sortedExtsCache: string[] | null = null;
+function getSortedExtensions(): string[] {
+  if (sortedExtsCache) return sortedExtsCache;
   const allExts = new Set<string>();
   for (const lang of Object.values(linguistLanguages)) {
     if (Array.isArray(lang.extensions)) {
       lang.extensions.forEach((ext) => allExts.add(ext));
     }
   }
+  // Sort longest-first so multi-part extensions match before shorter ones
+  sortedExtsCache = [...allExts].sort((a, b) => b.length - a.length);
+  return sortedExtsCache;
+}
 
-  // Find the first extension match in the title
+export function getLanguageDataFromTitle(title: string) {
+  const sortedExts = getSortedExtensions();
+
+  // Find the first (longest) extension that appears in the title.
+  // Require the extension to be preceded by a word char, path separator, or SOL,
+  // and followed by a non-word char or EOL — avoids false positives like ".14" in
+  // "Build: 3.14 errors".
   let foundExt: string | null = null;
-  for (const ext of allExts) {
+  for (const ext of sortedExts) {
     const escapedExt = ext.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(`${escapedExt}(\\W|$)`, "i");
+    const regex = new RegExp(`(?:^|[\\w/\\\\])${escapedExt}(?:\\W|$)`, "i");
     if (regex.test(title)) {
       foundExt = ext;
       break;
@@ -73,15 +99,5 @@ export function getLanguageDataFromTitle(title: string) {
   };
 }
 
-export function getLangIconUrl(ext?: string): string | null {
-  if (!ext) return null;
-  const icon = getIconForFile(ext);
-  if (!icon) return null;
-
-  // development
-  if (process.env.NODE_ENV === "development") {
-    return `/main_window/icons/${icon}`;
-  }
-  // production
-  return `icons/${icon}`;
-}
+// getLangIconUrl moved to src/utils/langIconUrl.ts (renderer-safe)
+export { getLangIconUrl } from "./langIconUrl";

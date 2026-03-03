@@ -3,8 +3,11 @@ import { activeWindow } from "@miniben90/x-win";
 import os from "os";
 import path from "path";
 import "./utils/langMap";
-import { getEditorByExecutable } from "./utils/editors";
-import { getLanguageDataFromTitle } from "./utils/extractData";
+import { matchApp } from "./utils/editors";
+import {
+  getLanguageDataFromTitle,
+  loadUserLangMapFromDisk,
+} from "./utils/extractData";
 import { getIdleTimeoutSeconds } from "./utils/ipcHelp";
 import { logUsage } from "./supabase/usageLogs";
 import { addSession } from "./supabase/timeTracking";
@@ -89,7 +92,7 @@ ipcMain.handle(
 
 let mainWindow: BrowserWindow;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
-const intervalSeconds = DEFAULT_TRACKING_INTERVAL_SECONDS;
+let intervalSeconds = DEFAULT_TRACKING_INTERVAL_SECONDS;
 let trackingInterval: ReturnType<typeof setInterval> | null = null;
 let sessionStart: Date | null = null;
 let sessionEnd: Date | null = null;
@@ -164,6 +167,9 @@ app.whenReady().then(() => {
   }, 60 * 1000); // Every minute
 });
 
+/** Cache process icons by exec name — icons don't change at runtime. */
+const iconCache = new Map<string, string>();
+
 async function trackActiveWindow() {
   try {
     // Try to get the authenticated user; fall back to cached ID when offline
@@ -172,6 +178,10 @@ async function trackActiveWindow() {
       const user = await getCurrentUser();
       if (user) {
         userId = user.id;
+        // Reload user's custom language map when user changes
+        if (cachedUserId !== user.id) {
+          loadUserLangMapFromDisk(user.id);
+        }
         cachedUserId = user.id; // keep cache fresh
       }
     } catch {
@@ -183,16 +193,39 @@ async function trackActiveWindow() {
     const uid = userId;
 
     const window = activeWindow(); // Synchronous
-    const icon = window.getIcon().data;
-    const execName = window?.info?.execName?.toLowerCase();
+    const execName = window?.info?.execName?.toLowerCase() || "";
     const title = window?.title || "";
-    const editor = getEditorByExecutable(execName);
 
-    if (!editor) return;
+    if (!execName) return;
 
-    // Track current window activity
+    // Look up cached icon or fetch + cache it
+    let icon = iconCache.get(execName);
+    if (icon === undefined) {
+      try {
+        icon = window.getIcon().data;
+      } catch {
+        icon = "";
+      }
+      iconCache.set(execName, icon);
+    }
+
+    // Match the executable against known apps (editors, dev tools, browsers)
+    const appMatch = matchApp(execName, uid);
+
+    // Determine the display name for the app
+    let appName: string;
+    if (appMatch) {
+      appName = appMatch.name;
+    } else {
+      // Unrecognized app — skip tracking entirely.
+      // Only editors, dev tools, and browsers are tracked.
+      return;
+    }
+
+    // Extract language info from the window title (useful for editors & terminals)
     const langData = getLanguageDataFromTitle(title);
-    const language = langData?.language || "Unknown";
+    const language =
+      langData?.language || (appMatch.category === "editor" ? "Unknown" : null);
     const langExt = langData?.extension || null;
 
     // Pass langExt to logUsage (Supabase version)
@@ -202,7 +235,7 @@ async function trackActiveWindow() {
         () =>
           logUsage(
             uid,
-            editor.name || "Unknown",
+            appName,
             title,
             language,
             langExt,
@@ -217,7 +250,7 @@ async function trackActiveWindow() {
       if (classifyError(retryErr) === "network") {
         enqueueUsageLog(
           uid,
-          editor.name || "Unknown",
+          appName,
           title,
           language,
           langExt,
@@ -699,4 +732,21 @@ function handleOAuthCallback(url: string) {
  */
 export function updateIdleTimeout(seconds: number) {
   idleTimeoutSeconds = seconds;
+}
+
+/**
+ * Update the tracking interval setting (called when user changes preference).
+ * If tracking is currently active (not paused), the running interval is
+ * restarted with the new cadence immediately.
+ */
+export function updateTrackingInterval(seconds: number) {
+  intervalSeconds = seconds;
+  // If tracking is running, restart the setInterval with the new duration
+  if (trackingInterval && !isPaused) {
+    clearInterval(trackingInterval);
+    trackingInterval = setInterval(
+      () => trackActiveWindow(),
+      intervalSeconds * 1000,
+    );
+  }
 }

@@ -1,54 +1,340 @@
-[
-  {
-    "name": "Visual Studio Code",
-    "execNames": ["code", "code.exe"]
-  },
-  {
-    "name": "Atom",
-    "execNames": ["atom", "atom.exe"]
-  },
-  {
-    "name": "Brackets",
-    "execNames": ["brackets", "brackets.exe"]
-  },
-  {
-    "name": "Eclipse",
-    "execNames": ["eclipse", "eclipse.exe"]
-  },
-  {
-    "name": "Emacs",
-    "execNames": ["emacs", "emacs.exe"]
-  },
-  {
-    "name": "Gedit",
-    "execNames": ["gedit"]
-  },
-  {
-    "name": "NetBeans",
-    "execNames": ["netbeans", "netbeans64.exe", "netbeans.exe"]
-  },
-  {
-    "name": "Notepad++",
-    "execNames": ["notepad++", "notepad++.exe", "Notepad++.exe"]
-  },
-  {
-    "name": "SlickEdit",
-    "execNames": ["vs", "vs.exe"]
-  },
-  {
-    "name": "Sublime Text",
-    "execNames": ["subl", "sublime_text", "sublime_text.exe"]
-  },
-  {
-    "name": "TextMate",
-    "execNames": ["TextMate"]
-  },
-  {
-    "name": "UltraEdit",
-    "execNames": ["uedit", "uedit64.exe"]
-  },
-  {
-    "name": "Vim",
-    "execNames": ["vim", "gvim", "vi", "vim.exe", "gvim.exe"]
-  }
-]
+{
+  "editors": [
+    {
+      "name": "Visual Studio Code",
+      "execNames": [
+        "code",
+        "code.exe",
+        "code - insiders",
+        "code-insiders",
+        "code-insiders.exe"
+      ]
+    },
+    {
+      "name": "Cursor",
+      "execNames": ["cursor", "cursor.exe"]
+    },
+    {
+      "name": "Windsurf",
+      "execNames": ["windsurf", "windsurf.exe"]
+    },
+    {
+      "name": "Zed",
+      "execNames": ["zed", "zed.exe"]
+    },
+    {
+      "name": "Sublime Text",
+      "execNames": ["subl", "subl.exe", "sublime_text", "sublime_text.exe"]
+    },
+    {
+      "name": "Neovim",
+      "execNames": ["nvim", "nvim.exe", "nvim-qt", "nvim-qt.exe"]
+    },
+    {
+      "name": "Vim",
+      "execNames": ["vim", "vim.exe", "gvim", "gvim.exe"]
+    },
+    {
+      "name": "Emacs",
+      "execNames": ["emacs", "emacs.exe"]
+    },
+    {
+      "name": "Helix",
+      "execNames": ["hx", "hx.exe", "helix", "helix.exe"]
+    },
+    {
+      "name": "Nano",
+      "execNames": ["nano"]
+    },
+    {
+      "name": "Vi",
+      "execNames": ["vi"]
+    },
+    {
+      "name": "IntelliJ IDEA",
+      "execNames": ["idea", "idea.exe", "idea64.exe", "idea.sh"]
+    },
+    {
+      "name": "PyCharm",
+      "execNames": ["pycharm", "pycharm.exe", "pycharm64.exe", "pycharm.sh"]
+    },
+    {
+      "name": "WebStorm",
+      "execNames": ["webstorm", "webstorm.exe", "webstorm64.exe", "webstorm.sh"]
+    },
+    {
+      "name": "GoLand",
+      "execNames": ["goland", "goland.exe", "goland64.exe", "goland.sh"]
+    },
+    {
+      "name": "Rider",
+      "execNames": ["rider", "rider.exe", "rider64.exe", "rider.sh"]
+    },
+    {
+      "name": "CLion",
+      "execNames": ["clion", "clion.exe", "clion64.exe", "clion.sh"]
+    },
+    {
+      "name": "PhpStorm",
+      "execNames": ["phpstorm", "phpstorm.exe", "phpstorm64.exe", "phpstorm.sh"]
+    },
+    {
+      "name": "RubyMine",
+      "execNames": ["rubymine", "rubymine.exe", "rubymine64.exe", "rubymine.sh"]
+    },
+    {
+      "name": "DataGrip",
+      "execNames": ["datagrip", "datagrip.exe", "datagrip64.exe", "datagrip.sh"]
+    },
+    {
+      "name": "Android Studio",
+      "execNames": ["studio", "studio.exe", "studio64.exe", "studio.sh"]
+    },
+    {
+      "name": "Fleet",
+      "execNames": ["fleet", "fleet.exe"]
+    },
+    {
+      "name": "Visual Studio",
+      "execNames": ["devenv", "devenv.exe"]
+    },
+    {
+      "name": "Xcode",
+      "execNames": ["xcode", "xcodebuild"]
+    },
+    {
+      "name": "Eclipse",
+      "execNames": ["eclipse", "eclipse.exe"]
+    },
+    {
+      "name": "NetBeans",
+      "execNames": ["netbeans", "netbeans.exe", "netbeans64.exe"]
+    },
+    {
+      "name": "Notepad++",
+      "execNames": ["notepad++", "notepad++.exe"]
+    },
+    {
+      "name": "Atom",
+      "execNames": ["atom", "atom.exe"]
+    },
+    {
+      "name": "Brackets",
+      "execNames": ["brackets", "brackets.exe"]
+    },
+    {
+      "name": "TextMate",
+      "execNames": ["textmate", "mate"]
+    },
+    {
+      "name": "Kate",
+      "execNames": ["kate", "kate.exe"]
+    },
+    {
+      "name": "Gedit",
+      "execNames": ["gedit"]
+    },
+    {
+      "name": "Geany",
+      "execNames": ["geany", "geany.exe"]
+    },
+    {
+      "name": "Lite XL",
+      "execNames": ["lite-xl", "lite-xl.exe"]
+    },
+    {
+      "name": "Lapce",
+      "execNames": ["lapce", "lapce.exe"]
+    },
+    {
+      "name": "Nova",
+      "execNames": ["nova"]
+    },
+    {
+      "name": "BBEdit",
+      "execNames": ["bbedit"]
+    },
+    {
+      "name": "CotEditor",
+      "execNames": ["coteditor"]
+    },
+    {
+      "name": "SlickEdit",
+      "execNames": ["slickedit", "slickedit.exe", "vs.exe"]
+    },
+    {
+      "name": "UltraEdit",
+      "execNames": ["uedit32", "uedit32.exe", "uedit64", "uedit64.exe"]
+    },
+    {
+      "name": "Komodo IDE",
+      "execNames": ["komodo", "komodo.exe"]
+    },
+    {
+      "name": "Theia",
+      "execNames": ["theia", "theia.exe"]
+    },
+    {
+      "name": "Spyder",
+      "execNames": ["spyder", "spyder.exe"]
+    },
+    {
+      "name": "RStudio",
+      "execNames": ["rstudio", "rstudio.exe"]
+    },
+    {
+      "name": "MATLAB",
+      "execNames": ["matlab", "matlab.exe"]
+    },
+    {
+      "name": "Jupyter Notebook",
+      "execNames": ["jupyter-notebook", "jupyter-lab"]
+    }
+  ],
+  "devTools": [
+    {
+      "name": "Terminal",
+      "execNames": [
+        "windowsterminal.exe",
+        "wt.exe",
+        "cmd.exe",
+        "powershell.exe",
+        "pwsh.exe",
+        "pwsh",
+        "bash",
+        "zsh",
+        "fish",
+        "alacritty",
+        "alacritty.exe",
+        "kitty",
+        "wezterm",
+        "wezterm-gui",
+        "wezterm.exe",
+        "iterm2",
+        "hyper",
+        "hyper.exe",
+        "gnome-terminal",
+        "konsole",
+        "xterm",
+        "tilix",
+        "terminator",
+        "terminal",
+        "conhost.exe"
+      ]
+    },
+    {
+      "name": "Docker Desktop",
+      "execNames": ["docker desktop", "docker", "docker.exe"]
+    },
+    {
+      "name": "Postman",
+      "execNames": ["postman", "postman.exe"]
+    },
+    {
+      "name": "Insomnia",
+      "execNames": ["insomnia", "insomnia.exe"]
+    },
+    {
+      "name": "Bruno",
+      "execNames": ["bruno", "bruno.exe"]
+    },
+    {
+      "name": "DBeaver",
+      "execNames": ["dbeaver", "dbeaver.exe"]
+    },
+    {
+      "name": "pgAdmin",
+      "execNames": ["pgadmin4", "pgadmin4.exe"]
+    },
+    {
+      "name": "MongoDB Compass",
+      "execNames": ["mongodb compass", "mongodbcompass.exe"]
+    },
+    {
+      "name": "Git GUI",
+      "execNames": [
+        "gitk",
+        "git-gui",
+        "sourcetreehost.exe",
+        "sourcetree",
+        "gitkraken",
+        "gitkraken.exe",
+        "fork",
+        "fork.exe",
+        "github desktop",
+        "github desktop.exe",
+        "smartgit",
+        "smartgit.exe"
+      ]
+    },
+    {
+      "name": "Figma",
+      "execNames": ["figma", "figma.exe"]
+    },
+    {
+      "name": "Blender",
+      "execNames": ["blender", "blender.exe"]
+    },
+    {
+      "name": "Unity",
+      "execNames": ["unity", "unity.exe"]
+    },
+    {
+      "name": "Unreal Engine",
+      "execNames": [
+        "unrealengine",
+        "ue4editor.exe",
+        "ue5editor.exe",
+        "unrealed"
+      ]
+    },
+    {
+      "name": "Godot",
+      "execNames": ["godot", "godot.exe"]
+    }
+  ],
+  "browsers": [
+    {
+      "name": "Chrome",
+      "execNames": [
+        "chrome",
+        "chrome.exe",
+        "google-chrome",
+        "google-chrome-stable"
+      ]
+    },
+    {
+      "name": "Firefox",
+      "execNames": ["firefox", "firefox.exe"]
+    },
+    {
+      "name": "Edge",
+      "execNames": [
+        "msedge",
+        "msedge.exe",
+        "microsoft-edge",
+        "microsoft-edge-stable"
+      ]
+    },
+    {
+      "name": "Safari",
+      "execNames": ["safari"]
+    },
+    {
+      "name": "Brave",
+      "execNames": ["brave", "brave.exe", "brave-browser"]
+    },
+    {
+      "name": "Arc",
+      "execNames": ["arc", "arc.exe"]
+    },
+    {
+      "name": "Opera",
+      "execNames": ["opera", "opera.exe"]
+    },
+    {
+      "name": "Vivaldi",
+      "execNames": ["vivaldi", "vivaldi.exe"]
+    }
+  ]
+}

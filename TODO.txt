@@ -435,10 +435,10 @@
 - [ ] Allow one-click copy to clipboard
 
 ## ═══════════════════════════════════════════════════════════════════
-## PHASE 10: PRIVACY & CONTROL
+## PHASE 9: PRIVACY & CONTROL
 ## ═══════════════════════════════════════════════════════════════════
 
-### Step 10.1: Incognito Mode (Instant Pause)
+### Step 9.1: Incognito Mode (Instant Pause)
 - [ ] Add global keyboard shortcut (e.g., Ctrl+Shift+Pause) to toggle tracking
 - [ ] Add system tray icon with quick pause/resume action
 - [ ] When paused, show clear visual indicator ("Tracking Paused")
@@ -446,16 +446,16 @@
 - [ ] Resume automatically after configurable timeout (optional)
 
 ## ═══════════════════════════════════════════════════════════════════
-## PHASE 11: BILLING & REPORTS
+## PHASE 10: BILLING & REPORTS
 ## ═══════════════════════════════════════════════════════════════════
 
-### Step 11.1: Hourly Rate & Billable Hours
+### Step 10.1: Hourly Rate & Billable Hours
 - [ ] Add per-project hourly rate field (in project settings)
 - [ ] Mark sessions/time as billable or non-billable
 - [ ] Show billable hours summary per project on Dashboard
 - [ ] Display running total of earnings for current period
 
-### Step 11.2: Invoice Generation
+### Step 10.2: Invoice Generation
 - [ ] Generate professional PDF invoices from billable hours
       Include: client/project name, date range, hours, rate, total
 - [ ] Allow customization: logo, company name, payment terms, notes
@@ -463,35 +463,35 @@
 - [ ] Export as PDF or copy invoice data as CSV
 - [ ] Store invoice history for reference
 
-### Step 11.3: Team Dashboard (Org Analytics)
+### Step 10.3: Team Dashboard (Org Analytics)
 - [ ] Organization-wide analytics page for admins/managers
 - [ ] Show team member activity overview (hours tracked, projects, languages)
 - [ ] Aggregate stats: total org hours, most active projects, language breakdown
 - [ ] Allow filtering by date range, project, and team member
 
 ## ═══════════════════════════════════════════════════════════════════
-## PHASE 12: POLISH & SHIP
+## PHASE 11: POLISH & SHIP
 ## ═══════════════════════════════════════════════════════════════════
 
-### Step 12.1: Keyboard Shortcuts
+### Step 11.1: Keyboard Shortcuts
 - [ ] Add global shortcuts for common actions:
       Start/stop tracking, open app, switch tabs, open review panel
 - [ ] Make shortcuts configurable in preferences
 - [ ] Show shortcut hints in tooltips and menu items
 
-### Step 12.2: Notifications System
+### Step 11.2: Notifications System
 - [ ] In-app notification center (bell icon with unread count)
 - [ ] Notification types: goal completed, scheduled session reminder,
       health alert, org invite, sync status
 - [ ] System tray notifications for critical events
 - [ ] Notification preferences (per-type enable/disable)
 
-### Step 12.3: Export & Reporting
+### Step 11.3: Export & Reporting
 - [ ] Export individual reports as PDF (daily, weekly, monthly)
 - [ ] CSV export for any filtered data view
 - [ ] Allow organization switching (if member of multiple orgs)
 
-### Step 12.4: Quality & Release
+### Step 11.4: Quality & Release
 - [ ] Set up error logging service (Sentry or similar)
 - [ ] Add auto-update mechanism (electron-updater)
 - [ ] Code-sign the app for Windows/macOS
