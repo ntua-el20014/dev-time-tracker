@@ -508,12 +508,24 @@ async function handleScheduleSessionSubmit() {
     return;
   }
 
+  // Validate: if recurring, require an end date
+  if (isRecurring && !recurrenceEnd) {
+    showInAppNotification("Please select an end date for weekly recurrence");
+    return;
+  }
+
   // Create datetime without timezone conversion issues
   const scheduled_datetime = `${date}T${time}:00`;
 
   // Check if the scheduled time is in the past
   if (new Date(scheduled_datetime) < new Date()) {
     showInAppNotification("Cannot schedule sessions in the past");
+    return;
+  }
+
+  // Validate recurrence end date is after the session date
+  if (isRecurring && recurrenceEnd && recurrenceEnd <= date) {
+    showInAppNotification("Recurrence end date must be after the session date");
     return;
   }
 
@@ -549,14 +561,21 @@ async function handleScheduleSessionSubmit() {
   };
 
   try {
-    const sessionId = await safeIpcInvoke(
+    const result = await safeIpcInvoke<any>(
       "create-scheduled-session",
       [scheduledSession],
       { fallback: null },
     );
-    if (sessionId) {
+    if (result) {
       closeModal();
-      showInAppNotification("Session scheduled successfully!");
+      const count = result._recurringCount;
+      if (count && count > 1) {
+        showInAppNotification(
+          `${count} weekly sessions scheduled successfully!`,
+        );
+      } else {
+        showInAppNotification("Session scheduled successfully!");
+      }
       await renderCalendar();
     } else {
       showInAppNotification("Failed to schedule session");

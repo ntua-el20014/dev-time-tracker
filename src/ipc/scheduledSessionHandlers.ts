@@ -5,7 +5,9 @@ import type { ScheduledSessionData } from "../supabase/scheduledSessions";
 import { logError } from "../utils/errorHandler";
 
 /**
- * Create a new scheduled session
+ * Create a new scheduled session.
+ * If recurrence_type is "weekly" and an endDate is provided in recurrence_data,
+ * creates one session per week from the initial date until the end date.
  */
 ipcMain.handle(
   "create-scheduled-session",
@@ -17,6 +19,51 @@ ipcMain.handle(
         throw new Error("User not authenticated");
       }
 
+      // Handle weekly recurrence: create multiple sessions
+      if (
+        scheduledSession.recurrence_type === "weekly" &&
+        scheduledSession.recurrence_data?.endDate
+      ) {
+        const startDate = new Date(scheduledSession.scheduled_datetime);
+        const endDate = new Date(scheduledSession.recurrence_data.endDate);
+        // Ensure endDate covers the full day
+        endDate.setHours(23, 59, 59, 999);
+
+        const createdSessions = [];
+        const currentDate = new Date(startDate);
+
+        while (currentDate <= endDate) {
+          // Build the datetime string for this occurrence
+          const year = currentDate.getFullYear();
+          const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+          const day = String(currentDate.getDate()).padStart(2, "0");
+          const timePart = scheduledSession.scheduled_datetime.split("T")[1];
+          const occurrenceDatetime = `${year}-${month}-${day}T${timePart}`;
+
+          const sessionData: ScheduledSessionData = {
+            ...scheduledSession,
+            scheduled_datetime: occurrenceDatetime,
+          };
+
+          const created = await scheduledSessions.createScheduledSession(
+            user.id,
+            sessionData,
+          );
+          createdSessions.push(created);
+
+          // Advance by 7 days
+          currentDate.setDate(currentDate.getDate() + 7);
+        }
+
+        // Return the first created session with count info
+        const first = createdSessions[0] ?? null;
+        if (first) {
+          first._recurringCount = createdSessions.length;
+        }
+        return first;
+      }
+
+      // Non-recurring: create a single session
       return await scheduledSessions.createScheduledSession(
         user.id,
         scheduledSession,

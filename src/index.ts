@@ -1,4 +1,13 @@
-import { app, BrowserWindow, ipcMain, powerMonitor } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  powerMonitor,
+  Tray,
+  Menu,
+  nativeImage,
+  globalShortcut,
+} from "electron";
 import { activeWindow } from "@miniben90/x-win";
 import os from "os";
 import path from "path";
@@ -36,6 +45,7 @@ import "./ipc/projectHandlers";
 import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";
 import "./ipc/exportHandlers";
+import "./ipc/standupHandlers";
 import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
 
 // ── Process-level error handlers ──────────────────────────────────
@@ -99,6 +109,8 @@ let sessionEnd: Date | null = null;
 let sessionActiveDuration = 0; // in seconds
 let lastActiveTimestamp: Date | null = null;
 let isPaused = false;
+let isIncognito = false;
+let tray: Tray | null = null;
 /** Cached user ID so tracking can continue when the network is down. */
 let cachedUserId: string | null = null;
 let idleTimeoutSeconds = getIdleTimeoutSeconds(); // Default, updated when user logs in
@@ -150,11 +162,13 @@ app.whenReady().then(() => {
       if (!isPaused && trackingInterval) {
         ipcMain.emit("auto-pause");
         mainWindow?.webContents.send("auto-paused");
-        mainWindow?.webContents.send("notify", {
-          message: `Tracking paused due to inactivity (${(
-            idleTimeoutSeconds / 60
-          ).toFixed(1)} minutes idle).`,
-        });
+        if (!isIncognito) {
+          mainWindow?.webContents.send("notify", {
+            message: `Tracking paused due to inactivity (${(
+              idleTimeoutSeconds / 60
+            ).toFixed(1)} minutes idle).`,
+          });
+        }
       }
     }
   }, 2000);
@@ -165,12 +179,25 @@ app.whenReady().then(() => {
   setInterval(() => {
     checkScheduledSessionNotifications();
   }, 60 * 1000); // Every minute
+
+  // ── System tray ──────────────────────────────────────────────────
+  createTray();
+
+  // ── Global shortcut: Ctrl+Shift+I toggles incognito ──────────────
+  globalShortcut.register("CommandOrControl+Shift+I", () => {
+    isIncognito = !isIncognito;
+    mainWindow?.webContents.send("incognito-toggled", isIncognito);
+    updateTrayMenu();
+  });
 });
 
 /** Cache process icons by exec name — icons don't change at runtime. */
 const iconCache = new Map<string, string>();
 
 async function trackActiveWindow() {
+  // Skip logging when incognito mode is active
+  if (isIncognito) return;
+
   try {
     // Try to get the authenticated user; fall back to cached ID when offline
     let userId: string | null = null;
@@ -344,6 +371,55 @@ async function checkScheduledSessionNotifications() {
       logError("checkScheduledSessionNotifications", err);
     }
   }
+}
+
+// ── System Tray helpers ──────────────────────────────────────────────
+function createTray() {
+  // Create a 16x16 simple tray icon using nativeImage
+  const trayIcon = nativeImage.createFromDataURL(
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA" +
+      "RklEQVQ4y2NkYPj/n4EBCJgYKASMDCSCUQ1DM4CBkeH/fxA4D8RqhBSfB2I1IL4A" +
+      "xGcZGRl2MDIynAdKnAfi80B8AYgBG7ARCX6u/HQAAAAASUVORK5CYII=",
+  );
+  tray = new Tray(trayIcon.resize({ width: 16, height: 16 }));
+  tray.setToolTip("Dev Time Tracker");
+  updateTrayMenu();
+
+  tray.on("click", () => {
+    mainWindow?.show();
+    mainWindow?.focus();
+  });
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: isIncognito ? "✔ Incognito Mode" : "  Incognito Mode",
+      click: () => {
+        isIncognito = !isIncognito;
+        mainWindow?.webContents.send("incognito-toggled", isIncognito);
+        updateTrayMenu();
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Show Window",
+      click: () => {
+        mainWindow?.show();
+        mainWindow?.focus();
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Quit",
+      click: () => app.quit(),
+    },
+  ]);
+  tray.setContextMenu(contextMenu);
+  tray.setToolTip(
+    isIncognito ? "Dev Time Tracker (Incognito)" : "Dev Time Tracker",
+  );
 }
 
 function createWindow() {
@@ -561,6 +637,16 @@ ipcMain.on("auto-resume", (_event) => {
   }
 });
 
+// ── Incognito Mode ───────────────────────────────────────────────────
+ipcMain.handle("toggle-incognito", () => {
+  isIncognito = !isIncognito;
+  mainWindow?.webContents.send("incognito-toggled", isIncognito);
+  updateTrayMenu();
+  return isIncognito;
+});
+
+ipcMain.handle("get-incognito-status", () => isIncognito);
+
 // Handle manual notification check trigger (e.g., when user logs in)
 ipcMain.handle("check-notifications", async () => {
   await checkScheduledSessionNotifications();
@@ -665,6 +751,11 @@ app.on("before-quit", async (event) => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// Unregister global shortcuts when the app is about to quit
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 // Handle OAuth callback URLs (for deep linking)

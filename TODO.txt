@@ -417,33 +417,22 @@
 ## PHASE 8: DEVELOPER WORKFLOW AUTOMATIONS
 ## ═══════════════════════════════════════════════════════════════════
 
-### Step 8.1: Git Branch Correlation
-- [ ] Detect active Git repo in the tracked project directory
-- [ ] Read current branch name via `git rev-parse --abbrev-ref HEAD`
-- [ ] Auto-tag sessions with the active branch name
-- [ ] Store branch info in session metadata (git_branch field)
-- [ ] Show per-branch time breakdown in Dashboard / Summary tabs
-- [ ] Allow filtering sessions by branch name
-
-### Step 8.2: Auto-Generated Standup Notes
-- [ ] Add "Generate Daily Summary" button to Dashboard
-- [ ] Aggregate yesterday's or selection of dates data: languages used, apps/editors,
+### Step 8.1: Auto-Generated Standup Notes
+- [x] Add "Generate Daily Summary" button to Dashboard
+- [x] Aggregate yesterday's or selection of dates data: languages used, apps/editors,
       branches, session durations, projects worked on
-- [ ] Format into a clean standup-style summary:
-      "Yesterday (or last week) I worked X hours on [branch] in [project], mostly in
-       TypeScript/Python. Focused on [top window titles]."
-- [ ] Allow one-click copy to clipboard
+- [x] Format into a clean standup-style summary:
+- [x] Allow one-click copy to clipboard
 
 ## ═══════════════════════════════════════════════════════════════════
 ## PHASE 9: PRIVACY & CONTROL
 ## ═══════════════════════════════════════════════════════════════════
 
 ### Step 9.1: Incognito Mode (Instant Pause)
-- [ ] Add global keyboard shortcut (e.g., Ctrl+Shift+Pause) to toggle tracking
-- [ ] Add system tray icon with quick pause/resume action
-- [ ] When paused, show clear visual indicator ("Tracking Paused")
-- [ ] Do not record ANY data while incognito is active
-- [ ] Resume automatically after configurable timeout (optional)
+- [x] Add global keyboard shortcut (e.g., Ctrl+Shift+Pause) to toggle tracking
+- [x] Add system tray icon with quick pause/resume action
+- [x] When paused, show clear visual indicator ("Tracking Paused")
+- [x] Do not record ANY data while incognito is active
 
 ## ═══════════════════════════════════════════════════════════════════
 ## PHASE 10: BILLING & REPORTS

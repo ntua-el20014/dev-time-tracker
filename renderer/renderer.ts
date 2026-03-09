@@ -66,6 +66,8 @@ import "./styles/organization.css";
 import "./styles/connection-status.css";
 import "./styles/sync-status.css";
 import "./styles/org-wizard.css";
+import "./styles/standup.css";
+import "./styles/incognito.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
 // ── Tab dirty-flag system ──────────────────────────────────────────
@@ -574,6 +576,40 @@ ipcRenderer.on("auto-resumed", () => {
   const pauseIcon = document.getElementById("pauseIcon") as HTMLImageElement;
   if (pauseBtn && pauseIcon) {
     updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
+  }
+});
+
+// ── Incognito Mode ───────────────────────────────────────────────────
+(window as any).isIncognito = false;
+
+function updateIncognitoUI(active: boolean) {
+  (window as any).isIncognito = active;
+  const banner = document.getElementById("incognitoBanner");
+  const btn = document.getElementById("incognitoBtn");
+  if (banner) banner.style.display = active ? "flex" : "none";
+  if (btn) btn.classList.toggle("incognito-active", active);
+}
+
+ipcRenderer.on("incognito-toggled", (_event: any, active: boolean) => {
+  updateIncognitoUI(active);
+});
+
+// Set up incognito button click
+document.addEventListener("DOMContentLoaded", () => {
+  const incognitoBtn = document.getElementById("incognitoBtn");
+  if (incognitoBtn) {
+    incognitoBtn.addEventListener("click", async () => {
+      try {
+        const newState = await ipcRenderer.invoke("toggle-incognito");
+        updateIncognitoUI(newState);
+      } catch {
+        showInAppNotification(
+          "Failed to toggle incognito mode.",
+          3000,
+          "error",
+        );
+      }
+    });
   }
 });
 
