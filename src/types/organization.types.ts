@@ -52,6 +52,7 @@ export interface CloudProject {
   name: string;
   description?: string | null;
   color: string;
+  hourly_rate?: number | null;
   scope: "personal" | "organization";
   is_active: boolean;
   manager_id: string;
@@ -92,6 +93,7 @@ export interface CreateCloudProjectData {
   name: string;
   description?: string | null;
   color?: string;
+  hourly_rate?: number | null;
   scope?: "personal" | "organization";
   manager_id?: string;
   org_id?: string | null;
@@ -101,6 +103,7 @@ export interface UpdateCloudProjectData {
   name?: string;
   description?: string | null;
   color?: string;
+  hourly_rate?: number | null;
   scope?: "personal" | "organization";
   is_active?: boolean;
   manager_id?: string;

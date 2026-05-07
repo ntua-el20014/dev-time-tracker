@@ -1051,6 +1051,14 @@ function renderProjectCard(project: CloudProjectWithManager): string {
               ${project.is_active ? "Active" : "Archived"}
             </span>
           </div>
+          <div class="project-meta-item">
+            <span class="meta-label">Hourly Rate:</span>
+            <span class="meta-value">$${
+              project.hourly_rate != null
+                ? Number(project.hourly_rate).toFixed(2)
+                : "Not set"
+            }</span>
+          </div>
         </div>
       </div>
     </div>
@@ -1435,6 +1443,11 @@ async function showCreateCloudProjectModal() {
             <input id="cloud-project-color" name="color" type="color" value="#3b82f6">
           </div>
         </div>
+
+        <div style="margin-bottom: 15px;">
+          <label for="cloud-project-hourly-rate">Hourly Rate (optional)</label><br>
+          <input id="cloud-project-hourly-rate" name="hourlyRate" type="number" min="0" step="0.01" placeholder="e.g. 75.00">
+        </div>
         
         <div class="session-modal-actions">
           <button type="button" id="cloudProjectCancelBtn" class="btn-cancel">Cancel</button>
@@ -1462,12 +1475,15 @@ async function showCreateCloudProjectModal() {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(form);
+    const hourlyRateValue = (formData.get("hourlyRate") as string).trim();
+    const hourlyRate = hourlyRateValue ? Number(hourlyRateValue) : null;
 
     try {
       await createCloudProject({
         name: formData.get("name") as string,
         description: formData.get("description") as string,
         color: formData.get("color") as string,
+        hourly_rate: Number.isFinite(hourlyRate) ? hourlyRate : null,
         org_id: currentOrg!.id,
         manager_id: currentUserProfile!.id,
       });
@@ -1567,6 +1583,11 @@ async function showEditCloudProjectModal(projectId: string) {
             }">
           </div>
         </div>
+
+        <div style="margin-bottom: 15px;">
+          <label for="cloud-project-edit-hourly-rate">Hourly Rate (optional)</label><br>
+          <input id="cloud-project-edit-hourly-rate" name="hourlyRate" type="number" min="0" step="0.01" value="${project.hourly_rate ?? ""}" placeholder="e.g. 75.00">
+        </div>
         
         <div class="session-modal-actions">
           <button type="button" id="cloudProjectEditCancelBtn" class="btn-cancel">Cancel</button>
@@ -1596,12 +1617,15 @@ async function showEditCloudProjectModal(projectId: string) {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(form);
+    const hourlyRateValue = (formData.get("hourlyRate") as string).trim();
+    const hourlyRate = hourlyRateValue ? Number(hourlyRateValue) : null;
 
     try {
       await updateCloudProject(projectId, {
         name: formData.get("name") as string,
         description: formData.get("description") as string,
         color: formData.get("color") as string,
+        hourly_rate: Number.isFinite(hourlyRate) ? hourlyRate : null,
       });
       showNotification("Cloud project updated successfully!");
       modal.remove();

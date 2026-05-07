@@ -12,7 +12,13 @@ import type {
  */
 ipcMain.handle(
   "create-project",
-  async (_event, name: string, description: string, color: string) => {
+  async (
+    _event,
+    name: string,
+    description: string,
+    color: string,
+    hourlyRate?: number | null,
+  ) => {
     try {
       const user = await getCurrentUser();
       if (!user) {
@@ -23,6 +29,7 @@ ipcMain.handle(
         name,
         description,
         color,
+        hourly_rate: hourlyRate ?? null,
         scope: "personal", // Default to personal for now
       };
 
@@ -177,6 +184,7 @@ ipcMain.handle(
     name: string,
     description: string,
     color: string,
+    hourlyRate?: number | null,
   ) => {
     try {
       const projectId = String(id);
@@ -184,6 +192,7 @@ ipcMain.handle(
         name,
         description,
         color,
+        hourly_rate: hourlyRate ?? null,
       };
 
       return await cloudProjects.updateCloudProject(projectId, updates);

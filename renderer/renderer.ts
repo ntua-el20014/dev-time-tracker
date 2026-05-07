@@ -445,13 +445,16 @@ ipcRenderer.on("get-session-info", async () => {
               ? `
           <label for="session-project">Project (optional):</label><br>
           <div id="session-project-container"></div><br>
-          
-          <label>
-            <input type="checkbox" id="session-billable" name="billable"> Billable
-          </label><br>
           `
               : ""
           }
+
+          <label for="session-billable-status">Billing:</label><br>
+          <select id="session-billable-status" name="billableStatus" required>
+            <option value="" disabled selected>Select billing status</option>
+            <option value="false">Non-billable</option>
+            <option value="true">Billable</option>
+          </select><br>
           
           <div class="session-modal-actions">
             <button type="button" id="sessionCancelBtn" class="btn-cancel">Discard</button>
@@ -507,7 +510,13 @@ ipcRenderer.on("get-session-info", async () => {
       e.preventDefault();
       const formData = new FormData(form);
       const projectId = projectDropdown ? projectDropdown.getValue() : "";
-      const isBillable = (formData.get("billable") as string) === "on";
+      const billableStatus = formData.get("billableStatus") as string | null;
+
+      if (billableStatus !== "true" && billableStatus !== "false") {
+        return;
+      }
+
+      const isBillable = billableStatus === "true";
 
       ipcRenderer.send("session-info-reply", {
         title: (formData.get("title") as string) || "Coding Session",

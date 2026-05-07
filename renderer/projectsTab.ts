@@ -1,7 +1,6 @@
 import { ipcRenderer } from "electron";
 import { ProjectWithMembers } from "../shared/types";
 import {
-  getCurrentUserId,
   isCurrentUserManagerOrAdmin,
   getCurrentUserRole,
   safeIpcInvoke,
@@ -193,6 +192,14 @@ function renderProjectCard(project: ProjectWithMembers): string {
               ${project.is_active ? "Active" : "Archived"}
             </span>
           </div>
+          <div class="project-meta-item">
+            <span class="meta-label">Hourly Rate:</span>
+            <span class="meta-value">$${
+              project.hourly_rate != null
+                ? Number(project.hourly_rate).toFixed(2)
+                : "Not set"
+            }</span>
+          </div>
         </div>
         
         <button class="project-stats-btn" data-project-id="${project.id}">
@@ -319,6 +326,11 @@ function showCreateProjectModal() {
             <input id="project-color" name="color" type="color" value="#3b82f6">
           </div>
         </div>
+
+        <div style="margin-bottom: 15px;">
+          <label for="project-hourly-rate">Hourly Rate (optional)</label><br>
+          <input id="project-hourly-rate" name="hourlyRate" type="number" min="0" step="0.01" placeholder="e.g. 75.00">
+        </div>
         
         <div class="session-modal-actions">
           <button type="button" id="projectCancelBtn" class="btn-cancel">Cancel</button>
@@ -344,6 +356,8 @@ function showCreateProjectModal() {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(form);
+    const hourlyRateValue = (formData.get("hourlyRate") as string).trim();
+    const hourlyRate = hourlyRateValue ? Number(hourlyRateValue) : null;
 
     const result = await safeIpcInvoke(
       "create-project",
@@ -351,6 +365,7 @@ function showCreateProjectModal() {
         formData.get("name") as string,
         formData.get("description") as string,
         formData.get("color") as string,
+        Number.isFinite(hourlyRate) ? hourlyRate : null,
       ],
       { fallback: null },
     );
@@ -445,6 +460,11 @@ function showEditProjectModal(projectId: string | number) {
             project.color || "#3b82f6"
           }">
         </div>
+
+        <label for="project-edit-hourly-rate">Hourly Rate (optional)</label><br>
+        <input id="project-edit-hourly-rate" name="hourlyRate" type="number" min="0" step="0.01" value="${
+          project.hourly_rate ?? ""
+        }" placeholder="e.g. 75.00">
         
         <div class="session-modal-actions">
           <button type="button" id="projectEditCancelBtn" class="btn-cancel">Cancel</button>
@@ -472,6 +492,8 @@ function showEditProjectModal(projectId: string | number) {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(form);
+    const hourlyRateValue = (formData.get("hourlyRate") as string).trim();
+    const hourlyRate = hourlyRateValue ? Number(hourlyRateValue) : null;
 
     const result = await safeIpcInvoke(
       "update-project",
@@ -480,6 +502,7 @@ function showEditProjectModal(projectId: string | number) {
         formData.get("name") as string,
         formData.get("description") as string,
         formData.get("color") as string,
+        Number.isFinite(hourlyRate) ? hourlyRate : null,
       ],
       { fallback: null },
     );

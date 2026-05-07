@@ -14,8 +14,8 @@ export interface SessionRow {
   duration: number;
   title: string;
   description: string | null;
-  project_id?: number;
-  is_billable?: number;
+  project_id?: string | number | null;
+  is_billable: boolean;
   tags?: string[];
   date: string;
   project_name?: string;
@@ -117,6 +117,7 @@ export interface Project {
   name: string;
   description?: string;
   color?: string;
+  hourly_rate?: number | null;
   scope?: "personal" | "organization";
   is_active: number;
   manager_id: number;

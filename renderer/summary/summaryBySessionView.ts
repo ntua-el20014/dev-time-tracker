@@ -318,7 +318,7 @@ export function renderSessionRows(
     state.pagination = new PaginationManager<SessionRow>(
       SESSIONS_PER_PAGE,
       (pageData, pageInfo) => {
-        renderSessionPage(container, pageData, state, allTags);
+        renderSessionPage(container, pageData, allTags);
         updatePaginationControls(container, pageInfo, state);
       },
     );
@@ -331,7 +331,6 @@ export function renderSessionRows(
 export function renderSessionPage(
   container: HTMLElement,
   sessionsToRender: SessionRow[],
-  state: BySessionViewState,
   allTags: Tag[],
 ) {
   const sessionTableBody = container.querySelector("#sessionTableBody");
@@ -460,6 +459,17 @@ export async function showEditSessionModal(
         value: session.description || "",
       },
       {
+        name: "isBillable",
+        label: "Billing:",
+        type: "select",
+        value: session.is_billable ? "true" : "false",
+        required: true,
+        options: [
+          { value: "false", label: "Non-billable" },
+          { value: "true", label: "Billable" },
+        ],
+      },
+      {
         name: "duration",
         label: "Duration (seconds):",
         type: "text",
@@ -477,6 +487,7 @@ export async function showEditSessionModal(
             id: session.id,
             title: values.title,
             description: values.description,
+            isBillable: values.isBillable === "true",
             tags: selectedTags,
           },
         ],

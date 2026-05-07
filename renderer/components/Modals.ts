@@ -4,25 +4,25 @@
 export function cleanupAllModals() {
   // Clean up calendar modals
   const calendarModals = document.querySelectorAll(
-    "#calendarModal, #calendarDetailsModal"
+    "#calendarModal, #calendarDetailsModal",
   );
   calendarModals.forEach((modal) => modal.remove());
 
   // Clean up confirmation modals
   const confirmationModals = document.querySelectorAll(
-    "#confirmationModal, #deleteConfirmationModal"
+    "#confirmationModal, #deleteConfirmationModal",
   );
   confirmationModals.forEach((modal) => modal.remove());
 
   // Clean up generic modals
   const genericModals = document.querySelectorAll(
-    "#customModal, #customModalOverlay"
+    "#customModal, #customModalOverlay",
   );
   genericModals.forEach((modal) => modal.remove());
 
   // Clean up any modal overlays
   const overlays = document.querySelectorAll(
-    ".modal-overlay, .custom-modal-overlay"
+    ".modal-overlay, .custom-modal-overlay",
   );
   overlays.forEach((overlay) => overlay.remove());
 }
@@ -32,9 +32,10 @@ export interface ModalOptions {
   fields: {
     name: string;
     label: string;
-    type: "text" | "textarea" | "password" | "custom";
+    type: "text" | "textarea" | "password" | "select" | "custom";
     value?: string;
     required?: boolean;
+    options?: { value: string; label: string }[];
     render?: () => HTMLElement; // For custom field types
   }[];
   submitText?: string;
@@ -49,7 +50,7 @@ export interface ModalOptions {
 export function showModal(options: ModalOptions) {
   // Clean up any existing generic modals first, but let calendar handle its own modals
   const genericModals = document.querySelectorAll(
-    "#customModal, #customModalOverlay"
+    "#customModal, #customModalOverlay",
   );
   genericModals.forEach((modal) => modal.remove());
 
@@ -58,7 +59,7 @@ export function showModal(options: ModalOptions) {
 
   // --- Overlay logic ---
   let overlay = document.getElementById(
-    "customModalOverlay"
+    "customModalOverlay",
   ) as HTMLDivElement | null;
   if (!overlay) {
     overlay = document.createElement("div");
@@ -82,7 +83,7 @@ export function showModal(options: ModalOptions) {
     document.body.appendChild(modal);
   }
   const content = modal.querySelector(
-    ".session-modal-content"
+    ".session-modal-content",
   ) as HTMLDivElement;
   const h2 = content.querySelector("h2")!;
   const form = content.querySelector("form") as HTMLFormElement;
@@ -99,7 +100,7 @@ export function showModal(options: ModalOptions) {
       const customElement = f.render();
       form.appendChild(customElement);
     } else {
-      // For standard fields (text, textarea, password), create label and input
+      // For standard fields, create label and input
       const label = document.createElement("label");
       label.setAttribute("for", `modal-${f.name}`);
       label.textContent = f.label;
@@ -113,6 +114,23 @@ export function showModal(options: ModalOptions) {
         if (f.required) textarea.required = true;
         textarea.value = f.value || "";
         form.appendChild(textarea);
+      } else if (f.type === "select") {
+        const select = document.createElement("select");
+        select.id = `modal-${f.name}`;
+        select.name = f.name;
+        if (f.required) select.required = true;
+
+        (f.options || []).forEach((option) => {
+          const optionElement = document.createElement("option");
+          optionElement.value = option.value;
+          optionElement.textContent = option.label;
+          if (f.value !== undefined && option.value === f.value) {
+            optionElement.selected = true;
+          }
+          select.appendChild(optionElement);
+        });
+
+        form.appendChild(select);
       } else {
         // text or password
         const input = document.createElement("input");
@@ -230,7 +248,7 @@ export function showModal(options: ModalOptions) {
 
   // Prevent modal content clicks from bubbling up
   const modalContent = modal.querySelector(
-    ".session-modal-content, .custom-modal-content, .modal-content"
+    ".session-modal-content, .custom-modal-content, .modal-content",
   );
   if (modalContent) {
     modalContent.addEventListener("click", (e) => {

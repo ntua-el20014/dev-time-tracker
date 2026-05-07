@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { ipcRenderer } from "electron";
 import {
   getMonday,
   filterDailyDataForWeek,

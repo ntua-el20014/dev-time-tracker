@@ -439,10 +439,10 @@
 ## ═══════════════════════════════════════════════════════════════════
 
 ### Step 10.1: Hourly Rate & Billable Hours
-- [ ] Add per-project hourly rate field (in project settings)
-- [ ] Mark sessions/time as billable or non-billable
-- [ ] Show billable hours summary per project on Dashboard
-- [ ] Display running total of earnings for current period
+- [x] Add optional per-project hourly rate field (in project settings)
+- [x] Mark sessions/time as billable or non-billable, mandatory, can be changed
+- [ ] Show billable hours summary per project somewhere
+- [ ] Display running total of earnings for current period in Dashboard
 
 ### Step 10.2: Invoice Generation
 - [ ] Generate professional PDF invoices from billable hours

@@ -130,6 +130,7 @@ export interface Database {
           name: string;
           description: string | null;
           color: string;
+          hourly_rate: number | null;
           scope: "personal" | "organization";
           is_active: boolean;
           manager_id: string;
@@ -142,6 +143,7 @@ export interface Database {
           name: string;
           description?: string | null;
           color?: string;
+          hourly_rate?: number | null;
           scope?: "personal" | "organization";
           is_active?: boolean;
           manager_id: string;
@@ -153,6 +155,7 @@ export interface Database {
           name?: string;
           description?: string | null;
           color?: string;
+          hourly_rate?: number | null;
           scope?: "personal" | "organization";
           is_active?: boolean;
           manager_id?: string;
