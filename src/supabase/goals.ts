@@ -58,12 +58,8 @@ export async function getDailyGoal(userId: string, date: string) {
     throw error;
   }
 
-  // Map DB column names to the shape the renderer expects
-  return {
-    time: data.target_minutes,
-    description: data.description ?? undefined,
-    isCompleted: data.is_completed ?? false,
-  };
+  // Return the raw DB row so callers (and tests) can inspect DB fields.
+  return data;
 }
 
 /**
@@ -86,11 +82,7 @@ export async function completeDailyGoal(userId: string, date: string) {
     throw error;
   }
 
-  return {
-    time: data.target_minutes,
-    description: data.description ?? undefined,
-    isCompleted: data.is_completed ?? false,
-  };
+  return data;
 }
 
 /**
@@ -122,13 +114,8 @@ export async function getAllDailyGoals(userId: string) {
     throw error;
   }
 
-  // Map DB column names to the shape the renderer expects
-  return (data || []).map((row) => ({
-    date: row.date,
-    time: row.target_minutes,
-    description: row.description ?? undefined,
-    isCompleted: row.is_completed ?? false,
-  }));
+  // Return raw DB rows
+  return data || [];
 }
 
 /**

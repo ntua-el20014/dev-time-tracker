@@ -1,5 +1,5 @@
 import { getMonday } from "../utils";
-import type { DailySummaryRow } from "@shared/types";
+import type { DailySummaryRow } from "../../shared/types";
 import { ByDateViewState, createByDateViewState } from "./summaryByDateView";
 import {
   BySessionViewState,

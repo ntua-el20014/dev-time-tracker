@@ -1,4 +1,4 @@
-import { ScheduledSession } from "@shared/types";
+import { ScheduledSession } from "../shared/types";
 import { safeIpcInvoke, withLoading } from "./utils";
 import { showInAppNotification, showConfirmationModal } from "./components";
 

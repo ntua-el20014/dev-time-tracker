@@ -35,9 +35,6 @@ export const rendererConfig: Configuration = {
   plugins,
   resolve: {
     extensions: [".js", ".ts", ".jsx", ".tsx", ".css"],
-    alias: {
-      "@shared": path.resolve(__dirname, "shared"),
-    },
   },
   target: "electron-renderer", // NOT preload unless this is preload
   devtool: "source-map",

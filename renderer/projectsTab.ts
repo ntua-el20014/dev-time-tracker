@@ -1,5 +1,5 @@
 import { ipcRenderer } from "electron";
-import { ProjectWithMembers } from "@shared/types";
+import { ProjectWithMembers } from "../shared/types";
 import {
   getCurrentUserId,
   isCurrentUserManagerOrAdmin,

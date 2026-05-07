@@ -446,8 +446,8 @@
 
 ### Step 10.2: Invoice Generation
 - [ ] Generate professional PDF invoices from billable hours
-      Include: client/project name, date range, hours, rate, total
-- [ ] Allow customization: logo, company name, payment terms, notes
+      Include: project name, date range, hours, rate, total
+- [ ] Allow customization: logo, company name, notes
 - [ ] Use a lightweight PDF library (e.g., pdfkit or jsPDF)
 - [ ] Export as PDF or copy invoice data as CSV
 - [ ] Store invoice history for reference

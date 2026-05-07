@@ -46,7 +46,7 @@ import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";
 import "./ipc/exportHandlers";
 import "./ipc/standupHandlers";
-import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "@shared/constants";
+import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "../shared/constants";
 
 // ── Process-level error handlers ──────────────────────────────────
 // Catch truly unhandled errors so the app doesn't crash silently.

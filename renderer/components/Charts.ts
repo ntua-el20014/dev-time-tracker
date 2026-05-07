@@ -1,10 +1,10 @@
 import { Chart } from "chart.js/auto";
-import type { DailySummaryRow, SessionRow } from "@shared/types";
+import type { DailySummaryRow, SessionRow } from "../../shared/types";
 
 export function renderPercentBar(
   items: { label: string; percent: number; color: string }[],
   height = 32,
-  borderRadius = 8
+  borderRadius = 8,
 ): string {
   return `
     <div style="display: flex; height: ${height}px; border-radius: ${borderRadius}px; overflow: hidden; border: 1px solid #ccc; margin-bottom: 12px;">
@@ -13,11 +13,11 @@ export function renderPercentBar(
           (item) => `
         <div title="${item.label}: ${item.percent.toFixed(1)}%" 
              style="width:${item.percent}%;background:${
-            item.color
-          };display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;">
+               item.color
+             };display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;">
           ${item.percent > 10 ? item.label : ""}
         </div>
-      `
+      `,
         )
         .join("")}
     </div>
@@ -29,10 +29,10 @@ type PieChartContainer = HTMLElement & { _pieChartInstance?: Chart };
 export function renderPieChartJS(
   containerId: string,
   items: { label: string; percent: number; color: string }[],
-  size = 160
+  size = 160,
 ) {
   const container = document.getElementById(
-    containerId
+    containerId,
   ) as PieChartContainer | null;
   if (!container) return;
   container.innerHTML = "";
@@ -86,8 +86,8 @@ export function renderPieChartJS(
                     typeof value === "number"
                       ? value.toFixed(1)
                       : Array.isArray(value) && typeof value[0] === "number"
-                      ? value[0].toFixed(1)
-                      : ""
+                        ? value[0].toFixed(1)
+                        : ""
                   }%)`,
                   fillStyle: color,
                   borderRadius: 3,
@@ -147,7 +147,7 @@ export function renderLineChartJS(opts: LineChartOptions) {
     dateSpan,
   } = opts;
   const container = document.getElementById(
-    containerId
+    containerId,
   ) as LineChartContainer | null;
   if (!container) return;
   container.innerHTML = "";
@@ -284,10 +284,10 @@ type CustomChartContainer = HTMLElement & { _customChartInstance?: Chart };
 export function renderCustomChart(
   containerId: string,
   config: ChartConfig,
-  data: (DailySummaryRow | SessionRow)[]
+  data: (DailySummaryRow | SessionRow)[],
 ) {
   const container = document.getElementById(
-    containerId
+    containerId,
   ) as CustomChartContainer | null;
   if (!container) return;
   container.innerHTML = "";
@@ -373,7 +373,7 @@ export function renderCustomChart(
               const unit = getValueUnit(config.aggregation);
               return `${label}: ${formatChartValue(
                 value,
-                config.aggregation
+                config.aggregation,
               )}${unit}`;
             },
           },
@@ -406,7 +406,7 @@ export function renderCustomChart(
                     return (
                       formatChartValue(
                         typeof value === "string" ? parseFloat(value) : value,
-                        config.aggregation
+                        config.aggregation,
                       ) + getValueUnit(config.aggregation)
                     );
                   },
@@ -425,7 +425,7 @@ export function renderCustomChart(
 
 function processChartData(
   data: (DailySummaryRow | SessionRow)[],
-  config: ChartConfig
+  config: ChartConfig,
 ) {
   const grouped: { [key: string]: number[] } = {};
 
@@ -529,7 +529,7 @@ function processChartData(
 
 function getItemValue(
   item: DailySummaryRow | SessionRow,
-  aggregation: string
+  aggregation: string,
 ): number {
   switch (aggregation) {
     case "total-time":
@@ -612,7 +612,7 @@ export function showChartConfigModal(options: {
   dataSource: "sessions" | "daily-summary";
   onCreateChart: (
     config: ChartConfig,
-    data: (DailySummaryRow | SessionRow)[]
+    data: (DailySummaryRow | SessionRow)[],
   ) => void;
 }) {
   const modal = document.createElement("div");
@@ -673,10 +673,10 @@ export function showChartConfigModal(options: {
   const titleInput = modal.querySelector("#chartTitle") as HTMLInputElement;
   const createBtn = modal.querySelector("#createChartBtn") as HTMLButtonElement;
   const cancelBtn = modal.querySelector(
-    ".chart-modal-cancel"
+    ".chart-modal-cancel",
   ) as HTMLButtonElement;
   const closeBtn = modal.querySelector(
-    ".chart-modal-close"
+    ".chart-modal-close",
   ) as HTMLButtonElement;
 
   // Update preview when form changes

@@ -7,7 +7,7 @@ import {
   CONFIG_DIR,
   CONFIG_FILE,
   DEFAULT_ACCENT_COLORS,
-} from "@shared/constants";
+} from "../shared/constants";
 
 const configDir = path.join(os.homedir(), CONFIG_DIR);
 const configPath = path.join(configDir, CONFIG_FILE);
@@ -47,7 +47,7 @@ export function loadEditorColors(userId?: number): EditorColorConfig {
 
 export function saveEditorColors(
   editorColors: EditorColorConfig,
-  userId?: number
+  userId?: number,
 ) {
   const cfg = loadConfig();
   if (userId !== undefined) {
@@ -62,7 +62,7 @@ export function saveEditorColors(
 
 export function getAccentColor(
   theme: "dark" | "light" = "dark",
-  userId?: number
+  userId?: number,
 ): string {
   const cfg = loadConfig();
   if (userId !== undefined) {
@@ -79,7 +79,7 @@ export function getAccentColor(
 export function setAccentColor(
   color: string,
   theme: "dark" | "light" = "dark",
-  userId?: number
+  userId?: number,
 ) {
   const cfg = loadConfig();
   if (userId !== undefined) {

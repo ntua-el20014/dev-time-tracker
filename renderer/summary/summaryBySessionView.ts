@@ -15,7 +15,7 @@ import {
   createFilterBar,
 } from "./utils/tableUtils";
 import { addCustomChart } from "./utils/chartUtils";
-import type { SessionRow, Tag, Project } from "@shared/types";
+import type { SessionRow, Tag, Project } from "../../shared/types";
 
 // State for by-session view
 export interface BySessionViewState {

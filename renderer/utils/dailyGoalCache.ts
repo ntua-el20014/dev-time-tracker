@@ -49,9 +49,11 @@ export async function getDailyGoalCached(
     return { goal: existing.goal, totalMins: existing.totalMins };
   }
 
-  // Fetch both in parallel
-  const [goal, totalMins] = await Promise.all([
-    safeIpcInvoke<DailyGoalInfo | null>("get-daily-goal", [key], {
+  // Fetch both in parallel. Supplied IPC handlers return raw DB rows for goals
+  // (so tests can inspect DB fields). Convert the goal row into the
+  // `DailyGoalInfo` shape the renderer expects here.
+  const [rawGoal, totalMins] = await Promise.all([
+    safeIpcInvoke<any | null>("get-daily-goal", [key], {
       fallback: null,
       showNotification: false,
     }),
@@ -60,6 +62,14 @@ export async function getDailyGoalCached(
       showNotification: false,
     }),
   ]);
+
+  const goal = rawGoal
+    ? {
+        time: rawGoal.target_minutes,
+        description: rawGoal.description ?? undefined,
+        isCompleted: rawGoal.is_completed ?? false,
+      }
+    : null;
 
   cache.set(key, { goal, totalMins, ts: Date.now() });
   return { goal, totalMins };

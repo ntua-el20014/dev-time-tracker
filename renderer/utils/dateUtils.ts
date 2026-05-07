@@ -7,7 +7,7 @@ export {
   getMonday,
 } from "../../src/utils/timeFormat";
 import { getLocalDateString, getWeekDates } from "../../src/utils/timeFormat";
-import type { DailySummaryRow } from "@shared/types";
+import type { DailySummaryRow } from "../../shared/types";
 
 // Helper to format time in a pretty way (e.g., "14:30:25" or "2:30 PM")
 export function prettyTime(isoString: string): string {
@@ -26,10 +26,10 @@ export function prettyTime(isoString: string): string {
 // Helper to filter daily data for a specific week
 export function filterDailyDataForWeek(
   dailyData: DailySummaryRow[],
-  weekMonday: Date
+  weekMonday: Date,
 ): DailySummaryRow[] {
   const weekDates = getWeekDates(weekMonday).map((d: Date) =>
-    getLocalDateString(d)
+    getLocalDateString(d),
   );
   return dailyData.filter((row) => weekDates.includes(row.date));
 }

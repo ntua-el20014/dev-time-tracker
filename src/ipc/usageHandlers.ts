@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import * as usageLogs from "../supabase/usageLogs";
 import { getCurrentUser } from "../supabase/api";
-import type { DailySummaryFilters } from "@shared/types";
+import type { DailySummaryFilters } from "../../shared/types";
 import { logError } from "../utils/errorHandler";
 
 /**

@@ -195,7 +195,21 @@ function createAuthMock() {
       data: { user: { id: "test-user-id" }, session: {} },
       error: null,
     }),
+    signUp: vi.fn().mockResolvedValue({
+      data: { user: { id: "test-user-id" }, session: {} },
+      error: null,
+    }),
+    signInWithOAuth: vi.fn().mockResolvedValue({
+      data: { url: "https://example.com/oauth" },
+      error: null,
+    }),
     signOut: vi.fn().mockResolvedValue({ error: null }),
+    resetPasswordForEmail: vi.fn().mockResolvedValue({ error: null }),
+    resend: vi.fn().mockResolvedValue({ error: null }),
+    updateUser: vi.fn().mockResolvedValue({
+      data: { user: { id: "test-user-id" } },
+      error: null,
+    }),
     onAuthStateChange: vi.fn().mockReturnValue({
       data: { subscription: { unsubscribe: vi.fn() } },
     }),

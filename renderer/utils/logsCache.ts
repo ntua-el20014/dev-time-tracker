@@ -11,7 +11,7 @@
  * the storage overhead.
  */
 
-import type { LogEntry } from "@shared/types";
+import type { LogEntry } from "../../shared/types";
 import { safeIpcInvoke } from "./ipcHelpers";
 
 // ── Config ──────────────────────────────────────────────────────────

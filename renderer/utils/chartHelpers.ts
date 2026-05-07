@@ -4,7 +4,7 @@ import {
   getWeekDates,
   filterDailyDataForWeek,
 } from "./index";
-import type { DailySummaryRow, SessionRow } from "@shared/types";
+import type { DailySummaryRow, SessionRow } from "../../shared/types";
 import type { ChartConfig } from "../components";
 
 // Helper functions for chart display
@@ -42,7 +42,7 @@ export function getDatasetLabel(config: ChartConfig): string {
 
 export function renderTimelineChart(
   dailyData: DailySummaryRow[],
-  weekMonday: Date
+  weekMonday: Date,
 ): string {
   const weekDates = getWeekDates(weekMonday);
   const filteredData = filterDailyDataForWeek(dailyData, weekMonday);
@@ -96,7 +96,7 @@ export interface CustomChart {
 export function addCustomChart(
   charts: CustomChart[],
   config: ChartConfig,
-  data: (DailySummaryRow | SessionRow)[]
+  data: (DailySummaryRow | SessionRow)[],
 ): void {
   const chartId = `chart-${Date.now()}`;
   charts.push({ id: chartId, config, data });
@@ -159,7 +159,7 @@ export function setupCustomChartsEvents(
   _charts: CustomChart[],
   onAddChart: () => void,
   onRemoveChart: (_chartId: string) => void,
-  onClearAllCharts: () => void
+  onClearAllCharts: () => void,
 ): void {
   const addChartBtn = document.getElementById("add-chart-btn");
   if (addChartBtn) {

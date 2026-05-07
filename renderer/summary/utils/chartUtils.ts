@@ -6,7 +6,7 @@ import {
   prettyDate,
 } from "../../utils";
 import { renderCustomChart, showConfirmationModal } from "../../components";
-import type { DailySummaryRow, SessionRow } from "@shared/types";
+import type { DailySummaryRow, SessionRow } from "../../../shared/types";
 import type { ChartConfig } from "../../components";
 
 // Store created charts

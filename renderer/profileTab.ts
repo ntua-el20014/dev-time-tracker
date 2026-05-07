@@ -27,7 +27,7 @@ import {
 } from "./utils/organizationApi";
 import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
 import { getLangIconUrl } from "../src/utils/langIconUrl";
-import type { Tag } from "@shared/types";
+import type { Tag } from "../shared/types";
 
 function escapeHtml(text: string) {
   const div = document.createElement("div");

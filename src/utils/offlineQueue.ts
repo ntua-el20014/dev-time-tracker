@@ -18,7 +18,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { BrowserWindow } from "electron";
-import { CONFIG_DIR } from "@shared/constants";
+import { CONFIG_DIR } from "../../shared/constants";
 import { logUsage } from "../supabase/usageLogs";
 import { addSession } from "../supabase/timeTracking";
 import { logError, classifyError } from "./errorHandler";

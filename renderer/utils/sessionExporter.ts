@@ -1,5 +1,5 @@
 import { ipcRenderer } from "electron";
-import type { SessionRow, DailySummaryRow } from "@shared/types";
+import type { SessionRow, DailySummaryRow } from "../../shared/types";
 import { showNotification } from "../components";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
 import { safeIpcInvoke } from "./ipcHelpers";

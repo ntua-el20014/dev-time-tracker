@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron";
 import * as config from "../config";
-import { DEFAULT_IDLE_TIMEOUT_SECONDS } from "@shared/constants";
+import { DEFAULT_IDLE_TIMEOUT_SECONDS } from "../../shared/constants";
 
 export function notifyRenderer(message: string, durationMs = 3500) {
   // Find the main window and send the notification

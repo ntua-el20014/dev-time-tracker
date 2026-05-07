@@ -8,7 +8,7 @@ import {
   createFilterBar,
 } from "./utils/tableUtils";
 import { addCustomChart } from "./utils/chartUtils";
-import type { DailySummaryRow } from "@shared/types";
+import type { DailySummaryRow } from "../../shared/types";
 
 // State for by-date view
 export interface ByDateViewState {

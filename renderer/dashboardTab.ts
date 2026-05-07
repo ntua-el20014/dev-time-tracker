@@ -10,7 +10,7 @@ import {
 } from "./utils";
 import { getLangIconUrl } from "../src/utils/langIconUrl";
 import { showInAppNotification } from "./components/Notifications";
-import type { DailySummaryRow, SessionRow } from "@shared/types";
+import type { DailySummaryRow, SessionRow } from "../shared/types";
 
 export async function renderDashboard() {
   const container = document.getElementById("dashboardContent");
