@@ -11,6 +11,7 @@ import {
   showConfirmationModal,
   showModal,
 } from "./components";
+import { renderBillableHoursSummary } from "./components/BillableHoursSummary";
 
 let currentProjects: ProjectWithMembers[] = [];
 
@@ -70,6 +71,7 @@ export async function renderProjects() {
         <div class="projects-tabs">
           <button class="projects-tab-btn active" data-tab="active">Active Projects</button>
           <button class="projects-tab-btn" data-tab="archived">Archived Projects</button>
+          <button class="projects-tab-btn" data-tab="billable">Billable Hours</button>
         </div>
         
         <div id="activeProjectsSection" class="projects-section">
@@ -78,6 +80,10 @@ export async function renderProjects() {
         
         <div id="archivedProjectsSection" class="projects-section" style="display: none;">
           ${renderProjectsList(currentProjects.filter((p) => !p.is_active))}
+        </div>
+        
+        <div id="billableProjectsSection" class="projects-section" style="display: none;">
+          <div id="billable-hours-container"></div>
         </div>
       </div>
     </div>
@@ -217,7 +223,7 @@ function setupProjectsEventListeners() {
   // Tab switching
   const tabButtons = projectsContainer.querySelectorAll(".projects-tab-btn");
   tabButtons.forEach((btn) => {
-    btn.addEventListener("click", (e) => {
+    btn.addEventListener("click", async (e) => {
       const target = e.target as HTMLButtonElement;
       const tabType = target.dataset.tab;
 
@@ -230,13 +236,37 @@ function setupProjectsEventListeners() {
       const archivedSection = document.getElementById(
         "archivedProjectsSection",
       );
+      const billableSection = document.getElementById(
+        "billableProjectsSection",
+      );
 
       if (tabType === "active") {
         if (activeSection) activeSection.style.display = "";
         if (archivedSection) archivedSection.style.display = "none";
-      } else {
+        if (billableSection) billableSection.style.display = "none";
+      } else if (tabType === "archived") {
         if (activeSection) activeSection.style.display = "none";
         if (archivedSection) archivedSection.style.display = "";
+        if (billableSection) billableSection.style.display = "none";
+      } else if (tabType === "billable") {
+        if (activeSection) activeSection.style.display = "none";
+        if (archivedSection) archivedSection.style.display = "none";
+        if (billableSection) {
+          billableSection.style.display = "";
+          // Load billable hours summary
+          const container = billableSection.querySelector(
+            "#billable-hours-container",
+          );
+          if (container) {
+            await withLoading(
+              container as HTMLElement,
+              "Loading billable hours…",
+              async () => {
+                await renderBillableHoursSummary(container as HTMLElement);
+              },
+            );
+          }
+        }
       }
     });
   });

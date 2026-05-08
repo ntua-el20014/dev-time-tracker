@@ -10,6 +10,7 @@ import {
 } from "./utils";
 import { getLangIconUrl } from "../src/utils/langIconUrl";
 import { showInAppNotification } from "./components/Notifications";
+import { renderEarningsWidget } from "./components/BillableHoursSummary";
 import type { DailySummaryRow, SessionRow } from "../shared/types";
 
 export async function renderDashboard() {
@@ -24,6 +25,7 @@ export async function renderDashboard() {
           📋 Generate Daily Summary
         </button>
       </div>
+      <div id="dashboard-earnings"></div>
       <div id="dashboard-calendar"></div>
       <div id="dashboard-quickstats"></div>
       <div id="dashboard-charts"></div>
@@ -34,6 +36,13 @@ export async function renderDashboard() {
   const standupBtn = document.getElementById("generate-standup-btn");
   if (standupBtn) {
     standupBtn.addEventListener("click", () => showStandupModal());
+  }
+
+  // --- Earnings Widget ---
+  const earningsDiv = document.getElementById("dashboard-earnings");
+  if (earningsDiv) {
+    const earningsWidget = await renderEarningsWidget();
+    earningsDiv.appendChild(earningsWidget);
   }
 
   // --- Daily Goal Progress Bar ---
