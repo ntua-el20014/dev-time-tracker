@@ -468,11 +468,9 @@
 - [ ] Show shortcut hints in tooltips and menu items
 
 ### Step 11.2: Notifications System
-- [ ] In-app notification center (bell icon with unread count)
-- [ ] Notification types: goal completed, scheduled session reminder,
-      health alert, org invite, sync status
-- [ ] System tray notifications for critical events
-- [ ] Notification preferences (per-type enable/disable)
+- [x] In-app notification center (bell icon with sidebar)
+- [x] Notification types (scheduled sessions + daily goals now, health/org/sync later)
+- [x] Notification preferences (per-type enable/disable)
 
 ### Step 11.3: Export & Reporting
 - [ ] Export individual reports as PDF (daily, weekly, monthly)
@@ -497,3 +495,6 @@
 - Invoice PDF generation adds ~200KB to bundle (jsPDF) — acceptable trade-off
 - Weekly review buffer requires careful RLS: org can only see "submitted" rows
 - Gamification?
+- System tray notifications for critical events
+
+PROBLEM in schedule session. time missmatch

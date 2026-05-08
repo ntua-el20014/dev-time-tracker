@@ -3,9 +3,9 @@
 /* Incognito toggle button (next to record/pause) */
 #incognitoBtn {
   position: fixed;
-  bottom: 20px;
-  right: 80px;
-  z-index: 1000;
+  bottom: 46px;
+  right: 72px;
+  z-index: 9999;
   width: 42px;
   height: 42px;
   border-radius: 50%;

@@ -26,6 +26,7 @@ import {
   forceRefreshPreferences,
   invalidatePreferencesCache,
 } from "./utils";
+import { getCachedPreferences } from "./utils/preferencesCache";
 import {
   checkAuthStatus,
   onAuthStateChange,
@@ -70,6 +71,11 @@ import "./styles/org-wizard.css";
 import "./styles/standup.css";
 import "./styles/incognito.css";
 import "./styles/team-analytics.css";
+import "./styles/notification-sidebar.css";
+import {
+  initNotificationSidebar,
+  addSidebarNotification,
+} from "./components/NotificationSidebar";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
 // ── Tab dirty-flag system ──────────────────────────────────────────
@@ -643,7 +649,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 ipcRenderer.on(
   "scheduled-session-notification",
-  (
+  async (
     _event: any,
     data: {
       title?: string;
@@ -653,7 +659,22 @@ ipcRenderer.on(
     },
   ) => {
     if (data && data.message) {
-      showNotification(`${data.title} - ${data.message}`);
+      // Prefer sidebar for produced scheduled-session notifications when enabled
+      try {
+        const prefs = await getCachedPreferences();
+        const enabled = !!(
+          prefs?.notification_settings?.enabled &&
+          prefs?.notification_settings?.scheduledSessions
+        );
+        if (enabled) {
+          addSidebarNotification({ title: data.title, message: data.message });
+        } else {
+          showNotification(`${data.title} - ${data.message}`);
+        }
+      } catch (err) {
+        // Fallback to ephemeral toast on error
+        showNotification(`${data.title} - ${data.message}`);
+      }
 
       // For "time to start" notifications, offer to switch to calendar
       if (data.type === "time_to_start") {
@@ -965,7 +986,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
       } catch {
         // Token sync failed — will be retried on next refresh
-        console.warn("Failed to sync refreshed token to main process");
       }
     },
   );
@@ -976,6 +996,7 @@ function renderMainUI() {
   applyAccentColor();
   setupHotkeys();
   initConnectionStatus();
+  initNotificationSidebar();
   initSyncStatus();
 }
 
@@ -993,6 +1014,18 @@ async function checkDailyGoalProgress() {
       });
       invalidateDailyGoalCache(today);
       showNotification("🎉 Daily goal achieved!");
+      // Also add to notification sidebar if user prefs allow
+      try {
+        const prefs = await getCachedPreferences();
+        const enabled = !!(
+          prefs?.notification_settings?.enabled &&
+          prefs?.notification_settings?.dailyGoals
+        );
+        if (enabled)
+          addSidebarNotification({ message: "Daily goal achieved!" });
+      } catch (err) {
+        void err;
+      }
       // Re-render dashboard/logs and mark clean since we just refreshed
       markTabsDirty("dashboard", "today");
       renderDashboard();
@@ -1068,7 +1101,7 @@ async function autoSaveRecordingOnTimeout() {
       // with a 30s timeout fallback for the session-info dialog
       await ipcRenderer.invoke("stop-tracking");
     } catch (err) {
-      console.error("Failed to auto-save recording on timeout:", err);
+      void err;
     }
 
     // Reset renderer-side recording state

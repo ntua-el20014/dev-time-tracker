@@ -1,0 +1,136 @@
+.notification-sidebar {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  width: 340px;
+  max-height: calc(100vh - 96px);
+  background: var(--card-bg, #2b2b3c);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  overflow: auto;
+  z-index: 1200;
+  padding: 8px;
+}
+.notification-sidebar .ns-title,
+.notification-sidebar .ns-item-title {
+  color: var(--fg, #f3f4f6);
+}
+.notification-sidebar .ns-item-message {
+  color: var(--fg, #d1d5db);
+}
+.notification-sidebar .ns-item {
+  background: rgba(255, 255, 255, 0.04);
+}
+.notification-sidebar .ns-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.notification-sidebar .ns-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+.notification-sidebar .ns-title {
+  font-weight: 600;
+}
+.notification-sidebar .ns-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+}
+.notification-sidebar .ns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.ns-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 8px;
+  border-radius: 6px;
+  background: transparent;
+}
+.ns-item-body {
+  flex: 1;
+  padding-right: 8px;
+}
+.ns-item-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.ns-item-message {
+  font-size: 13px;
+  color: var(--muted-text, #555);
+  margin-top: 4px;
+}
+.ns-item-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: var(--muted-text, #888);
+}
+
+/* Floating notification bell (to the right of incognito button) */
+#notifBell {
+  position: fixed;
+  bottom: 46px;
+  right: 20px;
+  z-index: 9999;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+#notifBell:hover {
+  background: var(--bg-hover);
+  transform: scale(1.1);
+}
+
+body.light #notifBell {
+  background: #ffffff;
+  color: #1f2937;
+}
+
+body:not(.light) #notifBell {
+  background: #1f2937;
+  color: #f9fafb;
+}
+
+body.light .notification-sidebar {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+body.light .notification-sidebar .ns-title,
+body.light .notification-sidebar .ns-item-title {
+  color: #111827;
+}
+
+body.light .notification-sidebar .ns-item-message {
+  color: #4b5563;
+}
+
+body.light .notification-sidebar .ns-item {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+body.light .notification-sidebar .ns-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}

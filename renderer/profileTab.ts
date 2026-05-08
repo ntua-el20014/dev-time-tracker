@@ -25,6 +25,7 @@ import {
   getCurrentUserProfile,
   leaveOrganization,
 } from "./utils/organizationApi";
+import { updateCachedPreference } from "./utils/preferencesCache";
 import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
 import { getLangIconUrl } from "../src/utils/langIconUrl";
 import type { Tag } from "../shared/types";
@@ -34,6 +35,15 @@ function escapeHtml(text: string) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+type NotificationSettings = {
+  enabled: boolean;
+  scheduledSessions: boolean;
+  dailyGoals: boolean;
+  healthAlerts?: boolean;
+  orgInvites?: boolean;
+  syncStatus?: boolean;
+};
 
 async function renderEditorUsage(container: HTMLElement) {
   type EditorUsageRow = { app: string; total_time: number };
@@ -286,6 +296,28 @@ async function renderSettings(container: HTMLElement) {
       </button>
     </div>
     
+    <h2>Notifications</h2>
+    <div class="settings-row">
+      <label class="settings-label">Enable notifications:</label>
+      <input type="checkbox" id="notifEnabled" />
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">Scheduled session reminders:</label>
+      <input type="checkbox" id="notifScheduled" />
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">Daily goal completions:</label>
+      <input type="checkbox" id="notifDailyGoals" />
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">Health alerts:</label>
+      <input type="checkbox" id="notifHealth" />
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">Org invites:</label>
+      <input type="checkbox" id="notifOrgInvites" />
+    </div>
+    
     <div class="avatar-settings-row" style="margin-top:16px;">
       <label class="settings-label">Avatar:</label>
       <div class="avatar-preview" id="avatarPreview">
@@ -404,6 +436,81 @@ async function renderSettings(container: HTMLElement) {
       });
     });
   }
+
+  // --- Notification preferences wiring ---
+  (async () => {
+    try {
+      const notifSettings = await safeIpcInvoke<NotificationSettings>(
+        "get-notification-settings",
+        [],
+        {
+          fallback: {
+            enabled: true,
+            scheduledSessions: true,
+            dailyGoals: true,
+            healthAlerts: true,
+            orgInvites: true,
+            syncStatus: false,
+          },
+        },
+      );
+
+      const enabledEl = container.querySelector(
+        "#notifEnabled",
+      ) as HTMLInputElement | null;
+      const scheduledEl = container.querySelector(
+        "#notifScheduled",
+      ) as HTMLInputElement | null;
+      const dailyEl = container.querySelector(
+        "#notifDailyGoals",
+      ) as HTMLInputElement | null;
+      const healthEl = container.querySelector(
+        "#notifHealth",
+      ) as HTMLInputElement | null;
+      const orgEl = container.querySelector(
+        "#notifOrgInvites",
+      ) as HTMLInputElement | null;
+
+      if (enabledEl) enabledEl.checked = !!notifSettings.enabled;
+      if (scheduledEl) scheduledEl.checked = !!notifSettings.scheduledSessions;
+      if (dailyEl) dailyEl.checked = !!notifSettings.dailyGoals;
+      if (healthEl) healthEl.checked = !!notifSettings.healthAlerts;
+      if (orgEl) orgEl.checked = !!notifSettings.orgInvites;
+
+      const saveSettings = async () => {
+        const newSettings: any = {
+          enabled: !!enabledEl?.checked,
+          scheduledSessions: !!scheduledEl?.checked,
+          dailyGoals: !!dailyEl?.checked,
+          healthAlerts: !!healthEl?.checked,
+          orgInvites: !!orgEl?.checked,
+        };
+
+        const ok = await safeIpcInvoke(
+          "set-notification-settings",
+          [newSettings],
+          {
+            fallback: false,
+          },
+        );
+        if (ok) {
+          // Update local cache for immediate use
+          try {
+            updateCachedPreference("notification_settings", newSettings);
+          } catch {}
+          showNotification("Notification preferences saved");
+        } else {
+          showNotification("Failed to save notification preferences", 3000);
+        }
+      };
+
+      [enabledEl, scheduledEl, dailyEl, healthEl, orgEl].forEach((el) => {
+        if (el) el.addEventListener("change", () => void saveSettings());
+      });
+    } catch (err) {
+      // ignore — leave defaults
+    }
+  })();
 
   container.querySelectorAll(".delete-tag-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
