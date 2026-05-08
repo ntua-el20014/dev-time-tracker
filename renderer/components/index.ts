@@ -14,3 +14,4 @@ export * from "./ConnectionStatus";
 export * from "./SessionReviewPanel";
 export * from "./OrgSetupWizard";
 export * from "./BillableHoursSummary";
+export * from "./InvoiceModal";

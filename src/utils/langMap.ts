@@ -7,7 +7,6 @@ import {
   getCustomAppsForUser,
   saveCustomAppsForUser,
   getCustomAppsFilePath,
-  resetEditorCache,
   type KnownAppsData,
 } from "./editors";
 

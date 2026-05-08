@@ -445,12 +445,11 @@
 - [x] Display running total of earnings for current period in Dashboard
 
 ### Step 10.2: Invoice Generation
-- [ ] Generate professional PDF invoices from billable hours
-      Include: project name, date range, hours, rate, total
-- [ ] Allow customization: logo, company name, notes
-- [ ] Use a lightweight PDF library (e.g., pdfkit or jsPDF)
-- [ ] Export as PDF or copy invoice data as CSV
-- [ ] Store invoice history for reference
+- [x] Generate professional PDF invoices from billable hours
+- [x] Allow customization: logo, company name, notes
+- [x] Use a lightweight PDF library (e.g., pdfkit or jsPDF)
+- [x] Export as PDF or copy invoice data as CSV
+- [x] Store invoice history for reference
 
 ### Step 10.3: Team Dashboard (Org Analytics)
 - [ ] Organization-wide analytics page for admins/managers

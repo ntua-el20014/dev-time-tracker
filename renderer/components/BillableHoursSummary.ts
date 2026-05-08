@@ -190,10 +190,11 @@ export async function renderBillableHoursSummary(
     await renderBillableHoursSummaryInternal(container);
   } catch (error) {
     console.error("Error rendering billable hours summary:", error);
-    showInAppNotification({
-      type: "error",
-      message: "Failed to load billable hours summary",
-    });
+    showInAppNotification(
+      "Failed to load billable hours summary",
+      3500,
+      "error",
+    );
   }
 }
 

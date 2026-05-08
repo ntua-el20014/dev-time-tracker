@@ -47,6 +47,7 @@ import "./ipc/organizationHandlers";
 import "./ipc/exportHandlers";
 import "./ipc/standupHandlers";
 import "./ipc/billableHoursHandlers";
+import "./ipc/invoiceHandlers";
 import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "../shared/constants";
 
 // ── Process-level error handlers ──────────────────────────────────

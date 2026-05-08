@@ -820,6 +820,161 @@ select#tag-select option {
   resize: vertical;
 }
 
+/* ==========================================
+   INVOICE FORM STYLING
+   ========================================== */
+
+#invoiceForm label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--fg);
+  font-size: 13px;
+}
+
+#invoiceForm input[type="text"],
+#invoiceForm input[type="date"],
+#invoiceForm textarea {
+  width: 100%;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--row-odd);
+  color: var(--fg);
+  box-sizing: border-box;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+  font-family: inherit;
+}
+
+#invoiceForm input[type="text"]:focus,
+#invoiceForm input[type="date"]:focus,
+#invoiceForm textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(240, 219, 79, 0.15);
+}
+
+#invoiceForm textarea {
+  height: 80px;
+  resize: vertical;
+  margin-bottom: 12px;
+}
+
+/* Date range input container */
+#invoiceForm .date-range-container {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+#invoiceForm .date-range-container input[type="date"] {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+#invoiceForm .date-range-container span {
+  color: var(--fg);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* Projects list styling */
+#invoiceForm #invoice-projects-list {
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 15px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+}
+
+#invoiceForm .invoice-project-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+#invoiceForm .invoice-project-label:hover {
+  background: var(--row-hover);
+}
+
+#invoiceForm .invoice-project-label input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+#invoiceForm .invoice-project-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+#invoiceForm .invoice-project-name {
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+#invoiceForm .invoice-project-details {
+  color: var(--fg-secondary, var(--row-hover));
+  font-size: 12px;
+  font-style: normal;
+}
+
+/* Invoice summary box styling */
+#invoiceForm #invoice-summary {
+  background: var(--row-odd);
+  border: 1px solid var(--border);
+  padding: 12px;
+  border-radius: 6px;
+  margin: 15px 0;
+  font-size: 12px;
+  color: var(--fg);
+}
+
+#invoiceForm #invoice-summary p {
+  margin: 0 0 8px 0;
+  color: var(--fg);
+}
+
+#invoiceForm #invoice-summary p:first-child {
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+#invoiceForm #invoice-summary ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#invoiceForm #invoice-summary li {
+  margin-bottom: 4px;
+}
+
 .color-picker-container {
   display: flex;
   align-items: center;

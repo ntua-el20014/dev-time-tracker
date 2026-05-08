@@ -71,6 +71,7 @@
     "electron-squirrel-startup": "^1.0.1",
     "extract-file-icon": "^0.3.2",
     "json2csv": "^6.0.0-alpha.2",
+    "jspdf": "^4.2.1",
     "language-icons": "^0.3.0",
     "linguist-languages": "^8.0.0",
     "uuid": "^13.0.0",

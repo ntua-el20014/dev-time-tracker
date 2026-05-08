@@ -10,6 +10,7 @@ import {
   showInAppNotification,
   showConfirmationModal,
   showModal,
+  showInvoiceGenerationModal,
 } from "./components";
 import { renderBillableHoursSummary } from "./components/BillableHoursSummary";
 
@@ -83,6 +84,10 @@ export async function renderProjects() {
         </div>
         
         <div id="billableProjectsSection" class="projects-section" style="display: none;">
+          <div class="billable-section-header">
+            <h2>Billable Hours & Invoicing</h2>
+            <button id="generateInvoiceBtn" class="btn-primary">📄 Generate Invoice</button>
+          </div>
           <div id="billable-hours-container"></div>
         </div>
       </div>
@@ -276,6 +281,18 @@ function setupProjectsEventListeners() {
   if (newProjectBtn && !newProjectBtn.hasAttribute("data-listener-added")) {
     newProjectBtn.addEventListener("click", showCreateProjectModal);
     newProjectBtn.setAttribute("data-listener-added", "true");
+  }
+
+  // Generate invoice button
+  const generateInvoiceBtn = document.getElementById("generateInvoiceBtn");
+  if (
+    generateInvoiceBtn &&
+    !generateInvoiceBtn.hasAttribute("data-listener-added")
+  ) {
+    generateInvoiceBtn.addEventListener("click", () => {
+      showInvoiceGenerationModal();
+    });
+    generateInvoiceBtn.setAttribute("data-listener-added", "true");
   }
 
   // Project action buttons
