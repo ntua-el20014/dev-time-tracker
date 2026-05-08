@@ -44,6 +44,7 @@ import "./ipc/preferencesHandlers";
 import "./ipc/projectHandlers";
 import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";
+import "./ipc/analyticsHandlers";
 import "./ipc/exportHandlers";
 import "./ipc/standupHandlers";
 import "./ipc/billableHoursHandlers";

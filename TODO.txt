@@ -452,10 +452,10 @@
 - [x] Store invoice history for reference
 
 ### Step 10.3: Team Dashboard (Org Analytics)
-- [ ] Organization-wide analytics page for admins/managers
-- [ ] Show team member activity overview (hours tracked, projects, languages)
-- [ ] Aggregate stats: total org hours, most active projects, language breakdown
-- [ ] Allow filtering by date range, project, and team member
+- [x] Organization-wide analytics page for admins/managers
+- [x] Show team member activity overview (hours tracked, projects, languages)
+- [x] Aggregate stats: total org hours, most active projects, language breakdown
+- [x] Allow filtering by date range, project, and team member
 
 ## ═══════════════════════════════════════════════════════════════════
 ## PHASE 11: POLISH & SHIP

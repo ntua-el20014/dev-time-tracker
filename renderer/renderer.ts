@@ -7,6 +7,7 @@ import { renderDashboard } from "./dashboardTab";
 import { renderCalendar } from "./calendarTab";
 import { renderProjects } from "./projectsTab";
 import { renderOrganizationTab } from "./organizationTab";
+import { renderTeamAnalytics } from "./teamAnalyticsTab";
 import { initTheme, updateRecordBtn, updatePauseBtn } from "./theme";
 import {
   displayOSInfo,
@@ -68,6 +69,7 @@ import "./styles/sync-status.css";
 import "./styles/org-wizard.css";
 import "./styles/standup.css";
 import "./styles/incognito.css";
+import "./styles/team-analytics.css";
 import { updateAccentTextColors } from "./utils/colorUtils";
 
 // ── Tab dirty-flag system ──────────────────────────────────────────
@@ -163,6 +165,12 @@ function setupTabs() {
           markTabClean("projects");
         }
       }
+      if (tabId === "teamAnalytics") {
+        if (shouldRenderTab("teamAnalytics")) {
+          renderTeamAnalytics();
+          markTabClean("teamAnalytics");
+        }
+      }
       if (tabId === "organization") {
         if (shouldRenderTab("organization")) {
           renderOrganizationTab();
@@ -178,12 +186,23 @@ async function setupRoleBasedTabVisibility() {
   const projectsTab = document.querySelector(
     '.tab[data-tab="projects"]',
   ) as HTMLButtonElement;
+  const teamAnalyticsTab = document.querySelector(
+    '.tab[data-tab="teamAnalytics"]',
+  ) as HTMLButtonElement;
 
   if (projectsTab) {
     if (isManagerOrAdmin) {
       projectsTab.style.display = "";
     } else {
       projectsTab.style.display = "none";
+    }
+  }
+
+  if (teamAnalyticsTab) {
+    if (isManagerOrAdmin) {
+      teamAnalyticsTab.style.display = "";
+    } else {
+      teamAnalyticsTab.style.display = "none";
     }
   }
 }
