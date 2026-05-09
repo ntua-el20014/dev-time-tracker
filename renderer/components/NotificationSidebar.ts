@@ -9,6 +9,8 @@ const NOTIF_CONTAINER_ID = "notificationSidebar";
 const BELL_ID = "notifBell";
 
 let notifs: SidebarNotif[] = [];
+let hasUnread = false;
+let bellListenerAdded = false;
 
 function ensureContainer(): HTMLDivElement {
   let c = document.getElementById(NOTIF_CONTAINER_ID) as HTMLDivElement | null;
@@ -55,14 +57,22 @@ function render() {
 }
 
 export function initNotificationSidebar() {
-  // Wire bell button
-  const bell = document.getElementById(BELL_ID) as HTMLButtonElement | null;
-  if (bell) {
-    bell.addEventListener("click", () => toggle());
+  // Use event delegation for the bell so it works even if the element is
+  // replaced during logout/login without re-initialising DOM listeners.
+  if (!bellListenerAdded) {
+    document.addEventListener("click", (e) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest(`#${BELL_ID}`)) {
+        toggle();
+      }
+    });
+    bellListenerAdded = true;
   }
   // Ensure container exists but hidden
   const container = ensureContainer();
   container.style.display = "none";
+  updateBellBadge();
 }
 
 export function toggle(force?: boolean) {
@@ -71,7 +81,12 @@ export function toggle(force?: boolean) {
     container.style.display !== "none" && container.style.display !== "";
   const shouldOpen = typeof force === "boolean" ? force : !isOpen;
   container.style.display = shouldOpen ? "block" : "none";
-  if (shouldOpen) render();
+  if (shouldOpen) {
+    // Opening the sidebar marks notifications as read
+    hasUnread = false;
+    updateBellBadge();
+    render();
+  }
 }
 
 export function dismiss(id: string) {
@@ -94,7 +109,20 @@ export function addSidebarNotification(payload: {
   notifs = [n, ...notifs];
   const container = ensureContainer();
   // If sidebar open, re-render to show new item; otherwise keep hidden
-  if (container.style.display === "block") render();
+  if (container.style.display === "block") {
+    render();
+  } else {
+    // Mark as unread and update bell badge
+    hasUnread = true;
+    updateBellBadge();
+  }
+}
+
+function updateBellBadge() {
+  const bell = document.getElementById(BELL_ID) as HTMLElement | null;
+  if (!bell) return;
+  if (hasUnread) bell.classList.add("has-unread");
+  else bell.classList.remove("has-unread");
 }
 
 export function clearAll() {

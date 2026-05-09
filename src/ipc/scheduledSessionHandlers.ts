@@ -37,7 +37,10 @@ ipcMain.handle(
           const year = currentDate.getFullYear();
           const month = String(currentDate.getMonth() + 1).padStart(2, "0");
           const day = String(currentDate.getDate()).padStart(2, "0");
-          const timePart = scheduledSession.scheduled_datetime.split("T")[1];
+          const timePart =
+            scheduledSession.scheduled_datetime
+              .split("T")[1]
+              ?.replace(/(Z|[+-]\d\d:?\d\d)$/i, "") ?? "00:00:00";
           const occurrenceDatetime = `${year}-${month}-${day}T${timePart}`;
 
           const sessionData: ScheduledSessionData = {

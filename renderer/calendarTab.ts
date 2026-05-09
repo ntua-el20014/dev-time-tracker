@@ -7,6 +7,19 @@ let currentDate = new Date(); // Needs to be mutable for month navigation
 let scheduledSessions: ScheduledSession[] = [];
 let calendarListenerAttached = false;
 
+function formatLocalDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildLocalDateTime(date: string, time: string): Date {
+  const [year, month, day] = date.split("-").map((part) => parseInt(part, 10));
+  const [hours, minutes] = time.split(":").map((part) => parseInt(part, 10));
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+}
+
 export async function renderCalendar() {
   const calendarContainer = document.getElementById("calendarContent");
   if (!calendarContainer) return;
@@ -267,8 +280,8 @@ async function loadScheduledSessions() {
       "get-scheduled-sessions",
       [
         {
-          startDate: startOfMonth.toISOString().split("T")[0],
-          endDate: endOfMonth.toISOString().split("T")[0],
+          startDate: formatLocalDateInput(startOfMonth),
+          endDate: formatLocalDateInput(endOfMonth),
         },
       ],
       { fallback: [] },
@@ -367,9 +380,9 @@ function showScheduleSessionModal(selectedDate?: Date) {
           <div style="display: flex; gap: 10px; margin-bottom: 15px;">
             <div style="flex: 1;">
               <label for="session-date">Date *</label><br>
-              <input type="date" id="session-date" required value="${
-                defaultDate.toISOString().split("T")[0]
-              }">
+              <input type="date" id="session-date" required value="${formatLocalDateInput(
+                defaultDate,
+              )}">
             </div>
             
             <div style="flex: 1;">
@@ -514,11 +527,12 @@ async function handleScheduleSessionSubmit() {
     return;
   }
 
-  // Create datetime without timezone conversion issues
-  const scheduled_datetime = `${date}T${time}:00`;
+  // Build the picked local time as a real instant, then store UTC.
+  const scheduledLocalDateTime = buildLocalDateTime(date, time);
+  const scheduled_datetime = scheduledLocalDateTime.toISOString();
 
   // Check if the scheduled time is in the past
-  if (new Date(scheduled_datetime) < new Date()) {
+  if (scheduledLocalDateTime < new Date()) {
     showInAppNotification("Cannot schedule sessions in the past");
     return;
   }
@@ -550,9 +564,9 @@ async function handleScheduleSessionSubmit() {
     recurrence_data: isRecurring
       ? {
           dayOfWeek:
-            new Date(scheduled_datetime).getDay() === 0
+            scheduledLocalDateTime.getDay() === 0
               ? 7
-              : new Date(scheduled_datetime).getDay(), // Convert Sunday (0) to 7, keep others as is
+              : scheduledLocalDateTime.getDay(), // Convert Sunday (0) to 7, keep others as is
           endDate: recurrenceEnd || undefined,
         }
       : undefined,

@@ -462,10 +462,8 @@
 ## ═══════════════════════════════════════════════════════════════════
 
 ### Step 11.1: Keyboard Shortcuts
-- [ ] Add global shortcuts for common actions:
-      Start/stop tracking, open app, switch tabs, open review panel
-- [ ] Make shortcuts configurable in preferences
-- [ ] Show shortcut hints in tooltips and menu items
+- [x] Add global shortcuts for common actions:
+      Start/stop tracking, switch tabs
 
 ### Step 11.2: Notifications System
 - [x] In-app notification center (bell icon with sidebar)

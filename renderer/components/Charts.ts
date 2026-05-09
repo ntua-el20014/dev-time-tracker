@@ -82,13 +82,7 @@ export function renderPieChartJS(
                 const value = dataset.data[i];
                 const color = (dataset.backgroundColor as string[])[i];
                 return {
-                  text: `${label} (${
-                    typeof value === "number"
-                      ? value.toFixed(1)
-                      : Array.isArray(value) && typeof value[0] === "number"
-                        ? value[0].toFixed(1)
-                        : ""
-                  }%)`,
+                  text: `${label} (${typeof value === "number" ? value.toFixed(1) : Array.isArray(value) && typeof value[0] === "number" ? value[0].toFixed(1) : ""}%)`,
                   fillStyle: color,
                   borderRadius: 3,
                   fontColor: color,

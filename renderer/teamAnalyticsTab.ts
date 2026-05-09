@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { safeIpcInvoke, withLoading } from "./utils";
 import { showNotification } from "./components";
-import { getLocalDateString, getMonday } from "./utils/dateUtils";
+import { getLocalDateString } from "./utils/dateUtils";
 import { renderPercentBar, renderPieChartJS } from "./components/Charts";
 import type {
   OrgAnalyticsSummary,
@@ -14,7 +14,7 @@ import type {
   CloudProjectWithManager,
 } from "../src/types/organization.types";
 
-let currentFilter = {
+const currentFilter = {
   startDate: getLocalDateString(
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
   ), // 30 days ago
@@ -36,7 +36,7 @@ export async function renderTeamAnalytics() {
 
   container.innerHTML = `
     <div id="team-analytics-inner">
-      <h1 class="analytics-title">Team Analytics</h1>
+      <h1 class="org-title">Team Analytics</h1>
       <div id="analytics-filters"></div>
       <div id="analytics-loading" style="text-align: center; padding: 20px;">Loading analytics...</div>
       <div id="analytics-content" style="display: none;">
@@ -98,7 +98,11 @@ async function renderFilters() {
 
       <div class="filter-group">
         <label>Projects:</label>
-        <div id="filter-projects-selector" class="filter-selector"></div>
+        <div id="filter-projects-selector" class="filter-selector">
+          <span class="filter-chip-summary" id="projects-summary">All Projects</span>
+          <button class="filter-toggle-btn" id="toggle-projects">▼</button>
+          <div id="projects-dropdown" class="filter-dropdown" style="display: none;"></div>
+        </div>
       </div>
 
       <div class="filter-group">
@@ -106,8 +110,8 @@ async function renderFilters() {
         <div id="filter-members-selector" class="filter-selector">
           <span class="filter-chip-summary" id="members-summary">All Members</span>
           <button class="filter-toggle-btn" id="toggle-members">▼</button>
+          <div id="members-dropdown" class="filter-dropdown" style="display: none;"></div>
         </div>
-        <div id="members-dropdown" class="filter-dropdown" style="display: none;"></div>
       </div>
 
       <div class="filter-group">
@@ -123,43 +127,86 @@ async function renderFilters() {
 
   filterContainer.innerHTML = html;
 
-  // Populate project selector
+  // Populate project selector (dropdown lives inside selector so positioning is correct)
   const projectsDiv = document.getElementById("filter-projects-selector");
-  if (projectsDiv) {
-    projectsDiv.innerHTML = `
-      <span class="filter-chip-summary" id="projects-summary">All Projects</span>
-      <button class="filter-toggle-btn" id="toggle-projects">▼</button>
-    `;
+  const projectsDropdown = document.getElementById("projects-dropdown");
+  if (projectsDiv && projectsDropdown) {
     const toggleBtn = projectsDiv.querySelector("#toggle-projects");
     if (toggleBtn) {
       toggleBtn.addEventListener("click", () => {
-        const dropdown = document.getElementById("projects-dropdown");
-        if (dropdown) {
-          dropdown.style.display =
-            dropdown.style.display === "none" ? "" : "none";
-        }
+        const dd = projectsDiv.querySelector(
+          ".filter-dropdown",
+        ) as HTMLElement | null;
+        if (dd) dd.style.display = dd.style.display === "none" ? "" : "none";
+      });
+    }
+
+    // Build dropdown contents
+    if (orgProjects.length === 0) {
+      projectsDropdown.innerHTML = `<div style="padding:8px;">No projects</div>`;
+    } else {
+      projectsDropdown.innerHTML = `
+        <div style="padding: 8px; border-bottom: 1px solid #e0e0e0;">
+          <button id="select-all-projects" class="filter-action-btn">Select All</button>
+          <button id="clear-projects" class="filter-action-btn">Clear Selection</button>
+        </div>
+        <div style="max-height: 200px; overflow-y: auto;">
+          ${orgProjects
+            .map(
+              (project) => `
+            <label style="display: block; padding: 8px 12px; cursor: pointer;">
+              <input type="checkbox" class="project-checkbox" value="${project.id}" />
+              ${project.name}
+            </label>
+          `,
+            )
+            .join("")}
+        </div>
+      `;
+
+      const selectAllBtn = projectsDropdown.querySelector(
+        "#select-all-projects",
+      );
+      const clearBtn = projectsDropdown.querySelector("#clear-projects");
+      if (selectAllBtn) {
+        selectAllBtn.addEventListener("click", () => {
+          projectsDropdown
+            .querySelectorAll(".project-checkbox")
+            .forEach((cb: any) => (cb.checked = true));
+          updateSummaryCounts();
+        });
+      }
+      if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+          projectsDropdown
+            .querySelectorAll(".project-checkbox")
+            .forEach((cb: any) => (cb.checked = false));
+          updateSummaryCounts();
+        });
+      }
+
+      // Update summary when checkboxes change
+      projectsDropdown.querySelectorAll(".project-checkbox").forEach((cb) => {
+        cb.addEventListener("change", updateSummaryCounts);
       });
     }
   }
 
-  // Populate members selector
+  // Populate members selector (dropdown is inside selector so positioning is correct)
   const membersDiv = document.getElementById("filter-members-selector");
-  if (membersDiv) {
+  const membersDropdownEl = document.getElementById("members-dropdown");
+  if (membersDiv && membersDropdownEl) {
     const toggleBtn = membersDiv.querySelector("#toggle-members");
     if (toggleBtn) {
       toggleBtn.addEventListener("click", () => {
-        const dropdown = document.getElementById("members-dropdown");
-        if (dropdown) {
-          dropdown.style.display =
-            dropdown.style.display === "none" ? "" : "none";
-        }
+        const dd = membersDiv.querySelector(
+          ".filter-dropdown",
+        ) as HTMLElement | null;
+        if (dd) dd.style.display = dd.style.display === "none" ? "" : "none";
       });
     }
-  }
 
-  const membersDropdown = document.getElementById("members-dropdown");
-  if (membersDropdown) {
-    membersDropdown.innerHTML = `
+    membersDropdownEl.innerHTML = `
       <div style="padding: 8px; border-bottom: 1px solid #e0e0e0;">
         <button id="select-all-members" class="filter-action-btn">Select All</button>
         <button id="clear-members" class="filter-action-btn">Clear Selection</button>
@@ -178,23 +225,29 @@ async function renderFilters() {
       </div>
     `;
 
-    // Wire up select/clear buttons
-    const selectAllBtn = membersDropdown.querySelector("#select-all-members");
-    const clearBtn = membersDropdown.querySelector("#clear-members");
+    // Wire up select/clear buttons and checkbox change handlers
+    const selectAllBtn = membersDropdownEl.querySelector("#select-all-members");
+    const clearBtn = membersDropdownEl.querySelector("#clear-members");
     if (selectAllBtn) {
       selectAllBtn.addEventListener("click", () => {
-        membersDropdown
+        membersDropdownEl
           .querySelectorAll(".member-checkbox")
           .forEach((cb: any) => (cb.checked = true));
+        updateSummaryCounts();
       });
     }
     if (clearBtn) {
       clearBtn.addEventListener("click", () => {
-        membersDropdown
+        membersDropdownEl
           .querySelectorAll(".member-checkbox")
           .forEach((cb: any) => (cb.checked = false));
+        updateSummaryCounts();
       });
     }
+
+    membersDropdownEl.querySelectorAll(".member-checkbox").forEach((cb) => {
+      cb.addEventListener("change", updateSummaryCounts);
+    });
   }
 
   // Wire up apply filters
@@ -216,7 +269,7 @@ async function renderFilters() {
       currentFilter.billableOnly = billableInput?.checked || false;
 
       // Collect selected members
-      const memberCheckboxes = membersDropdown?.querySelectorAll(
+      const memberCheckboxes = membersDropdownEl?.querySelectorAll(
         ".member-checkbox:checked",
       );
       currentFilter.memberIds =
@@ -224,8 +277,39 @@ async function renderFilters() {
           ? Array.from(memberCheckboxes).map((cb: any) => cb.value)
           : null;
 
+      // Collect selected projects
+      const projectCheckboxes = projectsDropdown?.querySelectorAll(
+        ".project-checkbox:checked",
+      );
+      currentFilter.projectIds =
+        projectCheckboxes && projectCheckboxes.length > 0
+          ? Array.from(projectCheckboxes).map((cb: any) => cb.value)
+          : null;
+
       await loadAndRenderAnalytics();
     });
+  }
+}
+
+function updateSummaryCounts() {
+  const projectsDropdown = document.getElementById("projects-dropdown");
+  const membersDropdown = document.getElementById("members-dropdown");
+  const projectsSummary = document.getElementById("projects-summary");
+  const membersSummary = document.getElementById("members-summary");
+
+  if (projectsDropdown && projectsSummary) {
+    const selected = projectsDropdown.querySelectorAll(
+      ".project-checkbox:checked",
+    ).length;
+    projectsSummary.textContent =
+      selected === 0 ? "All Projects" : `${selected} selected`;
+  }
+  if (membersDropdown && membersSummary) {
+    const selected = membersDropdown.querySelectorAll(
+      ".member-checkbox:checked",
+    ).length;
+    membersSummary.textContent =
+      selected === 0 ? "All Members" : `${selected} selected`;
   }
 }
 
@@ -248,7 +332,7 @@ async function loadAndRenderAnalytics() {
           currentFilter.endDate,
           currentFilter.billableOnly,
         ],
-        { fallback: null },
+        { fallback: undefined },
       );
 
       // Fetch top projects
@@ -355,7 +439,7 @@ function renderCharts(
       </div>
       <div class="chart-card">
         <h3>Language Breakdown</h3>
-        <div id="language-chart"></div>
+        <div id="language-chart" class="language-pie-chart"></div>
       </div>
     </div>
   `;
@@ -410,7 +494,7 @@ function renderCharts(
         "#355c7d",
       ][i % 7],
     }));
-    renderPieChartJS("language-chart", langChartData, 200);
+    renderPieChartJS("language-chart", langChartData, 420);
   } else if (langChartDiv) {
     langChartDiv.innerHTML = "<p>No language data</p>";
   }

@@ -409,6 +409,25 @@ function setupHotkeys() {
         .querySelector('.tab[data-tab="profile"]')
         ?.dispatchEvent(new Event("click"));
     }
+    // Ctrl+7: Organization tab
+    if (e.ctrlKey && e.key === "7") {
+      e.preventDefault();
+      document
+        .querySelector('.tab[data-tab="organization"]')
+        ?.dispatchEvent(new Event("click"));
+    }
+    // Ctrl+8: Team Analytics tab (only if user has access)
+    if (e.ctrlKey && e.key === "8") {
+      e.preventDefault();
+      const teamAnalyticsTab = document.querySelector(
+        '.tab[data-tab="teamAnalytics"]',
+      ) as HTMLButtonElement;
+      // Only trigger if the tab is visible (user has access)
+      if (teamAnalyticsTab && teamAnalyticsTab.style.display !== "none") {
+        teamAnalyticsTab.dispatchEvent(new Event("click"));
+      }
+    }
+
     // Ctrl+P: Pause/Resume
     if (e.ctrlKey && e.key.toLowerCase() === "p") {
       e.preventDefault();

@@ -497,7 +497,9 @@ async function renderSettings(container: HTMLElement) {
           // Update local cache for immediate use
           try {
             updateCachedPreference("notification_settings", newSettings);
-          } catch {}
+          } catch {
+            // ignore cache update errors, not critical to show updated settings on next load
+          }
           showNotification("Notification preferences saved");
         } else {
           showNotification("Failed to save notification preferences", 3000);

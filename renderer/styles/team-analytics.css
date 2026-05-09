@@ -160,6 +160,14 @@
   color: var(--text-primary, #1a1a1a);
 }
 
+.language-pie-chart {
+  min-width: 320px;
+  width: 100%;
+  max-width: 500px;
+  margin-bottom: 0;
+  display: inline-block;
+}
+
 .chart-card ul {
   list-style: none;
   padding: 0;

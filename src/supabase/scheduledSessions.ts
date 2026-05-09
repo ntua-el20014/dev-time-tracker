@@ -28,6 +28,34 @@ export interface ScheduledSessionNotification {
   tags: string[];
 }
 
+function normalizeScheduledDateTime(value: string): string {
+  const localDateTimePattern =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
+
+  if (/[zZ]|[+-]\d\d:?\d\d$/.test(value)) {
+    return new Date(value).toISOString();
+  }
+
+  const match = value.match(localDateTimePattern);
+  if (!match) {
+    return new Date(value).toISOString();
+  }
+
+  const [, year, month, day, hours, minutes, seconds = "0", millis = "0"] =
+    match;
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hours),
+    Number(minutes),
+    Number(seconds),
+    Number(millis.padEnd(3, "0")),
+  );
+
+  return date.toISOString();
+}
+
 /**
  * Create a new scheduled session.
  */
@@ -41,7 +69,9 @@ export async function createScheduledSession(
     user_id: userId,
     title: sessionFields.title,
     description: sessionFields.description || null,
-    scheduled_datetime: sessionFields.scheduled_datetime,
+    scheduled_datetime: normalizeScheduledDateTime(
+      sessionFields.scheduled_datetime,
+    ),
     estimated_duration_minutes:
       sessionFields.estimated_duration_minutes || null,
     project_id: sessionFields.project_id || null,
@@ -151,7 +181,9 @@ export async function updateScheduledSession(
     updateData.description = sessionUpdates.description;
   }
   if (sessionUpdates.scheduled_datetime !== undefined) {
-    updateData.scheduled_datetime = sessionUpdates.scheduled_datetime;
+    updateData.scheduled_datetime = normalizeScheduledDateTime(
+      sessionUpdates.scheduled_datetime,
+    );
   }
   if (sessionUpdates.estimated_duration_minutes !== undefined) {
     updateData.estimated_duration_minutes =
