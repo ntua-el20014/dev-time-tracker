@@ -77,17 +77,23 @@ export async function updateOrganization(
 export async function updateUserRole(
   userId: string,
   role: "admin" | "manager" | "employee",
-): Promise<UserProfile> {
-  return await safeIpcInvoke<UserProfile>("org:update-user-role", [
+): Promise<void> {
+  const ok = await safeIpcInvoke<boolean>("org:update-user-role", [
     userId,
     role,
   ]);
+  if (!ok) {
+    throw new Error("Role update was rejected");
+  }
 }
 
 export async function removeUserFromOrganization(
   userId: string,
 ): Promise<void> {
-  return await safeIpcInvoke<void>("org:remove-user", [userId]);
+  const ok = await safeIpcInvoke<boolean>("org:remove-user", [userId]);
+  if (!ok) {
+    throw new Error("Member removal was rejected");
+  }
 }
 
 export async function leaveOrganization(): Promise<boolean> {

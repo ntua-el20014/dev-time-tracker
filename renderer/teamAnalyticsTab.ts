@@ -2,6 +2,7 @@
 import { safeIpcInvoke, withLoading } from "./utils";
 import { showNotification } from "./components";
 import { getLocalDateString } from "./utils/dateUtils";
+import { exportOrgAnalyticsReport } from "./utils/orgReportExporter";
 import { renderPercentBar, renderPieChartJS } from "./components/Charts";
 import type {
   OrgAnalyticsSummary,
@@ -36,7 +37,13 @@ export async function renderTeamAnalytics() {
 
   container.innerHTML = `
     <div id="team-analytics-inner">
-      <h1 class="org-title">Team Analytics</h1>
+      <div class="team-analytics-header" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px;">
+        <div>
+          <h1 class="org-title" style="margin-bottom: 4px;">Team Analytics</h1>
+          <p class="info-note" style="margin: 0;">Organization projects only. Export the current filtered view as a PDF report.</p>
+        </div>
+        <button id="export-org-report-btn" class="goal-btn" style="white-space: nowrap; align-self: center;">Export PDF Report</button>
+      </div>
       <div id="analytics-filters"></div>
       <div id="analytics-loading" style="text-align: center; padding: 20px;">Loading analytics...</div>
       <div id="analytics-content" style="display: none;">
@@ -46,6 +53,23 @@ export async function renderTeamAnalytics() {
       </div>
     </div>
   `;
+
+  const reportBtn = document.getElementById(
+    "export-org-report-btn",
+  ) as HTMLButtonElement | null;
+  if (reportBtn) {
+    reportBtn.addEventListener("click", async () => {
+      reportBtn.disabled = true;
+      const originalText = reportBtn.textContent || "Export PDF Report";
+      reportBtn.textContent = "Exporting…";
+      try {
+        await exportOrgAnalyticsReport(currentFilter);
+      } finally {
+        reportBtn.disabled = false;
+        reportBtn.textContent = originalText;
+      }
+    });
+  }
 
   // Render filters
   await renderFilters();

@@ -384,7 +384,7 @@ function renderMembersList() {
   const container = document.getElementById("org-members-section");
   if (!container || !currentUserProfile) return;
 
-  const canManageMembers = isAdmin();
+  const canManageMembers = isAdmin() || isManager();
   const canViewDetails = isAdmin() || isManager();
 
   container.innerHTML = `
@@ -394,10 +394,11 @@ function renderMembersList() {
         <table class="org-members-table">
           <thead>
             <tr>
+              <th>Avatar</th>
               <th>Username</th>
               ${canViewDetails ? "<th>Email</th>" : ""}
               <th>Role</th>
-              ${canManageMembers ? "<th>Actions</th>" : ""}
+              ${canManageMembers ? "<th>Update</th><th>Remove</th>" : ""}
             </tr>
           </thead>
           <tbody>
@@ -405,6 +406,7 @@ function renderMembersList() {
               .map(
                 (member) => `
               <tr>
+                <td class="member-avatar-cell">${renderMemberAvatar(member)}</td>
                 <td>${escapeHtml(member.username)}</td>
                 ${
                   canViewDetails
@@ -413,20 +415,19 @@ function renderMembersList() {
                 }
                 <td>
                   ${
-                    canManageMembers && member.id !== currentUserProfile?.id
+                    canManageMembers && canManageMember(member)
                       ? `
                     <select class="role-select" data-user-id="${
                       member.id
                     }" data-current-role="${member.role}">
-                      <option value="admin" ${
-                        member.role === "admin" ? "selected" : ""
-                      }>Admin</option>
-                      <option value="manager" ${
-                        member.role === "manager" ? "selected" : ""
-                      }>Manager</option>
-                      <option value="employee" ${
-                        member.role === "employee" ? "selected" : ""
-                      }>Employee</option>
+                      ${getAssignableRoles(member)
+                        .map(
+                          (role) =>
+                            `<option value="${role}" ${
+                              member.role === role ? "selected" : ""
+                            }>${role[0].toUpperCase() + role.slice(1)}</option>`,
+                        )
+                        .join("")}
                     </select>
                   `
                       : `<span class="role-badge role-${member.role}">${member.role}</span>`
@@ -437,13 +438,22 @@ function renderMembersList() {
                     ? `
                   <td>
                     ${
-                      member.id !== currentUserProfile?.id
-                        ? `<button class="btn btn-danger btn-sm remove-member-btn" data-user-id="${
-                            member.id
-                          }" data-username="${escapeHtml(
+                      canManageMember(member)
+                        ? `<button class="btn btn-primary btn-sm update-role-btn" data-user-id="${member.id}">Update</button>`
+                        : `<span class="text-muted">-</span>`
+                    }
+                  </td>
+                  <td>
+                    ${
+                      canManageMember(member)
+                        ? `<button class="remove-member-x-btn" title="Remove ${escapeHtml(
                             member.username,
-                          )}">Remove</button>`
-                        : `<span class="text-muted">You</span>`
+                          )}" aria-label="Remove ${escapeHtml(
+                            member.username,
+                          )}" data-user-id="${member.id}" data-username="${escapeHtml(
+                            member.username,
+                          )}">✕</button>`
+                        : `<span class="text-muted">-</span>`
                     }
                   </td>
                 `
@@ -461,13 +471,20 @@ function renderMembersList() {
 
   // Setup event listeners for role changes
   if (canManageMembers) {
-    const roleSelects = container.querySelectorAll(".role-select");
-    roleSelects.forEach((select) => {
-      const handleChange = (e: Event) =>
-        handleRoleChange(e.target as HTMLSelectElement);
-      select.addEventListener("change", handleChange);
+    const updateButtons = container.querySelectorAll(".update-role-btn");
+    updateButtons.forEach((btn) => {
+      const handleUpdate = async () => {
+        const userId = btn.getAttribute("data-user-id");
+        if (!userId) return;
+        const select = container.querySelector(
+          `.role-select[data-user-id="${userId}"]`,
+        ) as HTMLSelectElement | null;
+        if (!select) return;
+        await handleRoleChange(select, btn as HTMLButtonElement);
+      };
+      btn.addEventListener("click", handleUpdate);
       cleanupFunctions.push(() =>
-        select.removeEventListener("change", handleChange),
+        btn.removeEventListener("click", handleUpdate),
       );
     });
 
@@ -1181,12 +1198,32 @@ async function handleJoinOrganization(orgId: string) {
   }
 }
 
-async function handleRoleChange(select: HTMLSelectElement) {
+async function handleRoleChange(
+  select: HTMLSelectElement,
+  updateBtn?: HTMLButtonElement,
+) {
   const userId = select.getAttribute("data-user-id");
   const currentRole = select.getAttribute("data-current-role");
   const newRole = select.value as "admin" | "manager" | "employee";
 
   if (!userId || newRole === currentRole) return;
+
+  const targetMember = orgMembers.find((m) => m.id === userId);
+  if (!targetMember || !canManageMember(targetMember)) {
+    showNotification(
+      "You do not have permission to change this member's role.",
+    );
+    select.value = currentRole || "employee";
+    return;
+  }
+
+  if (
+    getRoleRank(newRole) > getRoleRank(currentUserProfile?.role || "employee")
+  ) {
+    showNotification("You cannot assign a role higher than your own.");
+    select.value = currentRole || "employee";
+    return;
+  }
 
   // Check if trying to remove last admin
   if (currentRole === "admin") {
@@ -1202,6 +1239,10 @@ async function handleRoleChange(select: HTMLSelectElement) {
 
   try {
     select.disabled = true;
+    if (updateBtn) {
+      updateBtn.disabled = true;
+      updateBtn.textContent = "Updating...";
+    }
     await updateUserRole(userId, newRole);
     showNotification("User role updated successfully");
     await renderOrganizationTab(); // Refresh
@@ -1213,12 +1254,21 @@ async function handleRoleChange(select: HTMLSelectElement) {
     );
     select.value = currentRole || "";
     select.disabled = false;
+    if (updateBtn) {
+      updateBtn.disabled = false;
+      updateBtn.textContent = "Update";
+    }
   }
 }
 
 async function handleRemoveMember(userId: string, username: string) {
-  // Check if trying to remove last admin
   const member = orgMembers.find((m) => m.id === userId);
+  if (!member || !canManageMember(member)) {
+    showNotification("You do not have permission to remove this member.");
+    return;
+  }
+
+  // Check if trying to remove last admin
   if (member?.role === "admin") {
     const adminCount = orgMembers.filter((m) => m.role === "admin").length;
     if (adminCount <= 1) {
@@ -2018,6 +2068,46 @@ function isAdmin(): boolean {
 
 function isManager(): boolean {
   return currentUserProfile?.role === "manager";
+}
+
+function getRoleRank(role: "admin" | "manager" | "employee"): number {
+  if (role === "admin") return 3;
+  if (role === "manager") return 2;
+  return 1;
+}
+
+function canManageMember(member: UserProfile): boolean {
+  if (!currentUserProfile) return false;
+  if (member.id === currentUserProfile.id) return false;
+
+  const actorRank = getRoleRank(currentUserProfile.role);
+  const targetRank = getRoleRank(member.role);
+  return actorRank > targetRank;
+}
+
+function getAssignableRoles(
+  member: UserProfile,
+): Array<"admin" | "manager" | "employee"> {
+  if (!currentUserProfile || !canManageMember(member)) {
+    return [];
+  }
+
+  const actorRank = getRoleRank(currentUserProfile.role);
+  const allRoles: Array<"admin" | "manager" | "employee"> = [
+    "admin",
+    "manager",
+    "employee",
+  ];
+
+  return allRoles.filter((role) => getRoleRank(role) <= actorRank);
+}
+
+function renderMemberAvatar(member: UserProfile): string {
+  const label = escapeHtml((member.username || "?").charAt(0).toUpperCase());
+  if (member.avatar) {
+    return `<img class="member-avatar" src="${escapeHtml(member.avatar)}" alt="${escapeHtml(member.username)} avatar" />`;
+  }
+  return `<span class="member-avatar member-avatar-fallback" aria-label="${escapeHtml(member.username)} avatar">${label}</span>`;
 }
 
 function calculateOrgStats() {

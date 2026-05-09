@@ -471,13 +471,19 @@
 - [x] Notification preferences (per-type enable/disable)
 
 ### Step 11.3: Export & Reporting
-- [ ] Export individual reports as PDF (daily, weekly, monthly)
-- [ ] CSV export for any filtered data view
+- [x] Export individual reports as PDF (daily, weekly, monthly)
+- [x] Export for any filtered data view
 
 ### Step 11.4: Fixing
-- [ ] Fix location of export data buttons and admin panel
-- [ ] Fix access based on role (e.g. now non admins cannot access project tab)
-- [ ] Fix org invites - creation - deletion - modal etc.
+- [x] Fix location of export data buttons and admin panel
+- [ ] Fix access based on role (now non admins cannot access projects tab
+      which isnt what i want, everyone should,
+      just members should not be able to have access to org project actions edit, delete, archive i think)
+- [ ] Fix org invites refreshing - creation - deletion - modal. I invited a new member through code,
+      then made a new user, left its personal org and instantly got the organization modal which tells you what you are looking for,
+      i pressed to join existing org with the code, paste it but didnt work instantly. only after closing the app and rerunning it i was able to.
+- [ ] Fix visibilities of things (org_id not visible for employees/members , join section of organization tab should not be visible to people inside org even if its their personal)
+      add explanation if the org is personal that in order to join an existing one they need to leave their own. 
 
 ### Step 11.5: Quality & Release
 - [ ] Set up error logging service (Sentry or similar)

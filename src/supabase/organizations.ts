@@ -169,35 +169,106 @@ export async function updateOrganization(
   return result.data as Organization;
 }
 
+function getRoleRank(role: "admin" | "manager" | "employee"): number {
+  if (role === "admin") return 3;
+  if (role === "manager") return 2;
+  return 1;
+}
+
+async function getUserProfileById(userId: string): Promise<UserProfile | null> {
+  const { data, error } = await (supabase.rpc as any)(
+    "get_user_profile_by_id",
+    {
+      p_user_id: userId,
+    },
+  );
+
+  if (error) throw error;
+  if (data && Array.isArray(data) && data.length > 0) {
+    return data[0] as UserProfile;
+  }
+  return null;
+}
+
+async function getActorAndTargetProfiles(targetUserId: string): Promise<{
+  actor: UserProfile;
+  target: UserProfile;
+}> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  if (user.id === targetUserId) {
+    throw new Error("You cannot modify your own organization role here");
+  }
+
+  const actor = await getUserProfileById(user.id);
+  const target = await getUserProfileById(targetUserId);
+
+  if (!actor || !actor.org_id) {
+    throw new Error("You are not in an organization");
+  }
+  if (!target || !target.org_id) {
+    throw new Error("Target user is not in an organization");
+  }
+  if (actor.org_id !== target.org_id) {
+    throw new Error("You can only manage members in your organization");
+  }
+
+  return { actor, target };
+}
+
 /**
- * Update a user's role in the organization (admin only)
+ * Update a user's role in the organization
  */
 export async function updateUserRole(
   userId: string,
   role: "admin" | "manager" | "employee",
 ): Promise<void> {
+  const { actor, target } = await getActorAndTargetProfiles(userId);
+  const actorOrgId = actor.org_id;
+  if (!actorOrgId) throw new Error("You are not in an organization");
+
+  if (getRoleRank(actor.role) <= getRoleRank(target.role)) {
+    throw new Error("You cannot modify members with equal or higher role");
+  }
+
+  if (getRoleRank(role) > getRoleRank(actor.role)) {
+    throw new Error("You cannot assign a role higher than your own");
+  }
+
   // Supabase RLS policies cause update() to be typed as never
   const result = await supabase
     .from("user_profiles")
     // @ts-ignore - Supabase RLS typing limitation
     .update({ role })
-    .eq("id", userId);
+    .eq("id", userId)
+    .eq("org_id", actorOrgId);
 
   if (result.error) throw result.error;
 }
 
 /**
- * Remove a user from the organization (admin only)
+ * Remove a user from the organization
  */
 export async function removeUserFromOrganization(
   userId: string,
 ): Promise<void> {
+  const { actor, target } = await getActorAndTargetProfiles(userId);
+  const actorOrgId = actor.org_id;
+  if (!actorOrgId) throw new Error("You are not in an organization");
+
+  if (getRoleRank(actor.role) <= getRoleRank(target.role)) {
+    throw new Error("You cannot remove members with equal or higher role");
+  }
+
   // Supabase RLS policies cause update() to be typed as never
   const result = await supabase
     .from("user_profiles")
     // @ts-ignore - Supabase RLS typing limitation
-    .update({ org_id: null })
-    .eq("id", userId);
+    .update({ org_id: null, role: "employee" })
+    .eq("id", userId)
+    .eq("org_id", actorOrgId);
 
   if (result.error) throw result.error;
 }

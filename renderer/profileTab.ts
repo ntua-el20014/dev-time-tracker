@@ -6,7 +6,6 @@ import {
   showAvatarPicker,
   showConfirmationModal,
   showNotification,
-  renderAdminPanel,
   showOnboarding,
 } from "./components";
 import { loadHotkey, setUserTheme } from "./theme";
@@ -16,7 +15,6 @@ import {
   getCustomAvatars,
   addCustomAvatar,
   removeCustomAvatar,
-  isCurrentUserAdmin,
   safeIpcInvoke,
   withLoading,
 } from "./utils";
@@ -298,25 +296,83 @@ async function renderSettings(container: HTMLElement) {
     </div>
     
     <h2>Notifications</h2>
-    <div class="settings-row">
-      <label class="settings-label">Enable notifications:</label>
-      <input type="checkbox" id="notifEnabled" />
-    </div>
-    <div class="settings-row">
-      <label class="settings-label">Scheduled session reminders:</label>
-      <input type="checkbox" id="notifScheduled" />
-    </div>
-    <div class="settings-row">
-      <label class="settings-label">Daily goal completions:</label>
-      <input type="checkbox" id="notifDailyGoals" />
-    </div>
-    <div class="settings-row">
-      <label class="settings-label">Health alerts:</label>
-      <input type="checkbox" id="notifHealth" />
-    </div>
-    <div class="settings-row">
-      <label class="settings-label">Org invites:</label>
-      <input type="checkbox" id="notifOrgInvites" />
+    <div class="notification-preferences-panel">
+      <p class="notification-preferences-note">
+        Choose which events should surface as notifications.
+      </p>
+      <div class="notification-preferences-table-wrap">
+        <table class="notification-preferences-table">
+          <thead>
+            <tr>
+              <th>Preference</th>
+              <th>Description</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="notification-pref-name">Enable notifications</td>
+              <td class="notification-pref-description">Master switch for all notification delivery.</td>
+              <td>
+                <label class="notification-toggle" for="notifEnabled" aria-label="Enable notifications">
+                  <input type="checkbox" id="notifEnabled" />
+                  <span class="notification-toggle-track" aria-hidden="true">
+                    <span class="notification-toggle-thumb"></span>
+                  </span>
+                </label>
+              </td>
+            </tr>
+            <tr>
+              <td class="notification-pref-name">Scheduled session reminders</td>
+              <td class="notification-pref-description">Get nudges before a planned session starts.</td>
+              <td>
+                <label class="notification-toggle" for="notifScheduled" aria-label="Scheduled session reminders">
+                  <input type="checkbox" id="notifScheduled" />
+                  <span class="notification-toggle-track" aria-hidden="true">
+                    <span class="notification-toggle-thumb"></span>
+                  </span>
+                </label>
+              </td>
+            </tr>
+            <tr>
+              <td class="notification-pref-name">Daily goal completions</td>
+              <td class="notification-pref-description">Celebrate when you finish your daily target.</td>
+              <td>
+                <label class="notification-toggle" for="notifDailyGoals" aria-label="Daily goal completions">
+                  <input type="checkbox" id="notifDailyGoals" />
+                  <span class="notification-toggle-track" aria-hidden="true">
+                    <span class="notification-toggle-thumb"></span>
+                  </span>
+                </label>
+              </td>
+            </tr>
+            <tr>
+              <td class="notification-pref-name">Health alerts</td>
+              <td class="notification-pref-description">Receive warnings about tracking health or sync issues.</td>
+              <td>
+                <label class="notification-toggle" for="notifHealth" aria-label="Health alerts">
+                  <input type="checkbox" id="notifHealth" />
+                  <span class="notification-toggle-track" aria-hidden="true">
+                    <span class="notification-toggle-thumb"></span>
+                  </span>
+                </label>
+              </td>
+            </tr>
+            <tr>
+              <td class="notification-pref-name">Org invites</td>
+              <td class="notification-pref-description">Stay on top of invitations from your organization.</td>
+              <td>
+                <label class="notification-toggle" for="notifOrgInvites" aria-label="Org invites">
+                  <input type="checkbox" id="notifOrgInvites" />
+                  <span class="notification-toggle-track" aria-hidden="true">
+                    <span class="notification-toggle-thumb"></span>
+                  </span>
+                </label>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
     
     <div class="avatar-settings-row" style="margin-top:16px;">
@@ -371,12 +427,12 @@ async function renderSettings(container: HTMLElement) {
       Change the accent color for the current theme and <b>Save</b>.<br>
     </div>
 
-    <div class="help-section">
+    <div>
       <h2>My Data Export</h2>
       <p class="info-note" style="margin-bottom: 12px;">
         Export your own time tracking data, summaries, and PDF reports with a date range.
       </p>
-      <button id="openPersonalExportBtn" class="help-button">Export My Data…</button>
+      <button id="openPersonalExportBtn" class="help-button">Export My Data</button>
     </div>
 
     <div class="help-section">
@@ -884,9 +940,6 @@ export async function refreshProfile() {
   const profileDiv = document.getElementById("profileContent");
   if (!profileDiv) return;
 
-  // Check if current user is admin to show admin tab
-  const isAdmin = await isCurrentUserAdmin();
-
   profileDiv.innerHTML = `
   <div class="profile-main-flex">
     <nav id="profileSidebar" class="profile-sidebar">
@@ -897,11 +950,6 @@ export async function refreshProfile() {
         <li><button class="profile-chapter-btn" data-chapter="settings">Settings</button></li>
         <li><button class="profile-chapter-btn" data-chapter="hotkeys">Hotkeys</button></li>
         <li><button class="profile-chapter-btn" data-chapter="organization">Organization</button></li>
-        ${
-          isAdmin
-            ? '<li><button class="profile-chapter-btn" data-chapter="admin">Admin</button></li>'
-            : ""
-        }
       </ul>
       <button id="logoutBtn" class="logout-btn">Log Out</button>
     </nav>
@@ -929,8 +977,6 @@ export async function refreshProfile() {
         await renderDailyGoalHistory(contentDiv);
       } else if (chapter === "organization") {
         await renderOrganizationSection(contentDiv);
-      } else if (chapter === "admin") {
-        await renderAdminPanel(contentDiv);
       }
     });
     // Highlight active

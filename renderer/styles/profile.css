@@ -176,6 +176,121 @@
 .settings-range-value {
   margin-left: 8px;
 }
+.notification-preferences-panel {
+  margin-bottom: 24px;
+  padding: 18px 20px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--row-odd) 92%, transparent) 0%,
+    color-mix(in srgb, var(--row-hover) 72%, transparent) 100%
+  );
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+.notification-preferences-note {
+  margin: 0 0 14px 0;
+  color: var(--fg-secondary);
+  font-size: 0.95em;
+}
+.notification-preferences-table-wrap {
+  overflow-x: auto;
+}
+.notification-preferences-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.notification-preferences-table th,
+.notification-preferences-table td {
+  padding: 14px 16px;
+  vertical-align: middle;
+}
+.notification-preferences-table thead th {
+  font-size: 0.78em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-secondary);
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+}
+.notification-preferences-table tbody tr {
+  transition: background 0.2s ease;
+}
+.notification-preferences-table tbody tr + tr td {
+  border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+}
+.notification-preferences-table tbody tr:hover {
+  background: color-mix(in srgb, var(--row-hover) 85%, transparent);
+}
+.notification-pref-name {
+  font-weight: 600;
+  color: var(--fg);
+  min-width: 220px;
+}
+.notification-pref-description {
+  color: var(--fg-secondary);
+  line-height: 1.45;
+}
+.notification-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.notification-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+.notification-toggle-track {
+  position: relative;
+  width: 52px;
+  height: 30px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg-secondary) 24%, var(--row-hover));
+  border: 1px solid color-mix(in srgb, var(--fg-secondary) 28%, transparent);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.notification-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  transition: transform 0.2s ease;
+}
+.notification-toggle input:checked + .notification-toggle-track {
+  background: linear-gradient(
+    90deg,
+    var(--accent),
+    color-mix(in srgb, var(--accent) 75%, #ffffff 25%)
+  );
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.notification-toggle
+  input:checked
+  + .notification-toggle-track
+  .notification-toggle-thumb {
+  transform: translateX(22px);
+}
+.notification-toggle input:focus-visible + .notification-toggle-track {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, #fff 40%);
+  outline-offset: 3px;
+}
+.notification-toggle:hover .notification-toggle-track {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+}
 .theme-toggle-btn {
   margin-left: 12px;
   padding: 6px 12px;
