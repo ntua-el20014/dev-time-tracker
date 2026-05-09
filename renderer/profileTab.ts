@@ -880,7 +880,7 @@ async function renderOrganizationSection(container: HTMLElement) {
           <span>${org ? escapeHtml(org.name) : '<span style="color:var(--text-secondary);">None</span>'}</span>
         </div>
         ${
-          org
+          org && profile?.role === "admin"
             ? `
         <div class="org-profile-row">
           <label>Org ID:</label>
@@ -923,6 +923,8 @@ async function renderOrganizationSection(container: HTMLElement) {
             await leaveOrganization();
             showNotification("You have left the organization.");
             resetOrgWizardDismissed();
+            (window as any).markTabsDirty("organization");
+            window.dispatchEvent(new Event("organization:changed"));
             renderOrganizationSection(container);
             setTimeout(() => showOrgSetupWizard(), 800);
           } catch (error) {

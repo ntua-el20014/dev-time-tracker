@@ -277,6 +277,7 @@ function renderCreateTeamStep(
 
     try {
       await createTeamOrganization({ name });
+      window.dispatchEvent(new Event("organization:changed"));
       state.resultOrgName = name;
       state.path = "done";
       renderWizardStep(state);
@@ -360,7 +361,8 @@ function renderJoinTeamStep(content: HTMLDivElement, state: WizardState): void {
 
     try {
       const result = await joinWithInviteCode(code);
-      state.resultOrgName = (result as any)?.organization?.name || "the team";
+      window.dispatchEvent(new Event("organization:changed"));
+      state.resultOrgName = result?.org_name || "the team";
       state.path = "done";
       renderWizardStep(state);
     } catch (error) {

@@ -196,11 +196,7 @@ async function setupRoleBasedTabVisibility() {
   ) as HTMLButtonElement;
 
   if (projectsTab) {
-    if (isManagerOrAdmin) {
-      projectsTab.style.display = "";
-    } else {
-      projectsTab.style.display = "none";
-    }
+    projectsTab.style.display = "";
   }
 
   if (teamAnalyticsTab) {
@@ -211,6 +207,11 @@ async function setupRoleBasedTabVisibility() {
     }
   }
 }
+
+window.addEventListener("organization:changed", () => {
+  clearRoleCache();
+  void setupRoleBasedTabVisibility();
+});
 
 function initUI() {
   const localToday = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD format

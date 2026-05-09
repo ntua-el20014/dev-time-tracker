@@ -1,11 +1,6 @@
 import { ipcRenderer } from "electron";
 import { ProjectWithMembers } from "../shared/types";
-import {
-  isCurrentUserManagerOrAdmin,
-  getCurrentUserRole,
-  safeIpcInvoke,
-  withLoading,
-} from "./utils";
+import { getCurrentUserRole, safeIpcInvoke, withLoading } from "./utils";
 import {
   showInAppNotification,
   showConfirmationModal,
@@ -15,6 +10,7 @@ import {
 import { renderBillableHoursSummary } from "./components/BillableHoursSummary";
 
 let currentProjects: ProjectWithMembers[] = [];
+let currentUserRole: "admin" | "manager" | "employee" = "employee";
 
 // Flag to prevent multiple member management modals
 let isMemberModalOpen = false;
@@ -22,18 +18,6 @@ let isMemberModalOpen = false;
 export async function renderProjects() {
   const projectsContainer = document.getElementById("projectsContent");
   if (!projectsContainer) return;
-
-  // Check if user has permission to access projects tab
-  const hasAccess = await isCurrentUserManagerOrAdmin();
-  if (!hasAccess) {
-    projectsContainer.innerHTML = `
-      <div class="access-denied">
-        <h2>Access Denied</h2>
-        <p>You don't have permission to access project management. Only managers and administrators can access this section.</p>
-      </div>
-    `;
-    return;
-  }
 
   // Load projects data (with loading indicator)
   await withLoading(projectsContainer, "Loading projects…", async () => {
@@ -99,23 +83,13 @@ export async function renderProjects() {
 
 async function loadProjects() {
   try {
-    // Get projects based on user role — uses cached role to avoid redundant IPC call
-    const userRole = await getCurrentUserRole();
-
-    if (userRole === "admin") {
-      currentProjects = await safeIpcInvoke(
-        "get-all-projects-with-members",
-        [],
-        { fallback: [] },
-      );
-    } else {
-      // Managers only see projects they are members or managers of
-      currentProjects = await safeIpcInvoke(
-        "get-user-projects-with-members",
-        [],
-        { fallback: [] },
-      );
-    }
+    currentUserRole = (await getCurrentUserRole()) as
+      | "admin"
+      | "manager"
+      | "employee";
+    currentProjects = await safeIpcInvoke("get-all-projects-with-members", [], {
+      fallback: [],
+    });
   } catch (error) {
     showInAppNotification("Failed to load projects", 5000);
     currentProjects = [];
@@ -141,6 +115,11 @@ function renderProjectsList(projects: ProjectWithMembers[]): string {
 function renderProjectCard(project: ProjectWithMembers): string {
   const createdDate = new Date(project.created_at).toLocaleDateString();
   const memberCount = project.members ? project.members.length : 0;
+  const isOrganizationProject = (project as any).scope === "organization";
+  const canManageOrganizationProject =
+    currentUserRole === "admin" || currentUserRole === "manager";
+  const canShowProjectActions =
+    !isOrganizationProject || canManageOrganizationProject;
 
   return `
     <div class="project-card" data-project-id="${project.id}">
@@ -150,6 +129,9 @@ function renderProjectCard(project: ProjectWithMembers): string {
         }"></div>
         <h3 class="project-name">${escapeHtml(project.name)}</h3>
         <span class="project-scope-badge scope-${(project as any).scope || "personal"}">${(project as any).scope === "organization" ? "Org" : "Personal"}</span>
+        ${
+          canShowProjectActions
+            ? `
         <div class="project-actions">
           <button class="project-action-btn edit-project-btn" data-project-id="${
             project.id
@@ -167,6 +149,9 @@ function renderProjectCard(project: ProjectWithMembers): string {
               : `<button class="project-action-btn restore-project-btn" data-project-id="${project.id}" title="Restore Project">↩️</button>`
           }
         </div>
+        `
+            : ""
+        }
       </div>
       
       <div class="project-card-content">

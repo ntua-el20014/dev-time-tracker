@@ -28,10 +28,8 @@ import {
   listInviteCodes,
   revokeInviteCode,
   joinWithInviteCode,
-  leaveOrganization,
 } from "./utils/organizationApi";
 import { withLoading } from "./utils";
-import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
 import type {
   Organization,
   UserProfile,
@@ -49,6 +47,15 @@ let inviteCodes: OrgInviteCode[] = [];
 let cloudProjects: CloudProjectWithManager[] = [];
 let cleanupFunctions: (() => void)[] = [];
 let isMemberModalOpen = false;
+
+function notifyOrganizationChanged(): void {
+  window.dispatchEvent(new Event("organization:changed"));
+}
+
+async function refreshOrganizationTab(): Promise<void> {
+  notifyOrganizationChanged();
+  await renderOrganizationTab();
+}
 
 /**
  * Main render function for Organization Tab
@@ -135,7 +142,8 @@ export async function renderOrganizationTab() {
             createBtn.textContent = "Creating...";
             await createPersonalOrganization(name);
             showNotification("Organization created successfully!");
-            await renderOrganizationTab();
+            (window as any).markTabsDirty("organization");
+            await refreshOrganizationTab();
           } catch (error) {
             showNotification(
               `Failed to create organization: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -171,7 +179,8 @@ export async function renderOrganizationTab() {
                 ? `Successfully joined ${result.org_name}!`
                 : "Successfully joined!",
             );
-            await renderOrganizationTab();
+            (window as any).markTabsDirty("organization");
+            await refreshOrganizationTab();
           } catch (error) {
             showNotification(
               `Failed to join: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -246,7 +255,6 @@ export async function renderOrganizationTab() {
         <div id="org-members-section"></div>
         <div id="org-invite-codes-section"></div>
         <div id="org-projects-section"></div>
-        <div id="org-join-section"></div>
         <div id="org-requests-section"></div>
       </div>
     `;
@@ -283,6 +291,8 @@ function renderOrganizationInfo() {
 
   const stats = calculateOrgStats();
   const orgType = currentOrg.name.includes("Personal") ? "Personal" : "Team";
+  const canViewOrgId = isAdmin() || isManager();
+  const isPersonalOrg = orgType === "Personal";
 
   container.innerHTML = `
     <div class="org-section">
@@ -303,6 +313,9 @@ function renderOrganizationInfo() {
               stats.managers
             } manager, ${stats.employees} employee)</span>
           </div>
+          ${
+            canViewOrgId
+              ? `
           <div class="org-info-item">
             <label>Organization ID:</label>
             <span class="org-uuid-wrapper">
@@ -314,14 +327,25 @@ function renderOrganizationInfo() {
               </button>
             </span>
           </div>
+          `
+              : ""
+          }
         </div>
+        ${
+          isPersonalOrg
+            ? `
+        <div class="info-note" style="margin-top: 1rem;">
+          This is your automatically created personal organization. To join an existing team, leave it first, then use an invite code or request access.
+        </div>
+        `
+            : ""
+        }
         <div class="org-actions">
           ${
             orgType === "Personal"
               ? '<button id="create-team-org-btn" class="btn btn-primary">Create Team Organization</button>'
               : ""
           }
-          <button id="leave-org-btn" class="btn btn-danger">Leave Organization</button>
         </div>
       </div>
     </div>
@@ -343,36 +367,6 @@ function renderOrganizationInfo() {
     copyBtn.addEventListener("click", handleCopy);
     cleanupFunctions.push(() =>
       copyBtn.removeEventListener("click", handleCopy),
-    );
-  }
-
-  const leaveBtn = document.getElementById("leave-org-btn");
-  if (leaveBtn && currentOrg) {
-    const orgName = currentOrg.name;
-    const handleLeave = () => {
-      showConfirmationModal({
-        title: "Leave Organization",
-        message: `Are you sure you want to leave "${escapeHtml(orgName)}"? This cannot be undone.`,
-        confirmText: "Leave",
-        confirmClass: "btn-delete",
-        onConfirm: async () => {
-          try {
-            await leaveOrganization();
-            showNotification("You have left the organization.");
-            resetOrgWizardDismissed();
-            await renderOrganizationTab();
-            setTimeout(() => showOrgSetupWizard(), 800);
-          } catch (error) {
-            showNotification(
-              `Failed to leave: ${error instanceof Error ? error.message : "Unknown error"}`,
-            );
-          }
-        },
-      });
-    };
-    leaveBtn.addEventListener("click", handleLeave);
-    cleanupFunctions.push(() =>
-      leaveBtn.removeEventListener("click", handleLeave),
     );
   }
 }
@@ -702,6 +696,11 @@ function renderInviteCodes() {
 function renderJoinForm() {
   const container = document.getElementById("org-join-section");
   if (!container) return;
+
+  if (currentOrg) {
+    container.innerHTML = "";
+    return;
+  }
 
   container.innerHTML = `
     <div class="org-section">
@@ -1245,7 +1244,7 @@ async function handleRoleChange(
     }
     await updateUserRole(userId, newRole);
     showNotification("User role updated successfully");
-    await renderOrganizationTab(); // Refresh
+    await refreshOrganizationTab();
   } catch (error) {
     showNotification(
       `Failed to update role: ${
@@ -1288,7 +1287,7 @@ async function handleRemoveMember(userId: string, username: string) {
         try {
           await removeUserFromOrganization(userId);
           showNotification(`${username} removed from organization`);
-          await renderOrganizationTab(); // Refresh
+          await refreshOrganizationTab();
           resolve();
         } catch (error) {
           showNotification(
@@ -1310,7 +1309,7 @@ async function handleApproveRequest(requestId: string) {
   try {
     await approveJoinRequest(requestId);
     showNotification("Join request approved");
-    await renderOrganizationTab(); // Refresh
+    await refreshOrganizationTab();
   } catch (error) {
     showNotification(
       `Failed to approve request: ${
@@ -1324,7 +1323,7 @@ async function handleRejectRequest(requestId: string) {
   try {
     await rejectJoinRequest(requestId);
     showNotification("Join request rejected");
-    await renderOrganizationTab(); // Refresh
+    await refreshOrganizationTab();
   } catch (error) {
     showNotification(
       `Failed to reject request: ${
@@ -1373,7 +1372,7 @@ async function handleGenerateInviteCode() {
       showNotification("Invite code generated!");
     }
 
-    await renderOrganizationTab(); // Refresh to show new code
+    await refreshOrganizationTab();
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     showNotification(`Failed to generate invite code: ${errorMsg}`);
@@ -1394,7 +1393,7 @@ async function handleRevokeInviteCode(codeId: string) {
       try {
         await revokeInviteCode(codeId);
         showNotification("Invite code revoked");
-        await renderOrganizationTab(); // Refresh
+        await refreshOrganizationTab();
       } catch (error) {
         showNotification(
           `Failed to revoke invite code: ${
@@ -1430,7 +1429,7 @@ async function handleJoinWithInviteCode(code: string) {
     }
 
     joinInput.value = "";
-    await renderOrganizationTab(); // Refresh to show new org
+    await refreshOrganizationTab();
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     showNotification(`Failed to join: ${errorMsg}`);
