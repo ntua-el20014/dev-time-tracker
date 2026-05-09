@@ -282,3 +282,40 @@ h1 {
   border-radius: 6px;
   animation: skeleton-pulse 1.2s ease-in-out infinite;
 }
+
+/* Custom scrollbars (WebKit + Firefox fallback) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+/* WebKit browsers / Electron */
+*::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Light theme adjustments */
+body.light *::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+/* Make horizontal scrollbars a bit taller for easier grabbing */
+body .virtual-scroll-container::-webkit-scrollbar {
+  height: 12px;
+}

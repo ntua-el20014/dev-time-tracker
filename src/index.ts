@@ -427,7 +427,7 @@ function updateTrayMenu() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1000,
+    width: 1150,
     height: 800,
     webPreferences: {
       contextIsolation: false,
@@ -435,6 +435,16 @@ function createWindow() {
       webSecurity: true, // Re-enable web security to allow CSP
     },
   });
+
+  // Remove the default application menu (File/View/Help) for a cleaner window
+  try {
+    Menu.setApplicationMenu(null);
+    // Also hide the menu bar on Windows/Linux so Alt doesn't reveal it
+    mainWindow.setMenuBarVisibility(false);
+    mainWindow.setAutoHideMenuBar(true);
+  } catch (e) {
+    // Ignore if Menu APIs aren't available in some environments
+  }
 
   // Set CSP via session headers (more reliable than meta tag in Electron)
   mainWindow.webContents.session.webRequest.onHeadersReceived(

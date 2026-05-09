@@ -20,6 +20,7 @@ import {
   safeIpcInvoke,
   withLoading,
 } from "./utils";
+import { createPersonalExportModal } from "./utils/sessionExporter";
 import {
   getCurrentOrganization,
   getCurrentUserProfile,
@@ -371,6 +372,14 @@ async function renderSettings(container: HTMLElement) {
     </div>
 
     <div class="help-section">
+      <h2>My Data Export</h2>
+      <p class="info-note" style="margin-bottom: 12px;">
+        Export your own time tracking data, summaries, and PDF reports with a date range.
+      </p>
+      <button id="openPersonalExportBtn" class="help-button">Export My Data…</button>
+    </div>
+
+    <div class="help-section">
       <h2>Need Help?</h2>
       <button id="showOnboardingBtn" class="help-button">🎯 Show Welcome Tour</button>
     </div>
@@ -712,9 +721,19 @@ async function renderSettings(container: HTMLElement) {
     "#showOnboardingBtn",
   ) as HTMLButtonElement;
 
+  const openPersonalExportBtn = container.querySelector(
+    "#openPersonalExportBtn",
+  ) as HTMLButtonElement;
+
   if (showOnboardingBtn) {
     showOnboardingBtn.onclick = () => {
       showOnboarding();
+    };
+  }
+
+  if (openPersonalExportBtn) {
+    openPersonalExportBtn.onclick = () => {
+      createPersonalExportModal();
     };
   }
 }
