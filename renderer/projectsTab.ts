@@ -402,7 +402,7 @@ function showCreateProjectModal() {
       { fallback: null },
     );
     if (result) {
-      showInAppNotification("Project created successfully!", 3000);
+      // Silent success - project created
       renderProjects();
     }
     modal.remove();
@@ -539,7 +539,7 @@ function showEditProjectModal(projectId: string | number) {
       { fallback: null },
     );
     if (result) {
-      showInAppNotification("Project updated successfully!", 3000);
+      // Silent success - project updated
       renderProjects();
     }
     modal.remove();
@@ -592,7 +592,7 @@ function archiveProject(projectId: string | number) {
         fallback: false,
       });
       if (result) {
-        showInAppNotification("Project archived successfully!", 3000);
+        showInAppNotification("Project archived successfully!", 2000);
         renderProjects();
       }
     },
@@ -614,7 +614,7 @@ function restoreProject(projectId: string | number) {
         fallback: false,
       });
       if (result) {
-        showInAppNotification("Project restored successfully!", 3000);
+        showInAppNotification("Project restored successfully!", 2000);
         renderProjects();
       }
     },
@@ -838,7 +838,7 @@ async function showManageMembersModal(projectId: string | number) {
                   dbRole,
                 );
               }
-              showInAppNotification("Role updated successfully!", 3000);
+              showInAppNotification("Role updated successfully!", 2000);
 
               setTimeout(async () => {
                 await loadProjects();
@@ -934,7 +934,7 @@ async function showManageMembersModal(projectId: string | number) {
                 userValue,
                 dbRole,
               );
-              showInAppNotification("Member added successfully!", 3000);
+              showInAppNotification("Member added successfully!", 2000);
 
               // Wait a bit before refreshing to ensure database is updated
               setTimeout(async () => {
@@ -1033,7 +1033,7 @@ async function showManageMembersModal(projectId: string | number) {
                       projectId,
                       userId,
                     );
-                    showInAppNotification("Member removed successfully!", 3000);
+                    showInAppNotification("Member removed successfully!", 2000);
                     // Close modal and refresh projects
                     modal?.classList.remove("active");
                     modal?.remove();
@@ -1080,7 +1080,7 @@ async function showManageMembersModal(projectId: string | number) {
                     dbRole,
                   );
                 }
-                showInAppNotification("Role updated successfully!", 3000);
+                showInAppNotification("Role updated successfully!", 2000);
 
                 // Wait a bit before refreshing to ensure database is updated
                 setTimeout(async () => {

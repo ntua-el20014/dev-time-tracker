@@ -565,7 +565,7 @@ async function renderSettings(container: HTMLElement) {
           } catch {
             // ignore cache update errors, not critical to show updated settings on next load
           }
-          showNotification("Notification preferences saved");
+          // Silent success - preferences saved
         } else {
           showNotification("Failed to save notification preferences", 3000);
         }

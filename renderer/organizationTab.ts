@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   showNotification,
+  showInAppNotification,
   showConfirmationModal,
   showModal,
 } from "./components";
@@ -134,14 +135,14 @@ export async function renderOrganizationTab() {
         const handleCreate = async () => {
           const name = createInput.value.trim();
           if (!name) {
-            showNotification("Please enter an organization name");
+            showInAppNotification("Please enter an organization name");
             return;
           }
           try {
             createBtn.setAttribute("disabled", "true");
             createBtn.textContent = "Creating...";
             await createPersonalOrganization(name);
-            showNotification("Organization created successfully!");
+            showInAppNotification("Organization created successfully!");
             (window as any).markTabsDirty("organization");
             await refreshOrganizationTab();
           } catch (error) {
@@ -167,7 +168,7 @@ export async function renderOrganizationTab() {
         const handleJoinCode = async () => {
           const code = joinCodeInput.value.trim();
           if (!code) {
-            showNotification("Please enter an invite code");
+            showInAppNotification("Please enter an invite code");
             return;
           }
           try {
@@ -204,14 +205,14 @@ export async function renderOrganizationTab() {
         const handleJoinOrg = async () => {
           const orgId = joinOrgInput.value.trim();
           if (!orgId) {
-            showNotification("Please enter an organization ID");
+            showInAppNotification("Please enter an organization ID");
             return;
           }
           try {
             joinOrgBtn.setAttribute("disabled", "true");
             joinOrgBtn.textContent = "Requesting...";
             await requestToJoinOrganization(orgId);
-            showNotification("Join request sent! Waiting for approval.");
+            showInAppNotification("Join request sent! Waiting for approval.");
             joinOrgInput.value = "";
           } catch (error) {
             showNotification(
@@ -670,8 +671,8 @@ function renderInviteCodes() {
       const code = (btn as HTMLElement).getAttribute("data-code");
       if (code) {
         navigator.clipboard.writeText(code).then(
-          () => showNotification("Invite code copied to clipboard!"),
-          () => showNotification("Failed to copy invite code"),
+          () => showInAppNotification("Invite code copied to clipboard!", 2000),
+          () => {}, // Silent failure
         );
       }
     };
@@ -1117,7 +1118,7 @@ async function showCreateOrgModal() {
   confirmBtn?.addEventListener("click", async () => {
     const name = input.value.trim();
     if (!name) {
-      showNotification("Please enter an organization name");
+      showInAppNotification("Please enter an organization name");
       return;
     }
 
@@ -1126,7 +1127,7 @@ async function showCreateOrgModal() {
       confirmBtn.textContent = "Creating...";
 
       await createTeamOrganization({ name });
-      showNotification("Team organization created successfully!");
+      showInAppNotification("Team organization created successfully!");
       cleanup();
       await renderOrganizationTab(); // Refresh
     } catch (error) {
@@ -1153,17 +1154,17 @@ function copyOrgId() {
 
   navigator.clipboard.writeText(currentOrg.id).then(
     () => {
-      showNotification("Organization ID copied to clipboard!");
+      showInAppNotification("Organization ID copied to clipboard!", 2000);
     },
     () => {
-      showNotification("Failed to copy Organization ID");
+      // Silent failure - clipboard operation
     },
   );
 }
 
 async function handleJoinOrganization(orgId: string) {
   if (!orgId) {
-    showNotification("Please enter an organization ID");
+    showInAppNotification("Please enter an organization ID");
     return;
   }
 
@@ -1179,7 +1180,7 @@ async function handleJoinOrganization(orgId: string) {
     // Validate org exists
     const targetOrg = await getOrganizationById(orgId);
     if (!targetOrg) {
-      showNotification("Organization not found");
+      showInAppNotification("Organization not found");
       return;
     }
 
@@ -1219,7 +1220,7 @@ async function handleRoleChange(
   if (
     getRoleRank(newRole) > getRoleRank(currentUserProfile?.role || "employee")
   ) {
-    showNotification("You cannot assign a role higher than your own.");
+    showInAppNotification("You cannot assign a role higher than your own.");
     select.value = currentRole || "employee";
     return;
   }
@@ -1243,7 +1244,7 @@ async function handleRoleChange(
       updateBtn.textContent = "Updating...";
     }
     await updateUserRole(userId, newRole);
-    showNotification("User role updated successfully");
+    showNotification("User role updated successfully", 2000);
     await refreshOrganizationTab();
   } catch (error) {
     showNotification(
@@ -1263,7 +1264,7 @@ async function handleRoleChange(
 async function handleRemoveMember(userId: string, username: string) {
   const member = orgMembers.find((m) => m.id === userId);
   if (!member || !canManageMember(member)) {
-    showNotification("You do not have permission to remove this member.");
+    showInAppNotification("You do not have permission to remove this member.");
     return;
   }
 
@@ -1308,7 +1309,7 @@ async function handleRemoveMember(userId: string, username: string) {
 async function handleApproveRequest(requestId: string) {
   try {
     await approveJoinRequest(requestId);
-    showNotification("Join request approved");
+    showNotification("Join request approved", 2000);
     await refreshOrganizationTab();
   } catch (error) {
     showNotification(
@@ -1322,7 +1323,7 @@ async function handleApproveRequest(requestId: string) {
 async function handleRejectRequest(requestId: string) {
   try {
     await rejectJoinRequest(requestId);
-    showNotification("Join request rejected");
+    showNotification("Join request rejected", 2000);
     await refreshOrganizationTab();
   } catch (error) {
     showNotification(
@@ -1369,7 +1370,7 @@ async function handleGenerateInviteCode() {
         `Invite code ${result.code} generated and copied to clipboard!`,
       );
     } else {
-      showNotification("Invite code generated!");
+      showNotification("Invite code generated!", 2000);
     }
 
     await refreshOrganizationTab();
@@ -1392,7 +1393,7 @@ async function handleRevokeInviteCode(codeId: string) {
     onConfirm: async () => {
       try {
         await revokeInviteCode(codeId);
-        showNotification("Invite code revoked");
+        showNotification("Invite code revoked", 2000);
         await refreshOrganizationTab();
       } catch (error) {
         showNotification(
@@ -1407,7 +1408,7 @@ async function handleRevokeInviteCode(codeId: string) {
 
 async function handleJoinWithInviteCode(code: string) {
   if (!code) {
-    showNotification("Please enter an invite code");
+    showInAppNotification("Please enter an invite code");
     return;
   }
 
@@ -1536,7 +1537,7 @@ async function showCreateCloudProjectModal() {
         org_id: currentOrg!.id,
         manager_id: currentUserProfile!.id,
       });
-      showNotification("Cloud project created successfully!");
+      showNotification("Cloud project created successfully!", 2000);
       modal.remove();
       overlay.remove();
       await renderOrganizationTab(); // Refresh
@@ -1676,7 +1677,7 @@ async function showEditCloudProjectModal(projectId: string) {
         color: formData.get("color") as string,
         hourly_rate: Number.isFinite(hourlyRate) ? hourlyRate : null,
       });
-      showNotification("Cloud project updated successfully!");
+      showNotification("Cloud project updated successfully!", 2000);
       modal.remove();
       overlay.remove();
       await renderOrganizationTab(); // Refresh
@@ -1727,7 +1728,7 @@ async function archiveCloudProject(projectId: string) {
     onConfirm: async () => {
       try {
         await updateCloudProject(projectId, { is_active: false });
-        showNotification("Project archived successfully!");
+        showNotification("Project archived successfully!", 2000);
         await renderOrganizationTab();
       } catch {
         showNotification("Failed to archive project");
@@ -1747,7 +1748,7 @@ async function restoreCloudProject(projectId: string) {
     onConfirm: async () => {
       try {
         await updateCloudProject(projectId, { is_active: true });
-        showNotification("Project restored successfully!");
+        showNotification("Project restored successfully!", 2000);
         await renderOrganizationTab();
       } catch {
         showNotification("Failed to restore project");
@@ -1854,7 +1855,7 @@ async function showManageCloudMembersModal(projectId: string) {
                 userId!,
                 newRole as "manager" | "member",
               );
-              showNotification("Role updated successfully!");
+              showNotification("Role updated successfully!", 2000);
               setTimeout(async () => {
                 await renderOrganizationTab();
                 modal?.remove();
@@ -1937,7 +1938,7 @@ async function showManageCloudMembersModal(projectId: string) {
                 user_id: userValue,
                 role: frontendRole as "manager" | "member",
               });
-              showNotification("Member added successfully!");
+              showNotification("Member added successfully!", 2000);
 
               setTimeout(async () => {
                 await renderOrganizationTab();
@@ -1971,7 +1972,7 @@ async function showManageCloudMembersModal(projectId: string) {
             onConfirm: async () => {
               try {
                 await removeMemberFromProject(projectId, userId);
-                showNotification("Member removed successfully!");
+                showNotification("Member removed successfully!", 2000);
                 modal?.remove();
                 document.getElementById("customModalOverlay")?.remove();
                 isMemberModalOpen = false;

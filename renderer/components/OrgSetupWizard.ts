@@ -4,7 +4,7 @@
  * Triggered on first login and after leaving an organization.
  */
 
-import { showNotification } from "./Notifications";
+import { showInAppNotification } from "./Notifications";
 import {
   getCurrentOrganization,
   createTeamOrganization,
@@ -388,7 +388,7 @@ function renderJoinTeamStep(content: HTMLDivElement, state: WizardState): void {
 
     try {
       await requestToJoinOrganization(orgId);
-      showNotification("Request sent! An admin will review your request.");
+      showInAppNotification("Request sent! An admin will review your request.");
       cleanup();
       dismissWizard();
     } catch (error) {

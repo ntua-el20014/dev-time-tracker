@@ -1,6 +1,6 @@
 import { ipcRenderer } from "electron";
 import jsPDF from "jspdf";
-import { showNotification } from "../components";
+import { showNotification, showInAppNotification } from "../components";
 import { safeIpcInvoke } from "./ipcHelpers";
 import {
   getOrgAnalyticsSummary,
@@ -104,7 +104,7 @@ export async function exportOrgAnalyticsReport(
 
     const doc = buildOrganizationReportPDF(reportData);
     doc.save(filePath);
-    showNotification("Organization report exported successfully!");
+    showInAppNotification("Organization report exported successfully!");
   } catch {
     showNotification("Export failed. Please try again.");
   }

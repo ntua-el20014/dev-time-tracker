@@ -1,7 +1,7 @@
 import { ipcRenderer } from "electron";
 import jsPDF from "jspdf";
 import type { SessionRow, DailySummaryRow } from "../../shared/types";
-import { showNotification } from "../components";
+import { showNotification, showInAppNotification } from "../components";
 import { formatTimeSpent } from "../../src/utils/timeFormat";
 import { safeIpcInvoke } from "./ipcHelpers";
 
@@ -41,7 +41,7 @@ export class SessionExporter {
 
       // Only show success notification if export was actually completed
       if (success) {
-        showNotification("Data exported successfully!");
+        showInAppNotification("Data exported successfully!");
       }
     } catch (error) {
       showNotification("Export failed. Please try again.");
@@ -447,7 +447,7 @@ function createExportModalInternal(config: {
     if (startDate && endDate) {
       options.dateRange = { start: startDate, end: endDate };
     } else if (currentFormat === "pdf") {
-      showNotification("Please choose a date range for the PDF report.");
+      showInAppNotification("Please choose a date range for the PDF report.");
       return;
     }
 
