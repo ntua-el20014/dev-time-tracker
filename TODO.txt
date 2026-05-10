@@ -482,14 +482,16 @@
 ### Step 11.5: Quality & Release
 - [x] Set up error logging service (Sentry or similar)
 - [ ] Add auto-update mechanism (electron-updater)
-- [ ] Code-sign the app for Windows/macOS
+- [ ] Add GitHub release publishing flow (publish artifacts to GitHub Releases)
+- [ ] Provision signing secrets (Windows PFX + macOS notarize keys) and store in GitHub Secrets
+- [ ] Clean up lint noise in tests (fix unused symbols and warnings)
 - [ ] Write changelog and release notes
-- [ ] Publish v1.0
 
 ## ═══════════════════════════════════════════════════════════════════
 ## NOTES
 ## ═══════════════════════════════════════════════════════════════════
 
+- Update README
 - Password reset email templates
 - Git branch detection only works when project dir contains a .git folder
 - Gamification?

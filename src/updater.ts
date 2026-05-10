@@ -27,7 +27,9 @@ function setState(partial: Partial<UpdaterState>) {
 
 function isUpdaterEnabled(): boolean {
   const envEnabled = process.env.UPDATER_ENABLED === "true";
-  const prodLike = app.isPackaged || process.env.NODE_ENV === "production";
+  const devAllowed = process.env.UPDATER_ALLOW_DEV === "true";
+  const prodLike =
+    app.isPackaged || process.env.NODE_ENV === "production" || devAllowed;
   return envEnabled && prodLike;
 }
 
@@ -37,6 +39,22 @@ function shouldAutoCheck(): boolean {
 
 function shouldAutoDownload(): boolean {
   return process.env.UPDATER_AUTO_DOWNLOAD === "true";
+}
+
+function configureUpdaterFeed() {
+  const feedUrl = process.env.UPDATER_FEED_URL;
+
+  if (feedUrl) {
+    autoUpdater.setFeedURL(feedUrl);
+    return;
+  }
+
+  autoUpdater.setFeedURL({
+    provider: "github",
+    owner: process.env.UPDATER_GITHUB_OWNER || "ntua-el20014",
+    repo: process.env.UPDATER_GITHUB_REPO || "dev-time-tracker",
+    private: process.env.UPDATER_GITHUB_PRIVATE === "true",
+  });
 }
 
 export function setUpdaterStateSink(listener: (state: UpdaterState) => void) {
@@ -78,6 +96,8 @@ export async function initUpdater(): Promise<UpdaterState> {
     return getUpdaterState();
   }
 
+  autoUpdater.forceDevUpdateConfig = process.env.UPDATER_ALLOW_DEV === "true";
+  configureUpdaterFeed();
   autoUpdater.autoDownload = autoDownload;
   autoUpdater.autoInstallOnAppQuit = false;
 

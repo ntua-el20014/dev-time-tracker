@@ -60,12 +60,12 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 
 ## ⚠️ Platform Notes
 
-| Platform | Active Window Tracking | Notes |
-| --- | --- | --- |
-| **Windows** | ✅ Full support | Uses native Win32 APIs via `@miniben90/x-win` |
-| **macOS** | ✅ Full support | Requires Accessibility permission (prompted on first run) |
-| **Linux (X11)** | ✅ Works | X11 session required |
-| **Linux (Wayland)** | ❌ Not supported | `@miniben90/x-win` does not support the Wayland protocol. As a workaround, run the app under **XWayland** (e.g., launch with `GDK_BACKEND=x11`). Pure Wayland compositors without XWayland will not report active window data. |
+| Platform            | Active Window Tracking | Notes                                                                                                                                                                                                                          |
+| ------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Windows**         | ✅ Full support        | Uses native Win32 APIs via `@miniben90/x-win`                                                                                                                                                                                  |
+| **macOS**           | ✅ Full support        | Requires Accessibility permission (prompted on first run)                                                                                                                                                                      |
+| **Linux (X11)**     | ✅ Works               | X11 session required                                                                                                                                                                                                           |
+| **Linux (Wayland)** | ❌ Not supported       | `@miniben90/x-win` does not support the Wayland protocol. As a workaround, run the app under **XWayland** (e.g., launch with `GDK_BACKEND=x11`). Pure Wayland compositors without XWayland will not report active window data. |
 
 > **Custom Apps:** If your editor, terminal, or browser isn't recognized automatically, open  
 > **Profile → Language Usage → Open custom-apps.json** and add its executable name.  
@@ -252,6 +252,15 @@ npm run make       # Type-check + package into distributable
 npm run package    # Package without creating installer
 npm run clean      # Remove build artifacts (.webpack, dist, out)
 ```
+
+### Release Prep
+
+- GitHub Actions runs lint, type checking, and tests on pushes and pull requests.
+- A manual package preview workflow builds installers on Linux, Windows, and macOS without publishing them.
+- Auto-update checks read from GitHub Releases by default. You can override the feed with `UPDATER_FEED_URL`.
+- To test updates in development, set `UPDATER_ENABLED=true` and `UPDATER_ALLOW_DEV=true`.
+- Windows signing is enabled when `WINDOWS_CERTIFICATE_FILE` is set. Optional extras: `WINDOWS_CERTIFICATE_PASSWORD` and `WINDOWS_TIMESTAMP_SERVER`.
+- macOS signing is enabled when `MACOS_CODESIGN_IDENTITY` is set. Notarization needs `MACOS_NOTARIZE_APPLE_ID`, `MACOS_NOTARIZE_APPLE_PASSWORD`, and `MACOS_NOTARIZE_TEAM_ID`.
 
 ### All Commands
 
