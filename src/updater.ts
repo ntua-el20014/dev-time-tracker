@@ -49,10 +49,19 @@ function configureUpdaterFeed() {
     return;
   }
 
+  // Allow passing OWNER/REPO together in UPDATER_GITHUB_REPO (owner/repo)
+  let owner = process.env.UPDATER_GITHUB_OWNER || "ntua-el20014";
+  let repo = process.env.UPDATER_GITHUB_REPO || "dev-time-tracker";
+  if (repo.includes("/")) {
+    const parts = repo.split("/");
+    owner = parts[0] || owner;
+    repo = parts[1] || repo;
+  }
+
   autoUpdater.setFeedURL({
     provider: "github",
-    owner: process.env.UPDATER_GITHUB_OWNER || "ntua-el20014",
-    repo: process.env.UPDATER_GITHUB_REPO || "dev-time-tracker",
+    owner,
+    repo,
     private: process.env.UPDATER_GITHUB_PRIVATE === "true",
   });
 }
