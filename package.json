@@ -27,6 +27,9 @@
     "email": "el20014@mail.ntua.gr"
   },
   "license": "BUSL-1.1",
+  "engines": {
+    "node": "22.15.1"
+  },
   "devDependencies": {
     "@electron-forge/cli": "^7.8.1",
     "@electron-forge/maker-deb": "^7.8.1",
@@ -79,6 +82,7 @@
     "language-icons": "^0.3.0",
     "linguist-languages": "^8.0.0",
     "uuid": "^13.0.0",
-    "vscode-icons-js": "^11.6.1"
+    "vscode-icons-js": "^11.6.1",
+    "yaml": "^2.8.4"
   }
 }

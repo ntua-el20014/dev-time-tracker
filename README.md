@@ -182,7 +182,7 @@ Server-side logic defined in [`database/functions_and_triggers.sql`](./database/
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18+ recommended)
+- [Node.js](https://nodejs.org/) (22.15.1)
 - [npm](https://www.npmjs.com/) (comes with Node.js)
 - [Git](https://git-scm.com/)
 - A [Supabase](https://supabase.com/) project (free tier works)
