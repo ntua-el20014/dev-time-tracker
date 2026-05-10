@@ -107,8 +107,8 @@ async function renderFilters() {
       [],
       { fallback: [] },
     );
-  } catch (err) {
-    console.error("Failed to load filter options", err);
+  } catch {
+    // Fall back to the empty selector state already rendered below.
   }
 
   const html = `

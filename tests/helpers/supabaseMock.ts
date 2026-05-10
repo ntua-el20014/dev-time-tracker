@@ -25,7 +25,6 @@ const tableResultMap: Map<string, { data: any; error: any }> = new Map();
 const rpcResultMap: Map<string, { data: any; error: any }> = new Map();
 
 let lastCalledTable: string | null = null;
-let lastCalledRpc: string | null = null;
 // Track the chain calls for assertions
 let callLog: Array<{ method: string; args: any[] }> = [];
 
@@ -77,7 +76,6 @@ export function resetMockState() {
   tableResultMap.clear();
   rpcResultMap.clear();
   lastCalledTable = null;
-  lastCalledRpc = null;
   callLog = [];
 }
 
@@ -108,19 +106,6 @@ function resolveRpcResult(fnName: string): { data: any; error: any } {
 // ---------- Query builder ----------
 function createQueryBuilder(): any {
   const builder: any = {};
-
-  // Terminal methods — return { data, error } (or thenable)
-  const makeThenable = () => {
-    const result = resolveResult();
-    // Make it work both as a promise (await query) and as a direct value
-    const thenable = {
-      ...result,
-      then: (resolve: any) => {
-        return resolve ? resolve(result) : result;
-      },
-    };
-    return thenable;
-  };
 
   // Chain methods — every query-builder method returns the builder itself.
   const chainMethods = [
@@ -225,7 +210,6 @@ export function createMockSupabase() {
       return createQueryBuilder();
     }),
     rpc: vi.fn((fnName: string, params?: any) => {
-      lastCalledRpc = fnName;
       callLog.push({ method: "rpc", args: [fnName, params] });
       const result = resolveRpcResult(fnName);
       return {

@@ -11,11 +11,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   mockResult,
-  mockResults,
   mockSupabase,
   resetMockState,
   getCallsFor,
-  getCallLog,
 } from "../helpers/supabaseMock";
 
 vi.mock("../../src/supabase/config", async () => {

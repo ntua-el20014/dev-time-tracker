@@ -7,36 +7,14 @@ import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-nati
 import { WebpackPlugin } from "@electron-forge/plugin-webpack";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import dotenv from "dotenv";
+import path from "path";
 
 import { mainConfig } from "./webpack.main.config";
 import { rendererConfig } from "./webpack.renderer.config";
 
-function getMacOsSignConfig() {
-  const identity = process.env.MACOS_CODESIGN_IDENTITY;
-  if (!identity) {
-    return undefined;
-  }
-
-  return {
-    identity,
-  };
-}
-
-function getMacOsNotarizeConfig() {
-  const appleId = process.env.MACOS_NOTARIZE_APPLE_ID;
-  const appleIdPassword = process.env.MACOS_NOTARIZE_APPLE_PASSWORD;
-  const teamId = process.env.MACOS_NOTARIZE_TEAM_ID;
-
-  if (!appleId || !appleIdPassword || !teamId) {
-    return undefined;
-  }
-
-  return {
-    appleId,
-    appleIdPassword,
-    teamId,
-  };
-}
+// Load environment variables from .env.local (for code signing credentials)
+dotenv.config({ path: path.resolve(__dirname, ".env.local") });
 
 function getWindowsSignConfig() {
   const certificateFile = process.env.WINDOWS_CERTIFICATE_FILE;
@@ -54,8 +32,6 @@ function getWindowsSignConfig() {
   };
 }
 
-const macOsSignConfig = getMacOsSignConfig();
-const macOsNotarizeConfig = getMacOsNotarizeConfig();
 const windowsSignConfig = getWindowsSignConfig();
 
 const config: ForgeConfig = {
@@ -70,8 +46,6 @@ const config: ForgeConfig = {
       OriginalFilename: "dev-time-tracker",
       ProductName: "dev-time-tracker",
     },
-    ...(macOsSignConfig ? { osxSign: macOsSignConfig } : {}),
-    ...(macOsNotarizeConfig ? { osxNotarize: macOsNotarizeConfig } : {}),
     ...(windowsSignConfig ? { windowsSign: windowsSignConfig } : {}),
   },
   rebuildConfig: {},

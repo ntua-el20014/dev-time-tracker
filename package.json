@@ -70,6 +70,7 @@
     "chart.js": "^4.4.9",
     "csv": "^6.3.11",
     "csv-parse": "^5.6.0",
+    "dotenv": "^16.4.5",
     "electron-squirrel-startup": "^1.0.1",
     "electron-updater": "^6.8.3",
     "extract-file-icon": "^0.3.2",

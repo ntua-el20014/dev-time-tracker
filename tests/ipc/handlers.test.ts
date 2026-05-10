@@ -33,9 +33,7 @@ vi.mock("electron", () => ({
 import {
   createMockSupabase,
   mockResult,
-  mockResults,
   resetMockState,
-  getCallsFor,
 } from "../helpers/supabaseMock";
 
 const mockSupabase = createMockSupabase();

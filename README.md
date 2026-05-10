@@ -198,6 +198,51 @@ npm install
 ### 2. Set Up Supabase
 
 1. Create a new project at [supabase.com](https://supabase.com/) and wait for provisioning to complete
+
+---
+
+## Releasing (subsequent releases)
+
+Follow these minimal steps to publish a new release using your existing automated workflows (no workflow changes required).
+
+1. Commit & push any changes to `main` (CI runs on push):
+
+```bash
+git add -A
+git commit -m "chore(release): prepare release"  # only if you have changes to commit
+git push origin main
+```
+
+2. Trigger the One-Button Release workflow (`.github/workflows/release.yml`).
+
+Recommended (GitHub CLI):
+
+```bash
+# version: patch | minor | major | or exact semver (e.g. 1.0.1)
+# release_notes: optional string
+# publish: true to publish, false to keep draft (default)
+gh workflow run release.yml --ref main -f version=patch -f release_notes="Optional notes" -f publish=false
+```
+
+Notes:
+
+- `version` is where you manually input the bump type or exact semver (e.g. `patch`, `minor`, `major`, or `1.0.1`).
+- If you leave `version` empty, ensure `package.json` already has the desired version and tag exists (the workflow will create the release from that).
+
+3. Release Draft to Real with GitHub UI
+
+- Open the Draft.
+- Check everything (title, versions, release notes etc.)
+- Click "Publish release" button.
+
+CLI alternative (one-liner)
+
+Publish an existing draft release by tag:
+
+```bash
+gh release edit v1.0.0 --draft=false
+```
+
 2. In the Supabase **SQL Editor**, run the migration files **in order**:
    - **First:** paste and run [`database/functions_and_triggers.sql`](./database/functions_and_triggers.sql) — creates helper functions, triggers, and RPC procedures
    - **Then:** paste and run [`database/schema.sql`](./database/schema.sql) — creates all 14 tables, RLS policies, indexes, and timestamp triggers

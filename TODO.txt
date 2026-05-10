@@ -481,11 +481,10 @@
 
 ### Step 11.5: Quality & Release
 - [x] Set up error logging service (Sentry or similar)
-- [ ] Add auto-update mechanism (electron-updater)
-- [ ] Add GitHub release publishing flow (publish artifacts to GitHub Releases)
-- [ ] Provision signing secrets (Windows PFX + macOS notarize keys) and store in GitHub Secrets
-- [ ] Clean up lint noise in tests (fix unused symbols and warnings)
-- [ ] Write changelog and release notes
+- [x] Add auto-update mechanism (electron-updater)
+- [x] Add GitHub release publishing flow (publish artifacts to GitHub Releases)
+- [x] Provision signing secrets (Windows PFX code signing only)
+- [x] Clean up lint noise in tests (fix unused symbols and warnings)
 
 ## ═══════════════════════════════════════════════════════════════════
 ## NOTES

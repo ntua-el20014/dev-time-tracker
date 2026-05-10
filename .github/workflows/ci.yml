@@ -26,7 +26,7 @@ jobs:
         run: npm ci
 
       - name: Run lint
-        run: npx eslint forge.config.ts webpack*.ts "src/**/*.ts" "renderer/**/*.ts" "shared/**/*.ts" --ext .ts,.tsx --ignore-pattern tests
+        run: npm run lint
 
       - name: Run type check
         run: npm run type-check

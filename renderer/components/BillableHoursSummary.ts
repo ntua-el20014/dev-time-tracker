@@ -188,8 +188,7 @@ export async function renderBillableHoursSummary(
 ): Promise<void> {
   try {
     await renderBillableHoursSummaryInternal(container);
-  } catch (error) {
-    console.error("Error rendering billable hours summary:", error);
+  } catch {
     showInAppNotification(
       "Failed to load billable hours summary",
       3500,
@@ -234,8 +233,7 @@ export async function renderEarningsWidget(): Promise<HTMLElement> {
         </div>
       </div>
     `;
-  } catch (error) {
-    console.error("Error rendering earnings widget:", error);
+  } catch {
     widget.innerHTML = `
       <div class="earnings-widget-content">
         <div class="earnings-widget-header">

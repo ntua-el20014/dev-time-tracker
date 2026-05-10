@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   mockResult,
-  mockRpcResult,
   resetMockState,
   getCallsFor,
 } from "../helpers/supabaseMock";
