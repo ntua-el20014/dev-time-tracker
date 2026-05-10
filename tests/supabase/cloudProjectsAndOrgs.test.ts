@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   mockResult,
-  mockRpcResult,
+  mockResults,
   resetMockState,
   getCallsFor,
 } from "../helpers/supabaseMock";
@@ -493,7 +493,12 @@ describe("organizations", () => {
   // ───────────── updateUserRole ─────────────
   describe("updateUserRole", () => {
     it("updates user role in user_profiles", async () => {
-      mockResult({ data: null, error: null });
+      // Provide actor profile, target profile, then the update result
+      mockResults([
+        { data: [{ id: "test-user-id", org_id: "org-1", role: "admin" }], error: null },
+        { data: [{ id: "user-2", org_id: "org-1", role: "employee" }], error: null },
+        { data: null, error: null },
+      ]);
 
       await updateUserRole("user-2", "manager");
 
@@ -512,12 +517,17 @@ describe("organizations", () => {
   // ───────────── removeUserFromOrganization ─────────────
   describe("removeUserFromOrganization", () => {
     it("sets user org_id to null", async () => {
-      mockResult({ data: null, error: null });
+      // Provide actor profile, target profile, then the update result
+      mockResults([
+        { data: [{ id: "test-user-id", org_id: "org-1", role: "admin" }], error: null },
+        { data: [{ id: "user-2", org_id: "org-1", role: "employee" }], error: null },
+        { data: null, error: null },
+      ]);
 
       await removeUserFromOrganization("user-2");
 
       const updateCalls = getCallsFor("update");
-      expect(updateCalls[0].args[0]).toEqual({ org_id: null });
+      expect(updateCalls[0].args[0]).toEqual({ org_id: null, role: "employee" });
     });
   });
 

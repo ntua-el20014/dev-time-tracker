@@ -1,4 +1,5 @@
 import { applyAccentColor } from "./renderer";
+import { ipcRenderer } from "electron";
 import {
   renderPercentBar,
   renderPieChartJS,
@@ -27,7 +28,7 @@ import {
 import { updateCachedPreference } from "./utils/preferencesCache";
 import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
 import { getLangIconUrl } from "../src/utils/langIconUrl";
-import type { Tag } from "../shared/types";
+import type { Tag, UpdaterState } from "../shared/types";
 
 function escapeHtml(text: string) {
   const div = document.createElement("div");
@@ -43,6 +44,42 @@ type NotificationSettings = {
   orgInvites?: boolean;
   syncStatus?: boolean;
 };
+
+let updaterListenerRegistered = false;
+let updaterStatusEl: HTMLElement | null = null;
+let updaterCheckBtn: HTMLButtonElement | null = null;
+let updaterDownloadBtn: HTMLButtonElement | null = null;
+let updaterInstallBtn: HTMLButtonElement | null = null;
+
+function applyUpdaterState(state: UpdaterState) {
+  if (updaterStatusEl) {
+    const statusPrefix = state.status
+      .replace(/-/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+    updaterStatusEl.textContent = `${statusPrefix}: ${state.message}`;
+  }
+
+  if (updaterCheckBtn) updaterCheckBtn.disabled = !state.canCheck;
+
+  if (updaterDownloadBtn) {
+    updaterDownloadBtn.style.display = state.canDownload ? "" : "none";
+    updaterDownloadBtn.disabled = !state.canDownload;
+  }
+
+  if (updaterInstallBtn) {
+    updaterInstallBtn.style.display = state.canInstall ? "" : "none";
+    updaterInstallBtn.disabled = !state.canInstall;
+  }
+}
+
+function ensureUpdaterListener() {
+  if (updaterListenerRegistered) return;
+
+  ipcRenderer.on("updater:state-changed", (_event, state: UpdaterState) =>
+    applyUpdaterState(state),
+  );
+  updaterListenerRegistered = true;
+}
 
 async function renderEditorUsage(container: HTMLElement) {
   type EditorUsageRow = { app: string; total_time: number };
@@ -294,6 +331,18 @@ async function renderSettings(container: HTMLElement) {
         Switch to ${currentTheme === "dark" ? "Light" : "Dark"} Mode
       </button>
     </div>
+
+    <h2>App Updates</h2>
+    <div class="notification-preferences-panel">
+      <p id="updaterStatusText" class="notification-preferences-note">
+        Loading updater state...
+      </p>
+      <div class="settings-row">
+        <button id="checkUpdatesBtn" class="help-button">Check for Updates</button>
+        <button id="downloadUpdateBtn" class="help-button" style="display:none;">Download Update</button>
+        <button id="installUpdateBtn" class="help-button" style="display:none;">Restart to Install</button>
+      </div>
+    </div>
     
     <h2>Notifications</h2>
     <div class="notification-preferences-panel">
@@ -463,6 +512,67 @@ async function renderSettings(container: HTMLElement) {
   const themeToggleBtn = container.querySelector(
     "#themeToggleBtn",
   ) as HTMLButtonElement;
+  updaterStatusEl = container.querySelector("#updaterStatusText");
+  updaterCheckBtn = container.querySelector(
+    "#checkUpdatesBtn",
+  ) as HTMLButtonElement;
+  updaterDownloadBtn = container.querySelector(
+    "#downloadUpdateBtn",
+  ) as HTMLButtonElement;
+  updaterInstallBtn = container.querySelector(
+    "#installUpdateBtn",
+  ) as HTMLButtonElement;
+
+  ensureUpdaterListener();
+
+  updaterCheckBtn.addEventListener("click", async () => {
+    const state = await safeIpcInvoke<UpdaterState>("updater:check", [], {
+      fallback: {
+        status: "error",
+        message: "Failed to check for updates.",
+        canCheck: true,
+        canDownload: false,
+        canInstall: false,
+        autoEnabled: false,
+      },
+    });
+    applyUpdaterState(state);
+  });
+
+  updaterDownloadBtn.addEventListener("click", async () => {
+    const state = await safeIpcInvoke<UpdaterState>("updater:download", [], {
+      fallback: {
+        status: "error",
+        message: "Failed to download update.",
+        canCheck: true,
+        canDownload: false,
+        canInstall: false,
+        autoEnabled: false,
+      },
+    });
+    applyUpdaterState(state);
+  });
+
+  updaterInstallBtn.addEventListener("click", async () => {
+    await safeIpcInvoke("updater:install", [], { fallback: null });
+  });
+
+  const initialUpdaterState = await safeIpcInvoke<UpdaterState>(
+    "updater:get-state",
+    [],
+    {
+      fallback: {
+        status: "disabled",
+        message: "Updater unavailable.",
+        canCheck: false,
+        canDownload: false,
+        canInstall: false,
+        autoEnabled: false,
+      },
+    },
+  );
+  applyUpdaterState(initialUpdaterState);
+
   themeToggleBtn.addEventListener("click", async () => {
     document.body.classList.toggle("light");
     const newTheme = document.body.classList.contains("light")

@@ -1,12 +1,28 @@
-{
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "outDir": "./dist/renderer",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"]
-  },
-  "include": ["renderer/**/*", "shared/types/**/*"],
-  "exclude": ["src/**/*", "dist/**/*", "node_modules/**/*"]
+﻿{
+    "extends":  "./tsconfig.base.json",
+    "compilerOptions":  {
+                            "target":  "ES2020",
+                            "module":  "ESNext",
+                            "moduleResolution":  "bundler",
+                            "composite":  true,
+                            "outDir":  "./dist/renderer",
+                            "lib":  [
+                                        "ES2020",
+                                        "DOM",
+                                        "DOM.Iterable"
+                                    ]
+                        },
+    "files":  [
+                  "src/sentryRenderer.ts"
+              ],
+    "include":  [
+                    "renderer/**/*",
+                    "shared/**/*",
+                    "shared/types/**/*",
+                    "src/**/*"
+                ],
+    "exclude":  [
+                    "dist/**/*",
+                    "node_modules/**/*"
+                ]
 }

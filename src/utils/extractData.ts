@@ -39,8 +39,13 @@ function getSortedExtensions(): string[] {
   if (sortedExtsCache) return sortedExtsCache;
   const allExts = new Set<string>();
   for (const lang of Object.values(linguistLanguages)) {
-    if (Array.isArray(lang.extensions)) {
-      lang.extensions.forEach((ext) => allExts.add(ext));
+    if (
+      lang &&
+      typeof lang === "object" &&
+      "extensions" in lang &&
+      Array.isArray((lang as any).extensions)
+    ) {
+      (lang as any).extensions.forEach((ext: string) => allExts.add(ext));
     }
   }
   // Sort longest-first so multi-part extensions match before shorter ones
@@ -80,9 +85,15 @@ export function getLanguageDataFromTitle(title: string) {
       (l) => l.name === preferredExtensionMap[foundExt],
     );
   } else {
-    lang = Object.values(linguistLanguages).find(
-      (l) => Array.isArray(l.extensions) && l.extensions.includes(foundExt),
-    );
+    lang = Object.values(linguistLanguages).find((l) => {
+      return (
+        l &&
+        typeof l === "object" &&
+        "extensions" in l &&
+        Array.isArray((l as any).extensions) &&
+        (l as any).extensions.includes(foundExt)
+      );
+    });
   }
 
   if (!lang) {

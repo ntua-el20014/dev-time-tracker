@@ -49,8 +49,12 @@ import "./ipc/exportHandlers";
 import "./ipc/standupHandlers";
 import "./ipc/billableHoursHandlers";
 import "./ipc/invoiceHandlers";
+// @ts-ignore TS: editor/tsserver may not always resolve this side-effect handler path
+import "./ipc/updaterHandlers";
 import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "../shared/constants";
 import { initSentryMain, reportError } from "./sentryMain";
+// @ts-ignore TS: editor/tsserver may not always resolve this module; runtime implementation exists
+import { initUpdater, setUpdaterStateSink } from "./updater";
 
 // ── Initialize error logging ──────────────────────────────────────
 // Must be called early before any other Sentry calls
@@ -139,6 +143,11 @@ if (process.defaultApp) {
 
 app.whenReady().then(() => {
   createWindow();
+
+  setUpdaterStateSink((state: import("../shared/types").UpdaterState) => {
+    mainWindow?.webContents.send("updater:state-changed", state);
+  });
+  void initUpdater();
 
   // Handle OAuth callback URL if app was launched via protocol URL (Windows)
   if (process.platform === "win32") {

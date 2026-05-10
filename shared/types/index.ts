@@ -137,3 +137,26 @@ export interface ProjectWithMembers extends Project {
   members?: ProjectMember[];
   manager_name?: string;
 }
+
+export type UpdaterStatus =
+  | "disabled"
+  | "idle"
+  | "checking"
+  | "available"
+  | "not-available"
+  | "downloading"
+  | "downloaded"
+  | "error";
+
+export interface UpdaterState {
+  status: UpdaterStatus;
+  message: string;
+  canCheck: boolean;
+  canDownload: boolean;
+  canInstall: boolean;
+  autoEnabled: boolean;
+  availableVersion?: string;
+  downloadedVersion?: string;
+  progressPercent?: number;
+  error?: string;
+}
