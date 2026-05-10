@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcRenderer } from "electron";
+import { initSentryRenderer, setSentryUser, clearSentryUser, addBreadcrumb } from "../src/sentryRenderer";
 import { renderLogs } from "./logsTab";
 import { refreshProfile } from "./profileTab";
 import { renderSummary } from "./summaryTab";
@@ -297,15 +298,18 @@ function setupRecordAndPauseBtns() {
         (window as any).isPaused = false;
         pauseBtn.style.display = "";
         updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
+        addBreadcrumb("Session started");
         await ipcRenderer.invoke("start-tracking");
       } else {
         (window as any).isRecording = false;
         (window as any).isPaused = false;
         pauseBtn.style.display = "none";
+        addBreadcrumb("Session stopped");
         await ipcRenderer.invoke("stop-tracking");
       }
       updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
     } catch (err) {
+      addBreadcrumb("Tracking toggle failed", { error: String(err) }, "warning");
       showInAppNotification(
         "Failed to toggle tracking. Please try again.",
         3500,
@@ -318,9 +322,11 @@ function setupRecordAndPauseBtns() {
     try {
       if (!(window as any).isPaused) {
         (window as any).isPaused = true;
+        addBreadcrumb("Session paused");
         await ipcRenderer.invoke("pause-tracking");
       } else {
         (window as any).isPaused = false;
+        addBreadcrumb("Session resumed");
         await ipcRenderer.invoke("resume-tracking");
       }
       updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
@@ -778,6 +784,10 @@ async function applyUserTheme() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // Initialize error logging first (before anything else)
+  initSentryRenderer();
+  addBreadcrumb("App initialized", { timestamp: new Date().toISOString() });
+
   const landing = document.getElementById("userLanding") as HTMLDivElement;
   const mainUI = document.getElementById("mainUI");
 
@@ -804,6 +814,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     isMainUIInitialized = true;
 
     localStorage.setItem("currentUserId", String(userId));
+    
+    // Update Sentry user context for error tracking
+    setSentryUser(String(userId));
+    addBreadcrumb("User logged in", { userId });
+
     if (mainUI) {
       mainUI.style.display = "";
       renderMainUI();
@@ -889,6 +904,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   } catch (error) {
     // If there's an error checking auth, fall back to stored user ID
+    addBreadcrumb("Auth check failed, using fallback", { error: String(error) });
     const storedUserId = localStorage.getItem("currentUserId");
 
     if (storedUserId) {
@@ -946,6 +962,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           destroyConnectionStatus();
           destroySyncStatus();
           stopSessionHealthCheck();
+          clearSentryUser(); // Clear user context from error logging
           if (dailyGoalCheckInterval) {
             clearInterval(dailyGoalCheckInterval);
             dailyGoalCheckInterval = null;

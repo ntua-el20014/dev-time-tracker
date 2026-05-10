@@ -50,6 +50,11 @@ import "./ipc/standupHandlers";
 import "./ipc/billableHoursHandlers";
 import "./ipc/invoiceHandlers";
 import { DEFAULT_TRACKING_INTERVAL_SECONDS } from "../shared/constants";
+import { initSentryMain, reportError } from "./sentryMain";
+
+// ── Initialize error logging ──────────────────────────────────────
+// Must be called early before any other Sentry calls
+initSentryMain();
 
 // ── Process-level error handlers ──────────────────────────────────
 // Catch truly unhandled errors so the app doesn't crash silently.
@@ -62,6 +67,7 @@ process.on("uncaughtException", (error) => {
     );
   } else {
     logError("uncaughtException", error);
+    reportError(error, { type: "uncaughtException" });
   }
 });
 
@@ -74,6 +80,8 @@ process.on("unhandledRejection", (reason) => {
     );
   } else {
     logError("unhandledRejection", reason);
+    const error = reason instanceof Error ? reason : new Error(String(reason));
+    reportError(error, { type: "unhandledRejection" });
   }
 });
 

@@ -480,7 +480,7 @@
 - [x] Fix visibilities based on roles
 
 ### Step 11.5: Quality & Release
-- [ ] Set up error logging service (Sentry or similar)
+- [x] Set up error logging service (Sentry or similar)
 - [ ] Add auto-update mechanism (electron-updater)
 - [ ] Code-sign the app for Windows/macOS
 - [ ] Write changelog and release notes
