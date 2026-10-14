@@ -2,7 +2,10 @@ import { ipcRenderer } from "electron";
 import jsPDF from "jspdf";
 import type { SessionRow, DailySummaryRow } from "../../shared/types";
 import { showNotification, showInAppNotification } from "../components";
-import { formatTimeSpent } from "../../src/utils/timeFormat";
+import {
+  formatTimeSpent,
+  getLocalDateString,
+} from "../../src/utils/timeFormat";
 import { safeIpcInvoke } from "./ipcHelpers";
 
 export interface ExportOptions {
@@ -211,7 +214,7 @@ export class SessionExporter {
     const { filePath } = await ipcRenderer.invoke("show-save-dialog", {
       title: "Export as CSV",
       defaultPath: `dev-tracker-export-${
-        new Date().toISOString().split("T")[0]
+        getLocalDateString()
       }.zip`,
       filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
     });
@@ -228,7 +231,7 @@ export class SessionExporter {
     const { filePath } = await ipcRenderer.invoke("show-save-dialog", {
       title: "Export as JSON",
       defaultPath: `dev-tracker-export-${
-        new Date().toISOString().split("T")[0]
+        getLocalDateString()
       }.json`,
       filters: [{ name: "JSON File", extensions: ["json"] }],
     });
@@ -507,8 +510,8 @@ function getDefaultDateRange(daysBack = 30): { start: string; end: string } {
   start.setDate(start.getDate() - daysBack);
 
   return {
-    start: start.toISOString().split("T")[0],
-    end: end.toISOString().split("T")[0],
+    start: getLocalDateString(start),
+    end: getLocalDateString(end),
   };
 }
 

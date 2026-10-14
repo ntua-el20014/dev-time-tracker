@@ -16,6 +16,39 @@ export function getLocalDateString(date = new Date()): string {
   return date.toLocaleDateString("en-CA"); // YYYY-MM-DD format
 }
 
+// ── Local-day helpers ────────────────────────────────────────────────
+// "Days" in this app are the user's local calendar days. Never derive a day
+// from an ISO timestamp with split("T")[0] — that yields the UTC day.
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Local calendar day (YYYY-MM-DD) that a timestamp falls on. */
+export function toLocalDateString(timestamp: string | Date): string {
+  return getLocalDateString(
+    typeof timestamp === "string" ? new Date(timestamp) : timestamp,
+  );
+}
+
+/**
+ * ISO instant of local midnight at the start of a YYYY-MM-DD day, for use as
+ * an inclusive lower bound on timestamptz columns. Full timestamps pass through.
+ */
+export function localDayStartISO(date: string): string {
+  return DATE_ONLY.test(date)
+    ? new Date(`${date}T00:00:00`).toISOString()
+    : date;
+}
+
+/**
+ * ISO instant of the last millisecond of a local YYYY-MM-DD day, for use as an
+ * inclusive upper bound on timestamptz columns. Full timestamps pass through.
+ */
+export function localDayEndISO(date: string): string {
+  return DATE_ONLY.test(date)
+    ? new Date(`${date}T23:59:59.999`).toISOString()
+    : date;
+}
+
 // Pretty date formatting
 export function prettyDate(dateStr: string | Date | null | undefined): string {
   if (dateStr == null) return "Unknown date";

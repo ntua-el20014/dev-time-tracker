@@ -1,4 +1,9 @@
 import { supabase } from "./config";
+import {
+  getLocalDateString,
+  localDayStartISO,
+  localDayEndISO,
+} from "../utils/timeFormat";
 
 export interface BillableHoursSummary {
   projectId: string;
@@ -80,12 +85,10 @@ export async function getUserEarningsSummary(
   const now = new Date();
   const defaultStart =
     startDate ||
-    new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+    getLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
   const defaultEnd =
     endDate ||
-    new Date(now.getFullYear(), now.getMonth() + 1, 0)
-      .toISOString()
-      .split("T")[0];
+    getLocalDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 
   // Get all billable sessions for this user in the date range
   let query = supabase
@@ -95,8 +98,8 @@ export async function getUserEarningsSummary(
   query = query
     .eq("user_id", userId)
     .eq("is_billable", true)
-    .gte("start_time", `${defaultStart}T00:00:00`)
-    .lte("start_time", `${defaultEnd}T23:59:59`);
+    .gte("start_time", localDayStartISO(defaultStart))
+    .lte("start_time", localDayEndISO(defaultEnd));
 
   const { data: sessions, error: sessionsError } = await query;
 
@@ -187,12 +190,12 @@ export async function getCurrentMonthEarnings(
   userId: string,
 ): Promise<EarningsSummary> {
   const now = new Date();
-  const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-    .toISOString()
-    .split("T")[0];
-  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    .toISOString()
-    .split("T")[0];
+  const startDate = getLocalDateString(
+    new Date(now.getFullYear(), now.getMonth(), 1),
+  );
+  const endDate = getLocalDateString(
+    new Date(now.getFullYear(), now.getMonth() + 1, 0),
+  );
 
   return getUserEarningsSummary(userId, startDate, endDate);
 }

@@ -58,6 +58,8 @@ export interface QueuedSession {
     tags?: string[];
     projectId?: string;
     isBillable: boolean;
+    /** Wall-clock end (absent on items queued by older versions) */
+    endTime?: string;
   };
 }
 
@@ -216,6 +218,7 @@ export function enqueueSession(
   tags?: string[],
   projectId?: string,
   isBillable: boolean = false,
+  endTime?: string,
 ): void {
   const key = `session:${userId}:${startTime}`;
   if (keySet.has(key)) return; // duplicate
@@ -233,6 +236,7 @@ export function enqueueSession(
       tags,
       projectId,
       isBillable,
+      endTime,
     },
   };
 
@@ -286,6 +290,7 @@ export async function flush(): Promise<number> {
           d.tags,
           d.projectId,
           d.isBillable,
+          d.endTime,
         );
       }
 

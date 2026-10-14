@@ -1,10 +1,19 @@
 import { supabase } from "./config";
 import type { Database } from "../types/database.types";
+import {
+  toLocalDateString,
+  localDayStartISO,
+  localDayEndISO,
+} from "../utils/timeFormat";
 
 type UsageLogsInsert = Database["public"]["Tables"]["usage_logs"]["Insert"];
 
 /**
- * Log usage activity for an application
+ * Log usage activity for an application.
+ *
+ * `iconUrl` (a data URL) is only written to the daily summary row, never to
+ * the per-tick usage_logs row. Callers should pass it once per app/day and
+ * null afterwards — the summary keeps the existing icon when given null.
  */
 export async function logUsage(
   userId: string,
@@ -17,7 +26,7 @@ export async function logUsage(
   timestamp?: string,
 ) {
   const logTime = timestamp || new Date().toISOString();
-  const date = logTime.split("T")[0]; // Extract date (YYYY-MM-DD)
+  const date = toLocalDateString(logTime); // user's local calendar day
 
   const usageData: UsageLogsInsert = {
     user_id: userId,
@@ -25,7 +34,6 @@ export async function logUsage(
     window_title: windowTitle,
     language: language || null,
     language_extension: languageExtension || null,
-    icon_url: iconUrl || null,
     timestamp: logTime,
   };
 
@@ -135,13 +143,13 @@ export async function getUsageLogs(
     offset?: number;
   },
 ) {
-  const startOfDay = `${date}T00:00:00.000Z`;
-  const endOfDay = `${date}T23:59:59.999Z`;
+  const startOfDay = localDayStartISO(date);
+  const endOfDay = localDayEndISO(date);
 
   let query = supabase
     .from("usage_logs")
     .select(
-      "app_name, window_title, icon_url, language, language_extension, timestamp",
+      "app_name, window_title, language, language_extension, timestamp",
     )
     .eq("user_id", userId)
     .gte("timestamp", startOfDay)
@@ -319,13 +327,13 @@ export async function getUsageDetailsForAppDate(
   app: string,
   date: string,
 ) {
-  const startOfDay = `${date}T00:00:00.000Z`;
-  const endOfDay = `${date}T23:59:59.999Z`;
+  const startOfDay = localDayStartISO(date);
+  const endOfDay = localDayEndISO(date);
 
   const { data, error } = await supabase
     .from("usage_logs")
     .select(
-      "app_name, window_title, icon_url, language, language_extension, timestamp",
+      "app_name, window_title, language, language_extension, timestamp",
     )
     .eq("user_id", userId)
     .eq("app_name", app)
@@ -350,7 +358,7 @@ export async function getUsageDetailsForSession(
   // First get the session time range
   const { data: session, error: sessionError } = await supabase
     .from("time_tracking_sessions")
-    .select("start_time, duration")
+    .select("start_time, end_time, duration")
     .eq("id", sessionId)
     .single();
 
@@ -363,14 +371,16 @@ export async function getUsageDetailsForSession(
 
   const startTime = (session as any).start_time;
   const duration = (session as any).duration || 0;
-  const endTime = new Date(
-    new Date(startTime).getTime() + duration * 1000,
-  ).toISOString();
+  // end_time is the wall-clock end (includes pauses); older sessions lack it,
+  // so fall back to start + active duration.
+  const endTime =
+    (session as any).end_time ||
+    new Date(new Date(startTime).getTime() + duration * 1000).toISOString();
 
   const { data, error } = await supabase
     .from("usage_logs")
     .select(
-      "app_name, window_title, icon_url, language, language_extension, timestamp",
+      "app_name, window_title, language, language_extension, timestamp",
     )
     .eq("user_id", userId)
     .gte("timestamp", startTime)

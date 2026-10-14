@@ -1177,9 +1177,12 @@ function renderHotkeys(container: HTMLElement) {
       <li><span style="min-width:180px;display:inline-block;">${keyImg(
         "ctrl",
       )} + ${keyImg("hashtag")}</span> Switch to tab (# = 1,2,3...)</li>
+      <li><span style="min-width:180px;display:inline-block;">Ctrl + Alt + Shift + I</span> Toggle incognito (works from any app)</li>
     </ul>
     <div class="info-note" style="margin-top:16px;">
-      Shortcuts work globally except when typing in an input or textarea.
+      Shortcuts work while this window is focused, except when typing in an
+      input or textarea. Incognito works system-wide. Start/Stop and
+      Pause/Resume are also available from the tray icon.
     </div>
   `;
 }

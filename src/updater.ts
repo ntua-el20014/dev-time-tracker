@@ -1,6 +1,7 @@
 import { app } from "electron";
 import { autoUpdater } from "electron-updater";
 import type { UpdaterState } from "../shared/types";
+import { getEnv } from "./buildEnv";
 
 let initialized = false;
 let stateListener: ((state: UpdaterState) => void) | null = null;
@@ -26,23 +27,23 @@ function setState(partial: Partial<UpdaterState>) {
 }
 
 function isUpdaterEnabled(): boolean {
-  const envEnabled = process.env.UPDATER_ENABLED === "true";
-  const devAllowed = process.env.UPDATER_ALLOW_DEV === "true";
+  const envEnabled = getEnv("UPDATER_ENABLED") === "true";
+  const devAllowed = getEnv("UPDATER_ALLOW_DEV") === "true";
   const prodLike =
     app.isPackaged || process.env.NODE_ENV === "production" || devAllowed;
   return envEnabled && prodLike;
 }
 
 function shouldAutoCheck(): boolean {
-  return process.env.UPDATER_AUTO_CHECK === "true";
+  return getEnv("UPDATER_AUTO_CHECK") === "true";
 }
 
 function shouldAutoDownload(): boolean {
-  return process.env.UPDATER_AUTO_DOWNLOAD === "true";
+  return getEnv("UPDATER_AUTO_DOWNLOAD") === "true";
 }
 
 function configureUpdaterFeed() {
-  const feedUrl = process.env.UPDATER_FEED_URL;
+  const feedUrl = getEnv("UPDATER_FEED_URL");
 
   if (feedUrl) {
     autoUpdater.setFeedURL(feedUrl);
@@ -50,8 +51,8 @@ function configureUpdaterFeed() {
   }
 
   // Allow passing OWNER/REPO together in UPDATER_GITHUB_REPO (owner/repo)
-  let owner = process.env.UPDATER_GITHUB_OWNER || "ntua-el20014";
-  let repo = process.env.UPDATER_GITHUB_REPO || "dev-time-tracker";
+  let owner = getEnv("UPDATER_GITHUB_OWNER") || "ntua-el20014";
+  let repo = getEnv("UPDATER_GITHUB_REPO") || "dev-time-tracker";
   if (repo.includes("/")) {
     const parts = repo.split("/");
     owner = parts[0] || owner;
@@ -62,7 +63,7 @@ function configureUpdaterFeed() {
     provider: "github",
     owner,
     repo,
-    private: process.env.UPDATER_GITHUB_PRIVATE === "true",
+    private: getEnv("UPDATER_GITHUB_PRIVATE") === "true",
   });
 }
 
@@ -105,7 +106,7 @@ export async function initUpdater(): Promise<UpdaterState> {
     return getUpdaterState();
   }
 
-  autoUpdater.forceDevUpdateConfig = process.env.UPDATER_ALLOW_DEV === "true";
+  autoUpdater.forceDevUpdateConfig = getEnv("UPDATER_ALLOW_DEV") === "true";
   configureUpdaterFeed();
   autoUpdater.autoDownload = autoDownload;
   autoUpdater.autoInstallOnAppQuit = false;

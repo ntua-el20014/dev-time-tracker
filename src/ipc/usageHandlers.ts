@@ -3,6 +3,7 @@ import * as usageLogs from "../supabase/usageLogs";
 import { getCurrentUser } from "../supabase/api";
 import type { DailySummaryFilters } from "../../shared/types";
 import { logError } from "../utils/errorHandler";
+import { getLocalDateString } from "../utils/timeFormat";
 
 /**
  * Get usage logs/summary for a specific date
@@ -15,7 +16,7 @@ ipcMain.handle("get-logs", async (_event, date?: string) => {
       throw new Error("User not authenticated");
     }
 
-    const dateStr = date || new Date().toISOString().split("T")[0];
+    const dateStr = date || getLocalDateString();
     return await usageLogs.getUsageSummary(user.id, dateStr);
   } catch (err) {
     logError("get-logs", err);

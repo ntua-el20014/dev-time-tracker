@@ -4,6 +4,7 @@ import * as tags from "../supabase/tags";
 import { getCurrentUser } from "../supabase/api";
 import { supabase } from "../supabase/config";
 import { logError } from "../utils/errorHandler";
+import { toLocalDateString } from "../utils/timeFormat";
 
 /**
  * Enrich raw Supabase session rows with derived fields the renderer expects:
@@ -52,7 +53,7 @@ async function enrichSessions(rawSessions: any[]): Promise<any[]> {
 
   return rawSessions.map((s) => ({
     ...s,
-    date: s.start_time ? s.start_time.split("T")[0] : null,
+    date: s.start_time ? toLocalDateString(s.start_time) : null,
     tags: tagsBySession[s.id] || [],
     project_name: s.project_id ? projectMap[s.project_id]?.name : null,
     project_color: s.project_id ? projectMap[s.project_id]?.color : null,

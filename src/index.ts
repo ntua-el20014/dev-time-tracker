@@ -7,6 +7,7 @@ import {
   Menu,
   nativeImage,
   globalShortcut,
+  type IpcMainEvent,
 } from "electron";
 import { activeWindow } from "@miniben90/x-win";
 import os from "os";
@@ -18,6 +19,7 @@ import {
   loadUserLangMapFromDisk,
 } from "./utils/extractData";
 import { getIdleTimeoutSeconds } from "./utils/ipcHelp";
+import { toLocalDateString } from "./utils/timeFormat";
 import { logUsage } from "./supabase/usageLogs";
 import { addSession } from "./supabase/timeTracking";
 import {
@@ -26,6 +28,7 @@ import {
 } from "./supabase/scheduledSessions";
 import { getCurrentUser } from "./supabase/api";
 import { supabase } from "./supabase/config";
+import { SUPABASE_CONFIG } from "./supabase/env";
 import { logError, withRetry, classifyError } from "./utils/errorHandler";
 import {
   initOfflineQueue,
@@ -120,12 +123,23 @@ declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 let intervalSeconds = DEFAULT_TRACKING_INTERVAL_SECONDS;
 let trackingInterval: ReturnType<typeof setInterval> | null = null;
 let sessionStart: Date | null = null;
-let sessionEnd: Date | null = null;
 let sessionActiveDuration = 0; // in seconds
 let lastActiveTimestamp: Date | null = null;
 let isPaused = false;
+/** True when the current pause came from idle/lock/sleep, not the user. */
+let autoPaused = false;
+/** System away states: never auto-resume while either is set. */
+let screenLocked = false;
+let systemSuspended = false;
 let isIncognito = false;
 let tray: Tray | null = null;
+
+/** Idle time (s) below which an auto-paused session resumes on its own. */
+const AUTO_RESUME_IDLE_SECONDS = 5;
+/** How long Stop waits for the session-info modal before auto-saving. */
+const SESSION_INFO_TIMEOUT_MS = 10 * 60 * 1000;
+/** Global incognito toggle. Avoids Ctrl+Shift+I (DevTools / editor chat). */
+const INCOGNITO_SHORTCUT = "CommandOrControl+Alt+Shift+I";
 /** Cached user ID so tracking can continue when the network is down. */
 let cachedUserId: string | null = null;
 let idleTimeoutSeconds = getIdleTimeoutSeconds(); // Default, updated when user logs in
@@ -167,12 +181,27 @@ app.whenReady().then(() => {
   // Initialise the offline write queue (loads any persisted items from disk)
   initOfflineQueue();
 
-  // Listen for system idle (lock/unlock)
-  powerMonitor.on("lock-screen", () => {
+  // Pause when the user is away (lock / sleep); resume happens via the idle
+  // poll below once they are back and active.
+  const pauseForAway = () => {
     if (!isPaused && trackingInterval) {
       ipcMain.emit("auto-pause");
       mainWindow?.webContents.send("auto-paused");
     }
+  };
+  powerMonitor.on("lock-screen", () => {
+    screenLocked = true;
+    pauseForAway();
+  });
+  powerMonitor.on("unlock-screen", () => {
+    screenLocked = false;
+  });
+  powerMonitor.on("suspend", () => {
+    systemSuspended = true;
+    pauseForAway();
+  });
+  powerMonitor.on("resume", () => {
+    systemSuspended = false;
   });
 
   // Poll for idle time every 2 seconds
@@ -190,6 +219,23 @@ app.whenReady().then(() => {
           });
         }
       }
+    } else if (
+      autoPaused &&
+      isPaused &&
+      sessionStart &&
+      !screenLocked &&
+      !systemSuspended &&
+      idleSeconds < AUTO_RESUME_IDLE_SECONDS
+    ) {
+      // User is back: resume a session that was paused automatically.
+      // Manual pauses are never resumed automatically.
+      ipcMain.emit("auto-resume");
+      mainWindow?.webContents.send("auto-resumed");
+      if (!isIncognito) {
+        mainWindow?.webContents.send("notify", {
+          message: "Welcome back — tracking resumed.",
+        });
+      }
     }
   }, 2000);
 
@@ -203,16 +249,45 @@ app.whenReady().then(() => {
   // ── System tray ──────────────────────────────────────────────────
   createTray();
 
-  // ── Global shortcut: Ctrl+Shift+I toggles incognito ──────────────
-  globalShortcut.register("CommandOrControl+Shift+I", () => {
+  // ── Global shortcut: toggles incognito ───────────────────────────
+  const registered = globalShortcut.register(INCOGNITO_SHORTCUT, () => {
     isIncognito = !isIncognito;
     mainWindow?.webContents.send("incognito-toggled", isIncognito);
     updateTrayMenu();
   });
+  if (!registered) {
+    logError(
+      "globalShortcut",
+      new Error(`${INCOGNITO_SHORTCUT} is already taken by another app`),
+    );
+  }
 });
 
 /** Cache process icons by exec name — icons don't change at runtime. */
 const iconCache = new Map<string, string>();
+
+/**
+ * Summary rows (user/day/app/language) that already received their icon in
+ * this run. The icon is a data URL of several KB, so it is sent once per row
+ * rather than on every tick; the DB keeps the existing icon when sent null.
+ */
+const iconSentKeys = new Set<string>();
+let iconSentDay = "";
+
+function iconForSummary(
+  uid: string,
+  day: string,
+  appName: string,
+  language: string | null,
+  icon: string,
+): { icon: string | null; key: string } {
+  if (day !== iconSentDay) {
+    iconSentKeys.clear();
+    iconSentDay = day;
+  }
+  const key = `${uid}|${day}|${appName}|${language ?? ""}`;
+  return { icon: iconSentKeys.has(key) || !icon ? null : icon, key };
+}
 
 async function trackActiveWindow() {
   // Skip logging when incognito mode is active
@@ -277,6 +352,13 @@ async function trackActiveWindow() {
 
     // Pass langExt to logUsage (Supabase version)
     const logTimestamp = new Date().toISOString();
+    const summaryIcon = iconForSummary(
+      uid,
+      toLocalDateString(logTimestamp),
+      appName,
+      language,
+      icon,
+    );
     try {
       await withRetry(
         () =>
@@ -286,12 +368,13 @@ async function trackActiveWindow() {
             title,
             language,
             langExt,
-            icon,
+            summaryIcon.icon,
             intervalSeconds,
             logTimestamp,
           ),
         { maxAttempts: 2, retryOn: ["network"] },
       );
+      iconSentKeys.add(summaryIcon.key);
     } catch (retryErr) {
       // All retries exhausted — queue locally so data is never lost
       if (classifyError(retryErr) === "network") {
@@ -301,10 +384,11 @@ async function trackActiveWindow() {
           title,
           language,
           langExt,
-          icon,
+          summaryIcon.icon,
           intervalSeconds,
           logTimestamp,
         );
+        iconSentKeys.add(summaryIcon.key); // the queue will deliver it
       } else {
         // Non-network error — log and move on
         logError("trackActiveWindow (non-network)", retryErr);
@@ -411,9 +495,35 @@ function createTray() {
   });
 }
 
+/**
+ * Tray recording commands go through the renderer's record/pause buttons so
+ * the UI and the session-info modal stay in sync with the main process.
+ */
+function sendTrayCommand(command: "toggle-recording" | "toggle-pause") {
+  if (!mainWindow) return;
+  // Stopping opens the session-info modal, so make sure it's visible
+  if (command === "toggle-recording" && sessionStart) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  mainWindow.webContents.send("tray-command", command);
+}
+
 function updateTrayMenu() {
   if (!tray) return;
+  const isRecording = sessionStart !== null;
   const contextMenu = Menu.buildFromTemplate([
+    {
+      label: isRecording ? "Stop Tracking" : "Start Tracking",
+      click: () => sendTrayCommand("toggle-recording"),
+    },
+    {
+      label: isPaused ? "Resume" : "Pause",
+      enabled: isRecording,
+      click: () => sendTrayCommand("toggle-pause"),
+    },
+    { type: "separator" },
     {
       label: isIncognito ? "✔ Incognito Mode" : "  Incognito Mode",
       click: () => {
@@ -442,6 +552,37 @@ function updateTrayMenu() {
   );
 }
 
+/**
+ * CSP for the renderer, built from the configured Supabase URL so a custom
+ * SUPABASE_URL works. public/index.html carries a matching <meta> CSP (needed
+ * for the packaged file:// page) that allows any *.supabase.co project; a
+ * self-hosted Supabase on another domain must be added there as well.
+ */
+function buildContentSecurityPolicy(): string {
+  let supabaseOrigin = "";
+  try {
+    supabaseOrigin = new URL(SUPABASE_CONFIG.URL).origin;
+  } catch {
+    // Invalid URL — the *.supabase.co wildcard below still applies
+  }
+  const connectSrc = [
+    "'self'",
+    "https://*.supabase.co",
+    supabaseOrigin,
+    "http://localhost:3000",
+  ].filter((src, i, all) => src && all.indexOf(src) === i);
+
+  return (
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-eval' http://localhost:3000; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data:; " +
+    `connect-src ${connectSrc.join(" ")};`
+  );
+}
+
+const CONTENT_SECURITY_POLICY = buildContentSecurityPolicy();
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1150,
@@ -469,13 +610,7 @@ function createWindow() {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
-          "Content-Security-Policy": [
-            "default-src 'self'; " +
-              "script-src 'self' 'unsafe-eval' http://localhost:3000; " +
-              "style-src 'self' 'unsafe-inline'; " +
-              "img-src 'self' data:; " +
-              "connect-src 'self' https://bgrqsrpvznsdjpzhyhov.supabase.co http://localhost:3000;",
-          ],
+          "Content-Security-Policy": [CONTENT_SECURITY_POLICY],
         },
       });
     },
@@ -503,167 +638,220 @@ function createWindow() {
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 }
 
-ipcMain.handle("start-tracking", (_event) => {
+// ── Session state helpers ────────────────────────────────────────────
+
+function startTickInterval() {
   if (!trackingInterval) {
     trackingInterval = setInterval(
       () => trackActiveWindow(),
       intervalSeconds * 1000,
     );
   }
-  sessionStart = new Date();
-  sessionActiveDuration = 0;
-  lastActiveTimestamp = new Date();
-  isPaused = false;
-});
+}
 
-ipcMain.handle("pause-tracking", () => {
-  if (!isPaused && lastActiveTimestamp) {
-    const now = new Date();
-    sessionActiveDuration += Math.round(
-      (now.getTime() - lastActiveTimestamp.getTime()) / 1000,
-    );
-    isPaused = true;
-    if (trackingInterval) {
-      clearInterval(trackingInterval);
-      trackingInterval = null;
-    }
-  }
-});
-
-ipcMain.handle("resume-tracking", (_event) => {
-  if (isPaused) {
-    lastActiveTimestamp = new Date();
-    trackingInterval = setInterval(
-      () => trackActiveWindow(),
-      intervalSeconds * 1000,
-    );
-    isPaused = false;
-  }
-});
-
-ipcMain.handle("stop-tracking", async (_event) => {
+function stopTickInterval() {
   if (trackingInterval) {
     clearInterval(trackingInterval);
     trackingInterval = null;
   }
+}
 
-  // Check if there's an active session to stop
-  if (!sessionStart) {
-    // No active session to stop
-    return;
-  }
-
+/** Active (unpaused) seconds of the current session up to `now`. */
+function currentActiveDuration(now = new Date()): number {
   let duration = sessionActiveDuration;
   if (!isPaused && lastActiveTimestamp) {
-    const now = new Date();
     duration += Math.round(
       (now.getTime() - lastActiveTimestamp.getTime()) / 1000,
     );
   }
-  sessionEnd = new Date();
+  return duration;
+}
 
-  if (sessionStart && sessionEnd) {
-    if (duration >= 10) {
-      // Only record if >= 10 seconds
-      let uid: string | null = null;
-      try {
-        const user = await getCurrentUser();
-        if (user) {
-          uid = user.id;
-          cachedUserId = user.id;
-        }
-      } catch {
-        uid = cachedUserId;
-      }
-      if (!uid) return;
-
-      // Ask renderer for session title/description
-      const getSessionInfo = () =>
-        new Promise<{
-          title: string;
-          description: string;
-          projectId?: number | string;
-          isBillable?: boolean;
-        }>((resolve) => {
-          const timeout = setTimeout(() => {
-            // Timeout after 30 seconds — auto-save with default title
-            ipcMain.removeAllListeners("session-info-reply");
-            resolve({
-              title: "Untitled Session",
-              description: "Session info dialog timed out — auto-saved.",
-            });
-          }, 30_000);
-
-          ipcMain.once("session-info-reply", (_event, data) => {
-            clearTimeout(timeout);
-            resolve(data);
-          });
-          mainWindow?.webContents.send("get-session-info");
-        });
-
-      const { title, description, projectId, isBillable } =
-        await getSessionInfo();
-      if (title && title.trim() !== "") {
-        const start_time = sessionStart.toISOString();
-        try {
-          await addSession(
-            uid,
-            start_time,
-            duration,
-            title,
-            description,
-            undefined, // tags
-            projectId ? String(projectId) : undefined,
-            isBillable || false,
-          );
-        } catch (sessionErr) {
-          if (classifyError(sessionErr) === "network") {
-            enqueueSession(
-              uid,
-              start_time,
-              duration,
-              title,
-              description,
-              undefined,
-              projectId ? String(projectId) : undefined,
-              isBillable || false,
-            );
-          } else {
-            logError("stop-tracking addSession", sessionErr);
-          }
-        }
-      }
-    }
-  }
+function resetSessionState() {
+  stopTickInterval();
   sessionStart = null;
-  sessionEnd = null;
   sessionActiveDuration = 0;
   lastActiveTimestamp = null;
   isPaused = false;
-});
+  autoPaused = false;
+  updateTrayMenu();
+}
 
-ipcMain.on("auto-pause", () => {
-  if (!isPaused && lastActiveTimestamp) {
-    const now = new Date();
-    sessionActiveDuration += Math.round(
-      (now.getTime() - lastActiveTimestamp.getTime()) / 1000,
+/** Resolve the user, falling back to the cached ID when offline. */
+async function resolveUserId(): Promise<string | null> {
+  try {
+    const user = await getCurrentUser();
+    if (user) cachedUserId = user.id;
+    return user?.id ?? null;
+  } catch {
+    return cachedUserId;
+  }
+}
+
+type SessionInfo = {
+  title: string;
+  description: string;
+  projectId?: number | string;
+  isBillable?: boolean;
+};
+
+const TIMED_OUT_SESSION_INFO: SessionInfo = {
+  title: "Untitled Session",
+  description: "Session info dialog timed out — auto-saved.",
+};
+
+const APP_CLOSED_SESSION_INFO: SessionInfo = {
+  title: "Auto-saved session (app closed)",
+  description: "Session was automatically saved when the application closed",
+  isBillable: false,
+};
+
+/** Settles the open session-info prompt early (another stop, or quit). */
+let settleSessionInfo: ((info: SessionInfo) => void) | null = null;
+/** Save of a stopped session that is still waiting on its session-info prompt. */
+let pendingStopSave: Promise<void> | null = null;
+
+/** Ask the renderer for title/project/billing of a stopped session. */
+function askSessionInfo(): Promise<SessionInfo> {
+  return new Promise((resolve) => {
+    const finish = (info: SessionInfo) => {
+      clearTimeout(timeout);
+      ipcMain.removeListener("session-info-reply", onReply);
+      settleSessionInfo = null;
+      resolve(info);
+    };
+    const onReply = (_event: IpcMainEvent, data: SessionInfo) =>
+      finish(data);
+    // Closing the renderer's modal is what tells the user it was auto-saved
+    const settleEarly = (info: SessionInfo) => {
+      mainWindow?.webContents.send("session-info-timeout");
+      finish(info);
+    };
+    const timeout = setTimeout(
+      () => settleEarly(TIMED_OUT_SESSION_INFO),
+      SESSION_INFO_TIMEOUT_MS,
     );
-    isPaused = true;
-    if (trackingInterval) {
-      clearInterval(trackingInterval);
-      trackingInterval = null;
+
+    settleSessionInfo = settleEarly;
+    ipcMain.on("session-info-reply", onReply);
+    mainWindow?.webContents.send("get-session-info");
+  });
+}
+
+async function saveSession(
+  uid: string,
+  start: Date,
+  end: Date,
+  duration: number,
+  info: SessionInfo,
+  { queueOnAnyError = false } = {},
+) {
+  const startTime = start.toISOString();
+  const endTime = end.toISOString();
+  const projectId = info.projectId ? String(info.projectId) : undefined;
+  const isBillable = info.isBillable || false;
+  try {
+    await addSession(
+      uid,
+      startTime,
+      duration,
+      info.title,
+      info.description,
+      undefined, // tags
+      projectId,
+      isBillable,
+      endTime,
+    );
+  } catch (err) {
+    if (queueOnAnyError || classifyError(err) === "network") {
+      // Queue locally so the session is not lost
+      enqueueSession(
+        uid,
+        startTime,
+        duration,
+        info.title,
+        info.description,
+        undefined,
+        projectId,
+        isBillable,
+        endTime,
+      );
+    } else {
+      logError("saveSession", err);
     }
   }
+}
+
+// ── Tracking IPC ─────────────────────────────────────────────────────
+
+ipcMain.handle("start-tracking", (_event) => {
+  startTickInterval();
+  sessionStart = new Date();
+  sessionActiveDuration = 0;
+  lastActiveTimestamp = new Date();
+  isPaused = false;
+  autoPaused = false;
+  updateTrayMenu();
 });
 
-ipcMain.on("auto-resume", (_event) => {
+function pauseSession(automatic: boolean) {
+  if (!isPaused && lastActiveTimestamp) {
+    sessionActiveDuration = currentActiveDuration();
+    isPaused = true;
+    autoPaused = automatic;
+    stopTickInterval();
+    updateTrayMenu();
+  }
+}
+
+function resumeSession() {
   if (isPaused) {
     lastActiveTimestamp = new Date();
-    trackingInterval = setInterval(
-      () => trackActiveWindow(),
-      intervalSeconds * 1000,
-    );
+    startTickInterval();
     isPaused = false;
+    autoPaused = false;
+    updateTrayMenu();
+  }
+}
+
+ipcMain.handle("pause-tracking", () => pauseSession(false));
+ipcMain.handle("resume-tracking", () => resumeSession());
+ipcMain.on("auto-pause", () => pauseSession(true));
+ipcMain.on("auto-resume", () => resumeSession());
+
+ipcMain.handle("stop-tracking", async (_event) => {
+  if (!sessionStart) {
+    stopTickInterval();
+    return;
+  }
+
+  const start = sessionStart;
+  const end = new Date();
+  const duration = currentActiveDuration(end);
+  // Free the tracker right away: the prompt below can stay open for minutes
+  // and the user may start a new session in the meantime.
+  resetSessionState();
+
+  if (duration < 10) return; // Only record if >= 10 seconds
+
+  const uid = await resolveUserId();
+  if (!uid) return;
+
+  // A previous stop is still waiting on its prompt — auto-save it first
+  settleSessionInfo?.(TIMED_OUT_SESSION_INFO);
+
+  const save = (async () => {
+    const info = await askSessionInfo();
+    // An empty title means the user chose "Discard"
+    if (info.title && info.title.trim() !== "") {
+      await saveSession(uid, start, end, duration, info);
+    }
+  })();
+  pendingStopSave = save;
+  try {
+    await save;
+  } finally {
+    if (pendingStopSave === save) pendingStopSave = null;
   }
 });
 
@@ -696,87 +884,46 @@ ipcMain.handle("open-oauth-url", async (_event, url: string) => {
   await shell.openExternal(url);
 });
 
-// Handle app close with active session
+// Handle app close with an active (running or paused) session, or a stopped
+// session still waiting on its session-info prompt
+let quitInProgress = false;
 app.on("before-quit", async (event) => {
-  // Check if there's an active tracking session
-  if (sessionStart && trackingInterval) {
-    event.preventDefault(); // Prevent immediate quit
+  if (quitInProgress) return;
+  if (!sessionStart && !pendingStopSave) return; // normal quit
 
-    try {
-      // Get current user (fall back to cached ID when offline)
-      let quitUserId: string | null = null;
-      try {
-        const user = await getCurrentUser();
-        if (user) {
-          quitUserId = user.id;
-          cachedUserId = user.id;
-        }
-      } catch {
-        quitUserId = cachedUserId;
-      }
+  event.preventDefault(); // Prevent immediate quit
+  quitInProgress = true;
 
-      if (quitUserId) {
-        // Calculate final duration
-        let duration = sessionActiveDuration;
-        if (!isPaused && lastActiveTimestamp) {
-          const now = new Date();
-          duration += Math.round(
-            (now.getTime() - lastActiveTimestamp.getTime()) / 1000,
-          );
-        }
-
-        // Only save if session has meaningful duration (>= 10 seconds)
-        if (duration >= 10 && sessionStart) {
-          const startTime = sessionStart.toISOString();
-
-          // Auto-save session with default title
-          try {
-            await addSession(
-              quitUserId,
-              startTime,
-              duration,
-              "Auto-saved session (app closed)",
-              "Session was automatically saved when the application closed",
-              undefined, // tags
-              undefined, // projectId
-              false, // isBillable
-            );
-          } catch (saveErr) {
-            // Queue locally so the session is not lost
-            enqueueSession(
-              quitUserId,
-              startTime,
-              duration,
-              "Auto-saved session (app closed)",
-              "Session was automatically saved when the application closed",
-              undefined,
-              undefined,
-              false,
-            );
-          }
-        }
-
-        // Clean up tracking state
-        if (trackingInterval) {
-          clearInterval(trackingInterval);
-          trackingInterval = null;
-        }
-        sessionStart = null;
-        sessionEnd = null;
-        sessionActiveDuration = 0;
-        lastActiveTimestamp = null;
-        isPaused = false;
-      }
-    } catch (err) {
-      logError("before-quit", err);
-    } finally {
-      // Persist the offline queue to disk before exiting
-      destroyOfflineQueue();
-      // Allow app to quit now
-      app.quit();
+  try {
+    if (pendingStopSave) {
+      settleSessionInfo?.(APP_CLOSED_SESSION_INFO);
+      await pendingStopSave;
     }
+
+    if (sessionStart) {
+      const start = sessionStart;
+      const end = new Date();
+      const duration = currentActiveDuration(end);
+      resetSessionState();
+
+      // Only save if session has meaningful duration (>= 10 seconds)
+      if (duration >= 10) {
+        const uid = await resolveUserId();
+        if (uid) {
+          await saveSession(uid, start, end, duration, APP_CLOSED_SESSION_INFO, {
+            queueOnAnyError: true,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    logError("before-quit", err);
+  } finally {
+    // Persist the offline queue to disk before exiting
+    destroyOfflineQueue();
+    // Allow app to quit now
+    app.quit();
   }
-  // If no active session, allow normal quit
 });
 
 app.on("window-all-closed", () => {

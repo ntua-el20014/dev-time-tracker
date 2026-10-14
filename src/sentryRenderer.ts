@@ -3,15 +3,17 @@
  */
 
 import * as SentryRenderer from "@sentry/electron/renderer";
+import { getEnv } from "./buildEnv";
 
 export function initSentryRenderer() {
   const isDev = process.env.NODE_ENV === "development";
+  const dsn = getEnv("SENTRY_DSN") || "";
 
   SentryRenderer.init({
-    dsn: process.env.SENTRY_DSN || "",
-    enabled: !isDev,
+    dsn,
+    enabled: !isDev && dsn !== "",
     environment: isDev ? "development" : "production",
-    release: process.env.npm_package_version,
+    release: getEnv("APP_VERSION"),
     maxBreadcrumbs: 100,
     tracesSampleRate: 0.1,
     beforeSend(event: any, hint: SentryRenderer.EventHint) {
@@ -46,7 +48,8 @@ export function addBreadcrumb(
   data?: Record<string, unknown>,
   level: SentryRenderer.SeverityLevel = "info",
 ) {
-  SentryRenderer.captureMessage(message, level);
+  // Breadcrumbs ride along with the next captured error; they must not be
+  // sent as events of their own (that would be one event per user action).
   SentryRenderer.addBreadcrumb({
     message,
     level,

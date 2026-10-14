@@ -1,6 +1,7 @@
 import { supabase } from "./config";
 import type { Database } from "../types/database.types";
 import { setSessionTagsByNames } from "./tags";
+import { localDayStartISO, localDayEndISO } from "../utils/timeFormat";
 
 type SessionInsert =
   Database["public"]["Tables"]["time_tracking_sessions"]["Insert"];
@@ -177,10 +178,10 @@ export async function getAllSessions(
       query = query.eq("project_id", filters.projectId);
     }
     if (filters?.startDate) {
-      query = query.gte("start_time", filters.startDate);
+      query = query.gte("start_time", localDayStartISO(filters.startDate));
     }
     if (filters?.endDate) {
-      query = query.lte("start_time", filters.endDate);
+      query = query.lte("start_time", localDayEndISO(filters.endDate));
     }
     if (filters?.isBillable !== undefined) {
       query = query.eq("is_billable", filters.isBillable);
@@ -217,10 +218,10 @@ export async function getAllSessions(
     query = query.eq("project_id", filters.projectId);
   }
   if (filters?.startDate) {
-    query = query.gte("start_time", filters.startDate);
+    query = query.gte("start_time", localDayStartISO(filters.startDate));
   }
   if (filters?.endDate) {
-    query = query.lte("start_time", filters.endDate);
+    query = query.lte("start_time", localDayEndISO(filters.endDate));
   }
   if (filters?.isBillable !== undefined) {
     query = query.eq("is_billable", filters.isBillable);
@@ -309,7 +310,11 @@ export async function deleteSession(sessionId: string) {
 
 /**
  * Add a completed session (retrospectively)
- * Used for adding sessions with known duration and details
+ * Used for adding sessions with known duration and details.
+ *
+ * `duration` is active time (pauses excluded); `endTime` is the wall-clock end.
+ * Requires DB patch 007 — before it, the duration trigger would overwrite
+ * `duration` with end_time - start_time whenever end_time is set.
  */
 export async function addSession(
   userId: string,
@@ -320,10 +325,12 @@ export async function addSession(
   tags?: string[],
   projectId?: string,
   isBillable: boolean = false,
+  endTime?: string,
 ) {
   const sessionData: SessionInsert = {
     user_id: userId,
     start_time: startTime,
+    end_time: endTime || null,
     duration,
     title,
     description: description || null,
@@ -363,8 +370,8 @@ export async function getSessionsInDateRange(
       "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
     )
     .eq("user_id", userId)
-    .gte("start_time", startDate)
-    .lte("start_time", endDate)
+    .gte("start_time", localDayStartISO(startDate))
+    .lte("start_time", localDayEndISO(endDate))
     .order("start_time", { ascending: false });
 
   if (error) {

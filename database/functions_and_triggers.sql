@@ -350,11 +350,14 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- TIME TRACKING HELPERS
 -- =====================================================
 
--- Function to calculate session duration when end_time is set
+-- Function to derive session duration from end_time when the app didn't
+-- supply one. duration = active time (pauses excluded); end_time = wall clock.
 CREATE OR REPLACE FUNCTION calculate_session_duration()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.end_time IS NOT NULL AND NEW.start_time IS NOT NULL THEN
+    IF NEW.duration IS NULL
+       AND NEW.end_time IS NOT NULL
+       AND NEW.start_time IS NOT NULL THEN
         NEW.duration := EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time))::INTEGER;
     END IF;
     RETURN NEW;

@@ -1,5 +1,6 @@
 import { supabase } from "./config";
 import { Database } from "../types/database.types";
+import { getLocalDateString, localDayStartISO } from "../utils/timeFormat";
 
 type ScheduledSessionInsert =
   Database["public"]["Tables"]["scheduled_work_sessions"]["Insert"];
@@ -312,7 +313,7 @@ export async function getUpcomingSessionNotifications(
     .gte("scheduled_datetime", tomorrowStart.toISOString())
     .lte("scheduled_datetime", tomorrowEnd.toISOString())
     .or(
-      `last_notification_sent.is.null,last_notification_sent.lt.${now.toISOString().split("T")[0]}`,
+      `last_notification_sent.is.null,last_notification_sent.lt.${localDayStartISO(getLocalDateString(now))}`,
     );
 
   if (tomorrowError) {

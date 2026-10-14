@@ -616,6 +616,31 @@ ipcRenderer.on("get-session-info", async () => {
   }, 100);
 });
 
+// Main gave up waiting for the session-info modal (timeout, newer stop, or
+// quit) and saved the session with a default title — close the stale modal.
+ipcRenderer.on("session-info-timeout", () => {
+  document.getElementById("customModal")?.remove();
+  document.getElementById("customModalOverlay")?.remove();
+  document.getElementById("confirmationModal")?.remove();
+  showInAppNotification(
+    'Session auto-saved as "Untitled Session" — you can rename it in Summary.',
+    6000,
+  );
+});
+
+// Tray menu Start/Stop and Pause/Resume. Routed through the buttons so the
+// renderer's recording state and the session-info modal stay in sync.
+ipcRenderer.on(
+  "tray-command",
+  (_event: any, command: "toggle-recording" | "toggle-pause") => {
+    const mainUI = document.getElementById("mainUI");
+    if (!mainUI || mainUI.style.display === "none") return; // not signed in
+    const btnId = command === "toggle-recording" ? "recordBtn" : "pauseBtn";
+    const btn = document.getElementById(btnId) as HTMLButtonElement | null;
+    if (btn && btn.style.display !== "none") btn.click();
+  },
+);
+
 ipcRenderer.on("notify", (_event: any, data: { message?: string }) => {
   if (data && data.message) showInAppNotification(data.message);
 });

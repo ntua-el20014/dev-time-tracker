@@ -49,8 +49,8 @@ Tracks your coding sessions, editor and language usage, and helps you understand
   Sign in with email/password or GitHub OAuth. All data syncs across devices via Supabase.
 - **Connection Status:**  
   Live indicator (Online / Offline / Limited) with graceful degradation.
-- **Global Hotkeys:**  
-  Control tracking (start, pause, stop) from anywhere and switch between tabs using keyboard shortcuts.
+- **Hotkeys & Tray:**  
+  Start/stop and pause tracking and switch tabs with in-app shortcuts (Ctrl+R, Ctrl+P, Ctrl+1–8), or from the tray icon. Toggle incognito from any app with Ctrl+Alt+Shift+I.
 - **Customizable Themes:**  
   Switch between dark and light mode, pick custom accent colors for each theme. Settings sync across devices.
 - **Data Export:**  

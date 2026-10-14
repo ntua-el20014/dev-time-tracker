@@ -1,4 +1,5 @@
 import { safeIpcInvoke } from "../utils";
+import { getLocalDateString } from "../../src/utils/timeFormat";
 import { showInAppNotification } from "./Notifications";
 
 interface BillableHoursSummary {
@@ -32,8 +33,8 @@ function getMonthBounds(date: Date) {
       month: "long",
       year: "numeric",
     }),
-    startDate: startDate.toISOString().split("T")[0],
-    endDate: endDate.toISOString().split("T")[0],
+    startDate: getLocalDateString(startDate),
+    endDate: getLocalDateString(endDate),
   };
 }
 
@@ -208,8 +209,8 @@ export async function renderEarningsWidget(): Promise<HTMLElement> {
         totalBillableHours: 0,
         totalBillableSessions: 0,
         byProject: [],
-        startDate: new Date().toISOString().split("T")[0],
-        endDate: new Date().toISOString().split("T")[0],
+        startDate: getLocalDateString(),
+        endDate: getLocalDateString(),
       },
     });
 

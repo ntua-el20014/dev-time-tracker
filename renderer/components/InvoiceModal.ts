@@ -1,4 +1,5 @@
 import { safeIpcInvoke } from "../utils/ipcHelpers";
+import { getLocalDateString } from "../../src/utils/timeFormat";
 import {
   generateInvoicePDF,
   downloadInvoicePDF,
@@ -46,13 +47,13 @@ export async function showInvoiceGenerationModal(
             <input 
               type="date" 
               id="invoice-start-date" 
-              value="${thirtyDaysAgo.toISOString().split("T")[0]}"
+              value="${getLocalDateString(thirtyDaysAgo)}"
             />
             <span>to</span>
             <input 
               type="date" 
               id="invoice-end-date" 
-              value="${today.toISOString().split("T")[0]}"
+              value="${getLocalDateString(today)}"
             />
           </div>
         </div>

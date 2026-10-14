@@ -212,9 +212,16 @@ describe("timeTracking", () => {
       });
 
       const gteCalls = getCallsFor("gte");
-      expect(gteCalls[0].args).toEqual(["start_time", "2025-01-01"]);
+      // Date-only bounds are expanded to the user's local day
+      expect(gteCalls[0].args).toEqual([
+        "start_time",
+        new Date("2025-01-01T00:00:00").toISOString(),
+      ]);
       const lteCalls = getCallsFor("lte");
-      expect(lteCalls[0].args).toEqual(["start_time", "2025-01-31"]);
+      expect(lteCalls[0].args).toEqual([
+        "start_time",
+        new Date("2025-01-31T23:59:59.999").toISOString(),
+      ]);
     });
 
     it("applies project filter", async () => {
@@ -401,6 +408,34 @@ describe("timeTracking", () => {
       expect(insertArg.project_id).toBe("proj-1");
     });
 
+    it("stores end_time alongside active duration when provided", async () => {
+      mockResult({ data: { id: "s1" }, error: null });
+
+      await addSession(
+        "user-1",
+        "2025-01-15T10:00:00.000Z",
+        1800, // 30 min active
+        "Session",
+        undefined,
+        undefined,
+        undefined,
+        false,
+        "2025-01-15T11:00:00.000Z", // 60 min wall clock (30 min paused)
+      );
+
+      const insertArg = getCallsFor("insert")[0].args[0];
+      expect(insertArg.duration).toBe(1800);
+      expect(insertArg.end_time).toBe("2025-01-15T11:00:00.000Z");
+    });
+
+    it("leaves end_time null when not provided", async () => {
+      mockResult({ data: { id: "s1" }, error: null });
+
+      await addSession("user-1", "2025-01-15T10:00:00.000Z", 1800, "Session");
+
+      expect(getCallsFor("insert")[0].args[0].end_time).toBeNull();
+    });
+
     it("calls setSessionTagsByNames when tags provided", async () => {
       const session = { id: "s1", user_id: "user-1" };
       mockResult({ data: session, error: null });
@@ -437,9 +472,16 @@ describe("timeTracking", () => {
 
       expect(result).toHaveLength(1);
       const gteCalls = getCallsFor("gte");
-      expect(gteCalls[0].args).toEqual(["start_time", "2025-01-01"]);
+      // Date-only bounds are expanded to the user's local day
+      expect(gteCalls[0].args).toEqual([
+        "start_time",
+        new Date("2025-01-01T00:00:00").toISOString(),
+      ]);
       const lteCalls = getCallsFor("lte");
-      expect(lteCalls[0].args).toEqual(["start_time", "2025-01-31"]);
+      expect(lteCalls[0].args).toEqual([
+        "start_time",
+        new Date("2025-01-31T23:59:59.999").toISOString(),
+      ]);
     });
 
     it("returns empty array on null data", async () => {

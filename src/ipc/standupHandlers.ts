@@ -4,6 +4,7 @@ import * as usageLogs from "../supabase/usageLogs";
 import { getCurrentUser } from "../supabase/api";
 import { supabase } from "../supabase/config";
 import { logError } from "../utils/errorHandler";
+import { toLocalDateString } from "../utils/timeFormat";
 
 export interface StandupData {
   dateRange: { start: string; end: string };
@@ -139,7 +140,7 @@ ipcMain.handle(
         .slice(0, 5)
         .map((s) => ({
           title: s.title || "Untitled Session",
-          date: s.start_time ? s.start_time.split("T")[0] : "unknown",
+          date: s.start_time ? toLocalDateString(s.start_time) : "unknown",
           durationMinutes: Math.round((s.duration || 0) / 60),
           project: s.project_id ? projectMap[s.project_id] : undefined,
         }));

@@ -96,6 +96,10 @@ jobs:
 
       - name: Create distributables
         run: npm run make
+        env:
+          # Baked into the bundle at build time (see webpack.plugins.ts).
+          # Empty secret = Sentry stays disabled in the build.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 
       - name: Create release (draft by default) and upload artifacts
         uses: ncipollo/release-action@v1

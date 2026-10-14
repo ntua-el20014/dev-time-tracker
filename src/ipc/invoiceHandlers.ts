@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import { getCurrentUser } from "../supabase/api";
 import { supabase } from "../supabase/client";
+import { localDayStartISO, localDayEndISO } from "../utils/timeFormat";
 
 // Get billable sessions for projects in a date range
 ipcMain.handle(
@@ -19,15 +20,13 @@ ipcMain.handle(
       const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
-      const startDate = new Date(filters.startDate);
-      const endDate = new Date(filters.endDate);
 
       let query = supabase
         .from("time_tracking_sessions")
         .select("*")
         .eq("user_id", user.id)
-        .gte("start_time", startDate.toISOString())
-        .lte("start_time", endDate.toISOString());
+        .gte("start_time", localDayStartISO(filters.startDate))
+        .lte("start_time", localDayEndISO(filters.endDate));
 
       // Filter by project
       if (filters.projectId) {
@@ -92,8 +91,6 @@ ipcMain.handle(
       if (profileError) throw profileError;
       const userOrgId = userProfile?.org_id;
 
-      const dateStart = new Date(startDate);
-      const dateEnd = new Date(endDate);
 
       // Get user's sessions grouped by project
       const { data: sessions, error: sessionsError } = await supabase
@@ -101,8 +98,8 @@ ipcMain.handle(
         .select("id, project_id, duration, start_time, description")
         .eq("user_id", user.id)
         .eq("is_billable", true)
-        .gte("start_time", dateStart.toISOString())
-        .lte("start_time", dateEnd.toISOString());
+        .gte("start_time", localDayStartISO(startDate))
+        .lte("start_time", localDayEndISO(endDate));
 
       if (sessionsError) throw sessionsError;
 

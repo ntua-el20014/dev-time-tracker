@@ -123,7 +123,10 @@ CREATE TABLE daily_usage_summary (
     time_spent_seconds INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(user_id, date, app_name, language)
+    -- NULLS NOT DISTINCT: language is NULL for browsers/dev tools, and the
+    -- upsert in update_daily_usage_summary() must still match (Postgres 15+)
+    CONSTRAINT daily_usage_summary_unique_day_app_lang
+        UNIQUE NULLS NOT DISTINCT (user_id, date, app_name, language)
 );
 
 -- =====================================================
@@ -628,3 +631,9 @@ CREATE TRIGGER set_session_org_id_trigger
 BEFORE INSERT ON time_tracking_sessions
 FOR EACH ROW
 EXECUTE FUNCTION set_session_org_id();
+
+-- Trigger to auto-set org_id on usage logs
+CREATE TRIGGER set_usage_log_org_id_trigger
+BEFORE INSERT ON usage_logs
+FOR EACH ROW
+EXECUTE FUNCTION set_usage_log_org_id();

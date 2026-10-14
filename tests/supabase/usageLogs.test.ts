@@ -62,6 +62,42 @@ describe("usageLogs", () => {
       expect(rpcCalls[0].args[0]).toBe("update_daily_usage_summary");
     });
 
+    it("keeps the icon off the per-tick row and sends it to the summary", async () => {
+      mockResult({ data: { id: "log-1" }, error: null });
+
+      await logUsage("user-1", "VS Code", "main.ts", null, null, "data:icon");
+
+      const insertArg = getCallsFor("insert")[0].args[0];
+      expect(insertArg).not.toHaveProperty("icon_url");
+      const rpcArgs = getCallsFor("rpc")[0].args[1];
+      expect(rpcArgs.p_icon_url).toBe("data:icon");
+    });
+
+    it("files the summary under the local day, not the UTC day", async () => {
+      const originalTZ = process.env.TZ;
+      process.env.TZ = "Europe/Athens"; // UTC+3 in October
+      try {
+        mockResult({ data: { id: "log-1" }, error: null });
+
+        // 00:30 local on Oct 14 = 21:30 UTC on Oct 13
+        await logUsage(
+          "user-1",
+          "VS Code",
+          "main.ts",
+          null,
+          null,
+          null,
+          10,
+          "2026-10-13T21:30:00.000Z",
+        );
+
+        const rpcArgs = getCallsFor("rpc")[0].args[1];
+        expect(rpcArgs.p_date).toBe("2026-10-14");
+      } finally {
+        process.env.TZ = originalTZ;
+      }
+    });
+
     it("throws if insert fails", async () => {
       mockResult({ data: null, error: { message: "Insert failed" } });
 
