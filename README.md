@@ -337,6 +337,10 @@ Commits and pushes to `main` will NOT auto-publish the app — publishing only h
 | `npm run make`                | Package into distributable (platform installer) |
 | `npm run package`             | Package without creating installer              |
 | `npm run rebuild`             | Rebuild native modules for Electron             |
+| `npm test`                    | Unit tests (vitest)                             |
+| `npm run test:db`             | Check `database/schema.sql` in an in-process Postgres |
+| `npm run test:smoke`          | Smoke-test the packaged app (after `npm run package`) |
+| `npm run test:e2e`            | End-to-end test against Supabase with two test accounts from `.env.local` |
 
 ### Troubleshooting
 

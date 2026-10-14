@@ -19,7 +19,10 @@
     "clean": "rimraf dist .webpack out",
     "build": "npm run type-check && electron-forge make",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:db": "node scripts/db-test.mjs",
+    "test:smoke": "node scripts/smoke.mjs",
+    "test:e2e": "node scripts/e2e.mjs"
   },
   "keywords": [],
   "author": {
@@ -31,6 +34,7 @@
     "node": "22.15.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.2.17",
     "@electron-forge/cli": "^7.8.1",
     "@electron-forge/maker-deb": "^7.8.1",
     "@electron-forge/maker-rpm": "^7.8.1",

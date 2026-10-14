@@ -11,7 +11,7 @@ const onboardingSteps: OnboardingStep[] = [
   {
     title: "Welcome to Dev Time Tracker!",
     content:
-      "Track your coding sessions, analyze your productivity, and understand your development workflow - all while keeping your data completely private and local.",
+      "Track your coding sessions, analyze your productivity, and understand your development workflow. Your data syncs securely to your account, so it follows you across devices.",
     icon: "🚀",
   },
   {

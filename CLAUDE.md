@@ -17,6 +17,9 @@ npm test                  # vitest (~300 tests, mocked Supabase — ~10s)
 npm run type-check        # main + renderer tsconfigs
 npm run lint              # eslint
 npm run make              # installers
+npm run test:db           # database/schema.sql + reset.sql in PGlite (no Supabase needed)
+npm run test:smoke        # packaged app, isolated profile, over CDP (run `npm run package` first)
+npm run test:e2e          # packaged app vs real Supabase, 2 test accounts from .env.local
 ```
 Baseline as of 2026-10-14: tests, type-check and lint are all green. Keep them green.
 
