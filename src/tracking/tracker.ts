@@ -319,6 +319,8 @@ async function saveSession(
       isBillable,
       endTime,
     );
+    // Lets the renderer refresh session-based views
+    send("session-saved");
   } catch (err) {
     if (queueOnAnyError || classifyError(err) === "network") {
       // Queue locally so the session is not lost

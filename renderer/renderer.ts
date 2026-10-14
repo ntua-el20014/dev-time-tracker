@@ -218,9 +218,28 @@ async function setupRoleBasedTabVisibility() {
   }
 }
 
+/**
+ * Mark tabs as needing a re-render and refresh the active one right away
+ * if it is among them (inactive tabs re-render on their next visit).
+ */
+function refreshTabs(...tabIds: string[]) {
+  markTabsDirty(...tabIds);
+  const active = document.querySelector(".tab.active") as HTMLElement | null;
+  const activeId = active?.getAttribute("data-tab");
+  if (active && activeId && tabIds.includes(activeId)) {
+    active.dispatchEvent(new Event("click"));
+  }
+}
+
 window.addEventListener("organization:changed", () => {
   clearRoleCache();
   void setupRoleBasedTabVisibility();
+  refreshTabs("teamAnalytics", "projects");
+});
+
+// A session was saved: everything that lists or sums sessions is stale
+ipcRenderer.on("session-saved", () => {
+  refreshTabs("dashboard", "summary", "projects", "teamAnalytics");
 });
 
 function initUI() {
