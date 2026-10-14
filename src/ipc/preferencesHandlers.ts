@@ -1,7 +1,10 @@
 import { ipcMain } from "electron";
 import * as userPreferences from "../supabase/userPreferences";
 import { getCurrentUser } from "../supabase/api";
-import { updateIdleTimeout, updateTrackingInterval } from "../index";
+import {
+  updateIdleTimeout,
+  updateTrackingInterval,
+} from "../tracking/tracker";
 import { logError } from "../utils/errorHandler";
 
 /**

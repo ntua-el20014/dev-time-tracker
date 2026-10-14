@@ -5,6 +5,7 @@ import {
   showConfirmationModal,
   showModal,
 } from "./components";
+import { escapeHtml } from "./utils/domUtils";
 import {
   getCurrentOrganization,
   getOrganizationMembers,
@@ -2123,11 +2124,6 @@ function calculateOrgStats() {
   };
 }
 
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
 
 function formatTimeAgo(timestamp: string): string {
   const now = new Date();

@@ -16,8 +16,24 @@ import {
   renderCustomChartsSection,
   type CustomChart,
 } from "../../renderer/utils/chartHelpers";
+import { escapeHtml } from "../../renderer/utils/domUtils";
 
 describe("renderer core utilities", () => {
+  describe("escapeHtml", () => {
+    it("escapes quotes so values can't break out of attributes", () => {
+      const evil = `x" onerror="alert(1)`;
+      expect(escapeHtml(evil)).toBe("x&quot; onerror=&quot;alert(1)");
+      expect(escapeHtml("it's")).toBe("it&#39;s");
+    });
+
+    it("escapes markup characters and handles empty values", () => {
+      expect(escapeHtml("<b>a & b</b>")).toBe("&lt;b&gt;a &amp; b&lt;/b&gt;");
+      expect(escapeHtml(null)).toBe("");
+      expect(escapeHtml(undefined)).toBe("");
+      expect(escapeHtml(42)).toBe("42");
+    });
+  });
+
   describe("colorUtils", () => {
     it("picks readable text colors for light and dark backgrounds", () => {
       expect(getOptimalTextColor("#ffffff")).toBe("#000000");

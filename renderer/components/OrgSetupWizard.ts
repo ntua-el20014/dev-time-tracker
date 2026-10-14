@@ -5,6 +5,7 @@
  */
 
 import { showInAppNotification } from "./Notifications";
+import { escapeHtml } from "../utils/domUtils";
 import {
   getCurrentOrganization,
   createTeamOrganization,
@@ -444,8 +445,3 @@ function renderDoneStep(content: HTMLDivElement, state: WizardState): void {
   });
 }
 
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}

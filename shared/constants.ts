@@ -20,14 +20,8 @@ export const CHART_COLORS = [
   "#4bc0c0",
 ];
 
-export const DEFAULT_ACCENT_COLORS = {
-  light: "#007acc",
-  dark: "#0078d4",
-};
-
-// File paths
+// Local data dir under the user's home (offline queue)
 export const CONFIG_DIR = ".dev-time-tracker";
-export const CONFIG_FILE = "config.json";
 
 // Themes
 export const THEMES = ["light", "dark"] as const;

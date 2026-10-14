@@ -1,3 +1,5 @@
+import { escapeHtml } from "../utils/domUtils";
+
 type SidebarNotif = {
   id: string;
   title?: string;
@@ -40,8 +42,8 @@ function render() {
     item.dataset.id = n.id;
     item.innerHTML = `
       <div class="ns-item-body">
-        <div class="ns-item-title">${n.title ?? ""}</div>
-        <div class="ns-item-message">${n.message}</div>
+        <div class="ns-item-title">${escapeHtml(n.title)}</div>
+        <div class="ns-item-message">${escapeHtml(n.message)}</div>
       </div>
       <button class="ns-item-close" aria-label="Dismiss">×</button>
     `;

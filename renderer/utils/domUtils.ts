@@ -1,8 +1,19 @@
-// Escapes HTML special characters
-export function escapeHtml(text: string) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+/**
+ * Escapes text for use in HTML — both element content and quoted attribute
+ * values. Quotes must be escaped too: the renderer runs with Node access, so
+ * a value breaking out of an attribute (e.g. a crafted username) means code
+ * execution. This is the only escapeHtml in the renderer; don't add copies.
+ */
+export function escapeHtml(text: string | number | null | undefined): string {
+  return String(text ?? "").replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
 }
 
 // =====================================================

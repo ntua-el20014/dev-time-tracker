@@ -1,4 +1,5 @@
 import { formatTimeSpent } from "../src/utils/timeFormat";
+import { escapeHtml } from "./utils/domUtils";
 import {
   safeIpcInvoke,
   withLoading,
@@ -9,11 +10,6 @@ import {
 import { getLangIconUrl } from "../src/utils/langIconUrl";
 import { showModal, showInAppNotification } from "./components";
 
-function escapeHtml(text: string) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
 
 export async function renderLogs(date?: string) {
   const container = document.querySelector("#logTable")?.parentElement;

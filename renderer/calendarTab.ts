@@ -1,4 +1,6 @@
 import { ScheduledSession } from "../shared/types";
+import { getTrackingState, startTracking } from "./trackingControls";
+import { escapeHtml } from "./utils/domUtils";
 import { safeIpcInvoke, withLoading } from "./utils";
 import { showInAppNotification, showConfirmationModal } from "./components";
 
@@ -132,14 +134,14 @@ function renderCalendarGrid(): string {
                   (session) => `
                 <div class="session-indicator ${session.status}" 
                      data-session-id="${session.id}" 
-                     title="${session.title}">
+                     title="${escapeHtml(session.title)}">
                   <span class="session-time">${new Date(
                     session.scheduled_datetime,
                   ).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}</span>
-                  <span class="session-title">${session.title}</span>
+                  <span class="session-title">${escapeHtml(session.title)}</span>
                 </div>
               `,
                 )
@@ -182,7 +184,7 @@ function renderUpcomingSessions(): string {
       (session) => `
     <div class="upcoming-session" data-session-id="${session.id}">
       <div class="session-info">
-        <div class="session-title">${session.title}</div>
+        <div class="session-title">${escapeHtml(session.title)}</div>
         <div class="session-datetime">
           ${new Date(session.scheduled_datetime).toLocaleDateString(
             "en-GB",
@@ -194,7 +196,7 @@ function renderUpcomingSessions(): string {
         </div>
         ${
           session.description
-            ? `<div class="session-description">${session.description}</div>`
+            ? `<div class="session-description">${escapeHtml(session.description)}</div>`
             : ""
         }
         ${
@@ -613,10 +615,10 @@ async function showSessionDetailsModal(sessionId: string | number) {
         <button class="modal-close-btn calendar-details-close-btn">&times;</button>
         <h3>Session Details</h3>
         <div>
-          <p><strong>Title:</strong> ${session.title}</p>
+          <p><strong>Title:</strong> ${escapeHtml(session.title)}</p>
           ${
             session.description
-              ? `<p><strong>Description:</strong> ${session.description}</p>`
+              ? `<p><strong>Description:</strong> ${escapeHtml(session.description)}</p>`
               : ""
           }
           <p><strong>Date & Time:</strong> ${sessionDate.toLocaleDateString(
@@ -733,58 +735,45 @@ async function startSession(
   sessionId: string | number,
   session: ScheduledSession,
 ) {
-  // Close modal
   closeModal();
 
-  // Wait for modal cleanup to complete
-  setTimeout(() => {
-    // Re-setup record and pause buttons to ensure fresh event listeners
-    if ((window as any).setupRecordAndPauseBtns) {
-      (window as any).setupRecordAndPauseBtns();
+  // Starting must never stop a session that is already being recorded
+  if (getTrackingState().isRecording) {
+    showInAppNotification(
+      "A session is already being recorded. Stop it before starting this one.",
+    );
+    return;
+  }
+
+  try {
+    await startTracking();
+  } catch {
+    showInAppNotification("Could not start tracking. Please try again.");
+    return;
+  }
+  showInAppNotification(`Started session: ${session.title}`);
+
+  // Mark the scheduled session as completed and refresh the calendar
+  try {
+    await safeIpcInvoke(
+      "update-scheduled-session",
+      [sessionId, { status: "completed" }],
+      { fallback: null },
+    );
+    // Update local state instead of full re-render
+    const idx = scheduledSessions.findIndex(
+      (s) => String(s.id) === String(sessionId),
+    );
+    if (idx >= 0) {
+      scheduledSessions[idx] = {
+        ...scheduledSessions[idx],
+        status: "completed",
+      };
     }
-
-    // Wait for button setup, then trigger the record button
-    setTimeout(() => {
-      const recordBtn = document.getElementById(
-        "recordBtn",
-      ) as HTMLButtonElement;
-      if (recordBtn) {
-        recordBtn.click();
-        showInAppNotification(`Started session: ${session.title}`);
-
-        // Mark the scheduled session as completed and refresh calendar once
-        (async () => {
-          try {
-            await safeIpcInvoke(
-              "update-scheduled-session",
-              [
-                sessionId,
-                {
-                  status: "completed",
-                },
-              ],
-              { fallback: null },
-            );
-            // Update local state instead of full re-render
-            const idx = scheduledSessions.findIndex(
-              (s) => String(s.id) === String(sessionId),
-            );
-            if (idx >= 0) {
-              scheduledSessions[idx] = {
-                ...scheduledSessions[idx],
-                status: "completed",
-              };
-            }
-            await renderCalendar();
-          } catch (err) {
-            // Silent fail - the session start is more important than updating status
-          }
-        })();
-      } else {
-        showInAppNotification("Could not find record button");
-      }
-    }, 150);
-  }, 200);
+    await renderCalendar();
+  } catch (err) {
+    // Silent fail - the session start is more important than updating status
+  }
 }
 
 async function deleteScheduledSessionHandler(sessionId: string | number) {

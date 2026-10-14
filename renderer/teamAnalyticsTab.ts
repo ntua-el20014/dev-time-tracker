@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { safeIpcInvoke, withLoading } from "./utils";
+import { escapeHtml } from "./utils/domUtils";
 import { showNotification } from "./components";
 import { getLocalDateString } from "./utils/dateUtils";
 import { exportOrgAnalyticsReport } from "./utils/orgReportExporter";
@@ -180,7 +181,7 @@ async function renderFilters() {
               (project) => `
             <label style="display: block; padding: 8px 12px; cursor: pointer;">
               <input type="checkbox" class="project-checkbox" value="${project.id}" />
-              ${project.name}
+              ${escapeHtml(project.name)}
             </label>
           `,
             )
@@ -241,7 +242,7 @@ async function renderFilters() {
             (member) => `
           <label style="display: block; padding: 8px 12px; cursor: pointer;">
             <input type="checkbox" class="member-checkbox" value="${member.id}" />
-            ${member.username}
+            ${escapeHtml(member.username)}
           </label>
         `,
           )
@@ -491,7 +492,7 @@ function renderCharts(
           .map(
             (p) => `
           <li style="padding: 6px 0; font-size: 0.9em;">
-            <strong>${p.project_name}:</strong> ${p.total_hours.toFixed(1)}h (${p.session_count} sessions, ${p.active_members} members)
+            <strong>${escapeHtml(p.project_name)}:</strong> ${p.total_hours.toFixed(1)}h (${p.session_count} sessions, ${p.active_members} members)
           </li>
         `,
           )
@@ -554,7 +555,7 @@ function renderMemberTable(members: MemberActivity[]) {
             .map(
               (m) => `
             <tr>
-              <td><strong>${m.username}</strong></td>
+              <td><strong>${escapeHtml(m.username)}</strong></td>
               <td>${m.total_hours.toFixed(1)}</td>
               <td>${m.session_count}</td>
               <td>${m.active_projects}</td>

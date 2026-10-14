@@ -1,4 +1,3 @@
-import * as path from "path";
 import type { Configuration } from "webpack";
 import { rules } from "./webpack.rules";
 import { plugins } from "./webpack.plugins";
@@ -24,13 +23,11 @@ rules.push({
   },
 });
 
+// Entry points and output paths come from the Forge WebpackPlugin config in
+// forge.config.ts. Don't set output.publicPath here: Forge uses "/" for the
+// dev server and leaves it unset ("auto") for packaged builds, where the page
+// is loaded from file:// and an absolute "/" path resolves to the drive root.
 export const rendererConfig: Configuration = {
-  entry: "./renderer/renderer.ts", // <- Your renderer entry point
-  output: {
-    filename: "renderer.js",
-    path: path.resolve(__dirname, "../dist"),
-    publicPath: "/", // Make files available at http://localhost:3000/
-  },
   module: { rules },
   plugins,
   resolve: {

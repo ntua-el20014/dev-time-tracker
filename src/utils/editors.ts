@@ -142,14 +142,6 @@ function buildExecLookup(userId?: string): Map<string, AppMatch> {
   return execLookup;
 }
 
-/** Set / update the user whose custom apps are merged into the lookup. */
-export function setCustomAppsUser(userId: string | null): void {
-  if (userId !== loadedUserId) {
-    resetEditorCache();
-    loadedUserId = userId;
-  }
-}
-
 /**
  * Look up an application by its executable name (exact match).
  * Returns the app info and its category, or null if unrecognized.
@@ -158,22 +150,6 @@ export function matchApp(execName: string, userId?: string): AppMatch | null {
   if (!execName) return null;
   const lookup = buildExecLookup(userId);
   return lookup.get(execName.toLowerCase()) || null;
-}
-
-/**
- * Legacy compatibility wrapper.
- * Returns an Editor-like object if the execName matches an editor.
- */
-export function getEditorByExecutable(
-  execName: string,
-): { name: string } | undefined {
-  const match = matchApp(execName);
-  if (!match) return undefined;
-  // For backward compat, only return editors (other categories handled by trackActiveWindow)
-  if (match.category === "editor") {
-    return { name: match.name };
-  }
-  return undefined;
 }
 
 /**

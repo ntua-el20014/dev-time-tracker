@@ -17,8 +17,6 @@ vi.mock("../../src/supabase/tags", () => ({
 }));
 
 import {
-  startSession,
-  endSession,
   getSmallSessions,
   deleteSessions,
   getAllSessions,
@@ -33,111 +31,6 @@ describe("timeTracking", () => {
   beforeEach(() => {
     resetMockState();
     vi.clearAllMocks();
-  });
-
-  // ───────────── startSession ─────────────
-  describe("startSession", () => {
-    it("inserts a session and returns it", async () => {
-      const mockSession = {
-        id: "session-1",
-        user_id: "user-1",
-        start_time: "2025-01-15T10:00:00.000Z",
-        duration: 0,
-        title: "Untitled Session",
-        is_billable: false,
-      };
-      mockResult({ data: mockSession, error: null });
-
-      const result = await startSession("user-1");
-
-      expect(result).toEqual(mockSession);
-      const fromCalls = getCallsFor("from");
-      expect(fromCalls[0].args[0]).toBe("time_tracking_sessions");
-      const insertCalls = getCallsFor("insert");
-      expect(insertCalls.length).toBe(1);
-    });
-
-    it("includes description when provided", async () => {
-      const mockSession = {
-        id: "session-2",
-        user_id: "user-1",
-        description: "Working on feature X",
-        title: "Working on feature X",
-      };
-      mockResult({ data: mockSession, error: null });
-
-      const result = await startSession(
-        "user-1",
-        undefined,
-        "Working on feature X",
-      );
-
-      expect(result.description).toBe("Working on feature X");
-      const insertCalls = getCallsFor("insert");
-      const insertArg = insertCalls[0].args[0];
-      expect(insertArg.description).toBe("Working on feature X");
-      expect(insertArg.title).toBe("Working on feature X");
-    });
-
-    it("includes project_id when provided", async () => {
-      mockResult({
-        data: { id: "session-3", project_id: "proj-1" },
-        error: null,
-      });
-
-      await startSession("user-1", "proj-1");
-
-      const insertCalls = getCallsFor("insert");
-      expect(insertCalls[0].args[0].project_id).toBe("proj-1");
-    });
-
-    it("throws on supabase error", async () => {
-      mockResult({
-        data: null,
-        error: { message: "Insert failed", code: "42P01" },
-      });
-
-      await expect(startSession("user-1")).rejects.toEqual({
-        message: "Insert failed",
-        code: "42P01",
-      });
-    });
-  });
-
-  // ───────────── endSession ─────────────
-  describe("endSession", () => {
-    it("fetches session, calculates duration, and updates", async () => {
-      const startTime = new Date(Date.now() - 3600 * 1000).toISOString(); // 1 hour ago
-      // First call: select start_time
-      mockResult({
-        data: { start_time: startTime },
-        error: null,
-      });
-      // Second call: update with duration
-      mockResult({
-        data: { id: "session-1", duration: 3600 },
-        error: null,
-      });
-
-      const result = await endSession("session-1");
-
-      expect(result.duration).toBeGreaterThanOrEqual(3599); // allow 1s tolerance
-      const fromCalls = getCallsFor("from");
-      expect(fromCalls.length).toBe(2);
-      expect(fromCalls[0].args[0]).toBe("time_tracking_sessions");
-    });
-
-    it("throws if session not found", async () => {
-      mockResult({
-        data: null,
-        error: { message: "Not found", code: "PGRST116" },
-      });
-
-      await expect(endSession("nonexistent")).rejects.toEqual({
-        message: "Not found",
-        code: "PGRST116",
-      });
-    });
   });
 
   // ───────────── getSmallSessions ─────────────

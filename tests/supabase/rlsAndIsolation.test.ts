@@ -21,7 +21,7 @@ vi.mock("../../src/supabase/config", async () => {
   return { supabase: mockSupabase };
 });
 
-// Mock only setSessionTagsByNames to avoid side effects in addSession/startSession
+// Mock only setSessionTagsByNames to avoid side effects in addSession
 // but keep getAllTags and other real exports
 vi.mock("../../src/supabase/tags", async (importOriginal) => {
   const actual =
@@ -32,7 +32,7 @@ vi.mock("../../src/supabase/tags", async (importOriginal) => {
   };
 });
 
-import { getAllSessions, startSession } from "../../src/supabase/timeTracking";
+import { getAllSessions, addSession } from "../../src/supabase/timeTracking";
 import { getAllTags } from "../../src/supabase/tags";
 import { getDailyGoal, getAllDailyGoals } from "../../src/supabase/goals";
 import { getUsageSummary, logUsage } from "../../src/supabase/usageLogs";
@@ -66,9 +66,9 @@ describe("RLS: User-scoped data isolation", () => {
       expect(eqCalls[0].args).toEqual(["user_id", "user-A"]);
     });
 
-    it("startSession embeds user_id in insert payload", async () => {
+    it("addSession embeds user_id in insert payload", async () => {
       mockResult({ data: { id: "s1" }, error: null });
-      await startSession("user-A");
+      await addSession("user-A", "2025-01-15T10:00:00.000Z", 60, "Session");
 
       const insertCalls = getCallsFor("insert");
       expect(insertCalls[0].args[0].user_id).toBe("user-A");

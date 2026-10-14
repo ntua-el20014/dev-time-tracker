@@ -21,6 +21,7 @@ import { BrowserWindow } from "electron";
 import { CONFIG_DIR } from "../../shared/constants";
 import { logUsage } from "../supabase/usageLogs";
 import { addSession } from "../supabase/timeTracking";
+import { supabase } from "../supabase/config";
 import { logError, classifyError } from "./errorHandler";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -247,24 +248,42 @@ export function enqueueSession(
 }
 
 /**
- * Attempt to flush all queued items to Supabase.
- * Items are processed in order; the first network failure aborts the run
- * (remaining items stay queued for the next attempt).
+ * Attempt to flush the signed-in user's queued items to Supabase.
+ * Items are processed in order; the first network/auth failure aborts the
+ * run (remaining items stay queued for the next attempt).
  *
  * Returns the number of items successfully flushed.
  */
 export async function flush(): Promise<number> {
   if (isSyncing || queue.length === 0) return 0;
 
+  // Only flush while signed in, and only the signed-in user's items.
+  // Without a session every write fails RLS, which would otherwise be
+  // treated as permanent and discard the queued data.
+  let sessionUserId: string | undefined;
+  try {
+    const { data } = await supabase.auth.getSession();
+    sessionUserId = data.session?.user.id;
+  } catch {
+    sessionUserId = undefined;
+  }
+  if (!sessionUserId) return 0;
+
   isSyncing = true;
   lastError = null;
   broadcastSyncStatus();
 
   let flushed = 0;
+  let i = 0;
 
-  // Process a copy so we can safely mutate the queue
-  while (queue.length > 0) {
-    const item = queue[0];
+  while (i < queue.length) {
+    const item = queue[i];
+
+    // Another account's data waits until that account signs in again
+    if (item.data.userId !== sessionUserId) {
+      i++;
+      continue;
+    }
 
     try {
       if (item.type === "usage_log") {
@@ -295,22 +314,25 @@ export async function flush(): Promise<number> {
       }
 
       // Success — remove from queue
-      queue.shift();
+      queue.splice(i, 1);
       keySet.delete(item.key);
       flushed++;
     } catch (err) {
       const category = classifyError(err);
 
-      if (category === "network") {
-        // Still offline — stop flushing, keep remaining items
-        lastError = "Network unavailable — will retry automatically.";
+      if (category === "network" || category === "auth") {
+        // Offline or session problem — stop, keep remaining items
+        lastError =
+          category === "network"
+            ? "Network unavailable — will retry automatically."
+            : "Not signed in — will retry after sign-in.";
         break;
       }
 
-      // Non-network error (e.g., auth, duplicate row, constraint violation)
-      // Log and discard the item so it doesn't block the queue forever.
+      // Other errors (e.g. duplicate row, constraint violation) won't
+      // succeed on retry. Log and discard so they don't block the queue.
       logError(`offlineQueue.flush [${item.type}] — discarding`, err);
-      queue.shift();
+      queue.splice(i, 1);
       keySet.delete(item.key);
       flushed++; // count as "processed" even though it failed permanently
     }

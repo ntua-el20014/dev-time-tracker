@@ -1,4 +1,5 @@
 import { safeIpcInvoke } from "../utils";
+import { escapeHtml } from "../utils/domUtils";
 import { showConfirmationModal } from "./Modals";
 import { showInAppNotification } from "./Notifications";
 
@@ -241,8 +242,3 @@ export function showSessionReviewPanel(onComplete?: () => void) {
   fetchSessions();
 }
 
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}

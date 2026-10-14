@@ -554,7 +554,10 @@ export async function showEditSessionModal(
           <option value="">Add existing tag</option>
           ${allTags
             .filter((t: Tag) => !selectedTags.includes(t.name))
-            .map((t: Tag) => `<option value="${t.name}">${t.name}</option>`)
+            .map(
+              (t: Tag) =>
+                `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`,
+            )
             .join("")}
         </select>
         <label>Tags:</label>
@@ -595,7 +598,10 @@ export async function showEditSessionModal(
         `<option value="">Add existing tag</option>` +
         allTags
           .filter((t: Tag) => !selectedTags.includes(t.name))
-          .map((t: Tag) => `<option value="${t.name}">${t.name}</option>`)
+          .map(
+              (t: Tag) =>
+                `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`,
+            )
           .join("");
     }
 

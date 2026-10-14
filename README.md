@@ -355,9 +355,15 @@ Commits and pushes to `main` will NOT auto-publish the app — publishing only h
 
 ```
 src/                          # Main process (Electron backend)
-  index.ts                      # App entry: window creation, tracking loop, IPC registration
+  index.ts                      # App entry: window, tray, auth sync, OAuth, IPC registration
   preload.ts                    # Preload script for secure IPC bridge
-  config.ts                     # App configuration
+  buildEnv.ts                   # Build-time config (getEnv: runtime env, then baked-in values)
+  tracking/                     # Tracking engine (main process owns recording state)
+    tracker.ts                    # Orchestration: timers, idle/lock/sleep, session save, IPC
+    sessionClock.ts               # Pure session timing (active time, pauses)
+    idlePolicy.ts                 # Pure idle pause/resume rules
+    usageSampler.ts               # Foreground window → usage sample
+    usageBatcher.ts               # Batched usage writes (one insert per minute)
   ipc/                          # IPC handlers (invoked by renderer via channels)
     sessionHandlers.ts            # Start/stop/edit/delete sessions
     usageHandlers.ts              # Usage logs and summaries
@@ -391,10 +397,10 @@ src/                          # Main process (Electron backend)
     langMap.ts                    # Language mapping (file extension → language)
     editors.ts                    # Editor detection
     fileOps.ts                    # File operations (CSV/ZIP export helpers)
-    ipcHelp.ts                    # IPC helper functions
 
 renderer/                     # Renderer process (frontend UI)
   renderer.ts                   # Main entry: auth flow, tab initialization, tracking UI
+  trackingControls.ts           # Mirror of main's tracking state + start/stop/pause requests
   theme.ts                      # Theme management and switching
   dashboardTab.ts               # Dashboard: calendar, recent activity, quick stats
   summaryTab.ts                 # Summary: charts, sessions, custom analytics
@@ -415,8 +421,6 @@ renderer/                     # Renderer process (frontend UI)
     Pickers.ts                    # Color and date pickers
     Notifications.ts              # Toast notifications
     Onboarding.ts                 # First-run setup wizard
-    AdminPanel.ts                 # Admin data export
-    UserRoleManager.ts            # Role management UI
     OSInfo.ts                     # OS information display
   summary/                      # Summary tab sub-modules
     summaryByDateView.ts          # Group-by-date summary view

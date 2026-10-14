@@ -77,6 +77,15 @@ import {
   addSidebarNotification,
 } from "./components/NotificationSidebar";
 import { updateAccentTextColors } from "./utils/colorUtils";
+import {
+  getTrackingState,
+  onTrackingState,
+  refreshTrackingState,
+  stopTracking,
+  toggleRecording,
+  togglePause,
+  type TrackingState,
+} from "./trackingControls";
 
 // ── Tab dirty-flag system ──────────────────────────────────────────
 // Tracks whether each tab needs re-rendering. A tab is "dirty" when
@@ -268,8 +277,22 @@ function initUI() {
   }
 }
 
-(window as any).isRecording = false;
-(window as any).isPaused = false;
+/** Render the record/pause buttons from main's tracking state. */
+function renderTrackingButtons(state: TrackingState) {
+  const recordBtn = document.getElementById("recordBtn") as HTMLButtonElement;
+  const recordIcon = document.getElementById("recordIcon") as HTMLImageElement;
+  const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
+  const pauseIcon = document.getElementById("pauseIcon") as HTMLImageElement;
+  if (recordBtn && recordIcon) {
+    updateRecordBtn(recordBtn, recordIcon, state.isRecording);
+  }
+  if (pauseBtn && pauseIcon) {
+    pauseBtn.style.display = state.isRecording ? "" : "none";
+    updatePauseBtn(pauseBtn, pauseIcon, state.isPaused);
+  }
+}
+
+onTrackingState(renderTrackingButtons);
 
 function setupRecordAndPauseBtns() {
   // Remove old listeners by replacing buttons with clones
@@ -286,28 +309,13 @@ function setupRecordAndPauseBtns() {
   recordBtnOld.parentNode?.replaceChild(recordBtn, recordBtnOld);
   pauseBtnOld.parentNode?.replaceChild(pauseBtn, pauseBtnOld);
 
-  const recordIcon = document.getElementById("recordIcon") as HTMLImageElement;
-  const pauseIcon = document.getElementById("pauseIcon") as HTMLImageElement;
-
-  if (!recordBtn || !recordIcon || !pauseBtn || !pauseIcon) return;
-
+  // The buttons only ask main for a change; renderTrackingButtons draws the
+  // result when main broadcasts the new state.
   recordBtn.addEventListener("click", async () => {
+    const wasRecording = getTrackingState().isRecording;
     try {
-      if (!(window as any).isRecording) {
-        (window as any).isRecording = true;
-        (window as any).isPaused = false;
-        pauseBtn.style.display = "";
-        updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
-        addBreadcrumb("Session started");
-        await ipcRenderer.invoke("start-tracking");
-      } else {
-        (window as any).isRecording = false;
-        (window as any).isPaused = false;
-        pauseBtn.style.display = "none";
-        addBreadcrumb("Session stopped");
-        await ipcRenderer.invoke("stop-tracking");
-      }
-      updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
+      addBreadcrumb(wasRecording ? "Session stopped" : "Session started");
+      await toggleRecording();
     } catch (err) {
       addBreadcrumb("Tracking toggle failed", { error: String(err) }, "warning");
       showInAppNotification(
@@ -320,16 +328,10 @@ function setupRecordAndPauseBtns() {
 
   pauseBtn.addEventListener("click", async () => {
     try {
-      if (!(window as any).isPaused) {
-        (window as any).isPaused = true;
-        addBreadcrumb("Session paused");
-        await ipcRenderer.invoke("pause-tracking");
-      } else {
-        (window as any).isPaused = false;
-        addBreadcrumb("Session resumed");
-        await ipcRenderer.invoke("resume-tracking");
-      }
-      updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
+      addBreadcrumb(
+        getTrackingState().isPaused ? "Session resumed" : "Session paused",
+      );
+      await togglePause();
     } catch (err) {
       showInAppNotification(
         "Failed to toggle pause. Please try again.",
@@ -339,13 +341,9 @@ function setupRecordAndPauseBtns() {
     }
   });
 
-  updateRecordBtn(recordBtn, recordIcon, (window as any).isRecording);
-  updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
-  pauseBtn.style.display = "none";
+  renderTrackingButtons(getTrackingState());
 }
 
-// Expose the function globally so it can be called from other modules
-(window as any).setupRecordAndPauseBtns = setupRecordAndPauseBtns;
 
 let hotkeyListenerAdded = false;
 
@@ -628,39 +626,8 @@ ipcRenderer.on("session-info-timeout", () => {
   );
 });
 
-// Tray menu Start/Stop and Pause/Resume. Routed through the buttons so the
-// renderer's recording state and the session-info modal stay in sync.
-ipcRenderer.on(
-  "tray-command",
-  (_event: any, command: "toggle-recording" | "toggle-pause") => {
-    const mainUI = document.getElementById("mainUI");
-    if (!mainUI || mainUI.style.display === "none") return; // not signed in
-    const btnId = command === "toggle-recording" ? "recordBtn" : "pauseBtn";
-    const btn = document.getElementById(btnId) as HTMLButtonElement | null;
-    if (btn && btn.style.display !== "none") btn.click();
-  },
-);
-
 ipcRenderer.on("notify", (_event: any, data: { message?: string }) => {
   if (data && data.message) showInAppNotification(data.message);
-});
-
-ipcRenderer.on("auto-paused", () => {
-  (window as any).isPaused = true;
-  const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
-  const pauseIcon = document.getElementById("pauseIcon") as HTMLImageElement;
-  if (pauseBtn && pauseIcon) {
-    updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
-  }
-});
-
-ipcRenderer.on("auto-resumed", () => {
-  (window as any).isPaused = false;
-  const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
-  const pauseIcon = document.getElementById("pauseIcon") as HTMLImageElement;
-  if (pauseBtn && pauseIcon) {
-    updatePauseBtn(pauseBtn, pauseIcon, (window as any).isPaused);
-  }
 });
 
 // ── Incognito Mode ───────────────────────────────────────────────────
@@ -848,6 +815,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       mainUI.style.display = "";
       renderMainUI();
       setupRecordAndPauseBtns();
+      // Main may already be recording (e.g. after a window reload)
+      void refreshTrackingState();
       setupRoleBasedTabVisibility();
     }
     if (landing) landing.style.display = "none";
@@ -1156,30 +1125,12 @@ function stopSessionHealthCheck() {
  * Uses stop-tracking which will prompt for session info (with a 30s timeout fallback).
  */
 async function autoSaveRecordingOnTimeout() {
-  if ((window as any).isRecording) {
-    try {
-      // stop-tracking in main process will save the session (if >= 10s)
-      // with a 30s timeout fallback for the session-info dialog
-      await ipcRenderer.invoke("stop-tracking");
-    } catch (err) {
-      void err;
-    }
-
-    // Reset renderer-side recording state
-    (window as any).isRecording = false;
-    (window as any).isPaused = false;
-
-    const recordBtn = document.getElementById("recordBtn") as HTMLButtonElement;
-    const recordIcon = document.getElementById(
-      "recordIcon",
-    ) as HTMLImageElement;
-    const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
-
-    if (recordBtn && recordIcon) {
-      updateRecordBtn(recordBtn, recordIcon, false);
-    }
-    if (pauseBtn) {
-      pauseBtn.style.display = "none";
-    }
+  if (!getTrackingState().isRecording) return;
+  try {
+    // Main saves the session (if >= 10s) after the session-info prompt;
+    // the buttons update from the state broadcast.
+    await stopTracking();
+  } catch (err) {
+    void err;
   }
 }

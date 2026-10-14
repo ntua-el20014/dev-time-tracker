@@ -1,4 +1,5 @@
 import { applyAccentColor } from "./renderer";
+import { escapeHtml } from "./utils/domUtils";
 import { ipcRenderer } from "electron";
 import {
   renderPercentBar,
@@ -30,11 +31,6 @@ import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
 import { getLangIconUrl } from "../src/utils/langIconUrl";
 import type { Tag, UpdaterState } from "../shared/types";
 
-function escapeHtml(text: string) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
 
 type NotificationSettings = {
   enabled: boolean;
@@ -446,11 +442,11 @@ async function renderSettings(container: HTMLElement) {
               .map(
                 (tag) => `
               <li class="tag-list-item">
-                <span class="tag-label" style="background:${tag.color};">
+                <span class="tag-label" style="background:${escapeHtml(tag.color)};">
                   ${escapeHtml(tag.name)}
                   <span class="tag-color-chip" data-tag="${escapeHtml(
                     tag.name,
-                  )}" style="background:${tag.color};"></span>
+                  )}" style="background:${escapeHtml(tag.color)};"></span>
                 </span>
                 <button class="btn-delete btn-small delete-tag-btn" data-tag="${escapeHtml(
                   tag.name,
@@ -1025,7 +1021,7 @@ async function renderOrganizationSection(container: HTMLElement) {
     leaveBtn.addEventListener("click", () => {
       showConfirmationModal({
         title: "Leave Organization",
-        message: `Are you sure you want to leave "${escapeHtml(org.name)}"? This cannot be undone.`,
+        message: `Are you sure you want to leave "${org.name}"? This cannot be undone.`,
         confirmText: "Leave",
         confirmClass: "btn-delete",
         onConfirm: async () => {
@@ -1136,8 +1132,6 @@ export async function refreshProfile() {
     document.body.classList.remove("light");
     document.documentElement.style.setProperty("--accent", "#f0db4f");
     document.body.style.setProperty("--accent", "#f0db4f");
-    (window as any).isRecording = false;
-    (window as any).isPaused = false;
     const mainUI = document.getElementById("mainUI");
     if (mainUI) mainUI.style.display = "none";
 

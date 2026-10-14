@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
+import { escapeHtml } from "../utils/domUtils";
 
 // Global modal cleanup function
 export function cleanupAllModals() {
@@ -290,11 +291,11 @@ export function showConfirmationModal(options: ConfirmationModalOptions) {
   const modalHTML = `
     <div id="confirmationModal" class="active" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
       <div class="session-modal-content" style="max-width: 400px; background: var(--bg-primary, white); border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-        <h3>${title}</h3>
-        <p style="margin: 20px 0;">${message}</p>
+        <h3>${escapeHtml(title)}</h3>
+        <p style="margin: 20px 0;">${escapeHtml(message)}</p>
         <div class="session-modal-actions" style="display: flex; gap: 10px; justify-content: flex-end;">
-          <button type="button" id="confirmModalCancelBtn" class="btn-cancel">${cancelText}</button>
-          <button type="button" id="confirmModalOkBtn" class="${confirmClass}">${confirmText}</button>
+          <button type="button" id="confirmModalCancelBtn" class="btn-cancel">${escapeHtml(cancelText)}</button>
+          <button type="button" id="confirmModalOkBtn" class="${confirmClass}">${escapeHtml(confirmText)}</button>
         </div>
       </div>
     </div>

@@ -71,6 +71,63 @@ export async function logUsage(
 }
 
 /**
+ * Insert many usage_logs rows in one request (used by the tracking batcher).
+ * Icons are not stored per row; see addUsageToDailySummary.
+ */
+export async function insertUsageLogs(
+  records: Array<{
+    userId: string;
+    appName: string;
+    windowTitle: string;
+    language: string | null;
+    languageExtension: string | null;
+    timestamp: string;
+  }>,
+) {
+  if (records.length === 0) return;
+  const rows: UsageLogsInsert[] = records.map((r) => ({
+    user_id: r.userId,
+    app_name: r.appName,
+    window_title: r.windowTitle,
+    language: r.language || null,
+    language_extension: r.languageExtension || null,
+    timestamp: r.timestamp,
+  }));
+
+  const { error } = await supabase.from("usage_logs").insert(rows as any);
+  if (error) {
+    throw error;
+  }
+}
+
+/**
+ * Add time to one daily_usage_summary row (upsert). Throws on error.
+ * `date` must be the user's local calendar day.
+ */
+export async function addUsageToDailySummary(increment: {
+  userId: string;
+  date: string;
+  appName: string;
+  language: string | null;
+  languageExtension: string | null;
+  icon: string | null;
+  seconds: number;
+}) {
+  const { error } = await (supabase as any).rpc("update_daily_usage_summary", {
+    p_user_id: increment.userId,
+    p_date: increment.date,
+    p_app_name: increment.appName,
+    p_language: increment.language || null,
+    p_language_extension: increment.languageExtension || null,
+    p_icon_url: increment.icon || null,
+    p_time_spent_seconds: increment.seconds,
+  });
+  if (error) {
+    throw error;
+  }
+}
+
+/**
  * Helper to map raw daily_usage_summary rows to the shape the renderer expects.
  * DB columns: app_name, icon_url, language_extension, time_spent_seconds
  * Renderer expects: app, icon, lang_ext, time_spent (LogEntry) / total_time (DailySummaryRow)

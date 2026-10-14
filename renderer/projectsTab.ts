@@ -1,4 +1,5 @@
 import { ipcRenderer } from "electron";
+import { escapeHtml } from "./utils/domUtils";
 import { ProjectWithMembers } from "../shared/types";
 import { getCurrentUserRole, safeIpcInvoke, withLoading } from "./utils";
 import {
@@ -708,11 +709,6 @@ async function showProjectStats(projectId: string | number) {
   }, 50);
 }
 
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
 
 async function showManageMembersModal(projectId: string | number) {
   const project = currentProjects.find(

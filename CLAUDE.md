@@ -13,7 +13,7 @@ An Electron 28 desktop app, written in TypeScript and bundled with webpack via E
 ### Commands
 ```
 npm start                 # dev (electron-forge start, webpack HMR)
-npm test                  # vitest (260 tests, all mocked Supabase — ~8s)
+npm test                  # vitest (~300 tests, mocked Supabase — ~10s)
 npm run type-check        # main + renderer tsconfigs
 npm run lint              # eslint
 npm run make              # installers
@@ -35,21 +35,24 @@ Supabase (RLS enforces per-user / per-org access)
 - **There are two Supabase clients.** The renderer has one (backed by localStorage). Main has one (backed by an in-memory store). The renderer pushes its tokens to main through the `sync-auth-session` IPC (`src/index.ts`, top). Some renderer code skips IPC and queries Supabase directly: `renderer/utils/organizationApi.ts`, `src/supabase/orgAnalytics.ts` (imported by `teamAnalyticsTab`), `ConnectionStatus.ts`, and `oauthHandler.ts`.
 - The handler files register themselves as an import side effect (`import "./ipc/xHandlers"` in `src/index.ts`). `src/utils/langMap.ts` also registers handlers this way.
 
-### The tracking engine (all in `src/index.ts`)
-State is held in module-level variables: `sessionStart`, `sessionActiveDuration`, `lastActiveTimestamp`, `isPaused`, `isIncognito`, `trackingInterval`, `intervalSeconds`, `idleTimeoutSeconds`, `cachedUserId`.
+### The tracking engine (`src/tracking/`)
+**The main process owns the recording state.** The renderer and tray only request changes, and render the `tracking-state` broadcast (`{isRecording, isPaused, autoPaused, isIncognito}`). On the renderer side, `renderer/trackingControls.ts` mirrors that state and exposes `startTracking`/`stopTracking`/`togglePause`/… Never flip recording state locally.
 
-| Event | What happens |
+| Module | Role |
 |---|---|
-| `start-tracking` | Starts `setInterval(trackActiveWindow, intervalSeconds)` and resets the session clock |
-| `pause/resume-tracking`, `auto-pause` | Adds elapsed active time to `sessionActiveDuration`; clears or restarts the interval |
-| Idle poll (every 2s) | `powerMonitor.getSystemIdleTime() >= idleTimeoutSeconds` → auto-pause. If the pause was automatic (`autoPaused`) and the user is back (idle < 5s, not locked or suspended) → auto-resume |
-| `lock-screen`, `suspend` | auto-pause (and block auto-resume until `unlock-screen` / `resume`) |
-| `stop-tracking` | Snapshots start, end and active duration, then resets state immediately. If ≥10s, asks the renderer for title/project/billable (`askSessionInfo`: `get-session-info` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" + `session-info-timeout` to the renderer), then `saveSession()` → `addSession()` with `end_time`. On a network error the session goes to the offline queue |
-| `before-quit` | Settles any open prompt, then auto-saves a running *or paused* session with a default title |
-| Tray | Start/Stop and Pause/Resume send `tray-command` to the renderer, which clicks its own buttons |
-| `trackActiveWindow()` | `activeWindow()` (x-win). Matches `execName` against `assets/known_editors.json` plus per-user `custom-apps-<uid>.json` (`src/utils/editors.ts`). **Unknown apps are dropped.** Language comes from `getLanguageDataFromTitle()` (`src/utils/extractData.ts`, linguist extensions, longest match first, plus per-user `lang-<uid>.json`). Then `logUsage()`, retried once, then the offline queue. The app icon goes only to the summary row, once per user/day/app/language |
+| `tracker.ts` | Orchestrator with Electron dependencies: tick and flush timers, idle poll, lock/sleep handling, session-info prompt, session save, quit finalization, tracking IPC (`get-tracking-state`, `start/pause/resume/stop-tracking`, `toggle-incognito`). The user ID comes from `setTrackingUser()`, called by `sync-auth-session`, so ticks make no auth network call. On sign-in it also loads the user's saved idle timeout and tracking interval. |
+| `sessionClock.ts` | Pure timing: active seconds excluding pauses, manual vs automatic pause, stop → `{start, end, duration}` |
+| `idlePolicy.ts` | Pure rules: pause when idle ≥ timeout; resume an *automatic* pause when idle < 5s and not locked or suspended |
+| `usageSampler.ts` | Foreground window (x-win) → `{appName, windowTitle, language, languageExtension, icon}`. Matches `execName` against `assets/known_editors.json` plus per-user `custom-apps-<uid>.json`; **unknown apps are dropped**. Language comes from `getLanguageDataFromTitle()` (`src/utils/extractData.ts`). |
+| `usageBatcher.ts` | Buffers ticks; every 60s (and on pause/stop/sign-out/quit) does **one INSERT** into `usage_logs` plus one `update_daily_usage_summary` RPC per (local day, app, language). Network failure → offline queue. Icons are sent once per summary row. The Today tab refreshes on each flush (`window-tracked`). |
 
-`logUsage()` (`src/supabase/usageLogs.ts`) makes **two round trips on every tick**: an INSERT into `usage_logs`, then the RPC `update_daily_usage_summary`, which upserts into `daily_usage_summary` keyed by `(user_id, date, app_name, language)` with NULLs not distinct. `date` is the user's **local** day.
+Flows:
+- **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" + `session-info-timeout`), then saves with `end_time`.
+- **Quit:** `hasUnsavedTrackingWork()` / `finalizeTrackingForQuit()` settle an open prompt, save a running or paused session, and flush usage.
+- **Tray:** calls the tracker directly.
+- **Batching tradeoff:** a crash loses at most ~60s of usage samples, never the session.
+
+`daily_usage_summary` is keyed by `(user_id, date, app_name, language)` with NULLs not distinct; `date` is the user's **local** day.
 
 **Session time and usage time are two separate measurements and nothing reconciles them.**
 - Session `duration` is active time: wall-clock time between Start and Stop, minus pauses. `end_time` is the wall-clock end (set since Phase A; older rows have NULL).
@@ -69,8 +72,8 @@ Tables:
 A new user signup fires a trigger that creates a profile, a personal org, and preferences. Role helpers (`get_current_user_org_id`, `is_user_admin_or_manager`, …) are `SECURITY DEFINER` so RLS doesn't recurse.
 
 Local files:
-- `~/.dev-time-tracker/config.json`: legacy settings, mostly dead (`src/config.ts`)
-- `~/.dev-time-tracker/offline-queue.json`
+- `~/.dev-time-tracker/config.json`: legacy settings, no longer read by anything (safe to delete)
+- `~/.dev-time-tracker/offline-queue.json`: flushed only while signed in, and only the signed-in user's items
 - `userData/custom-apps-<uid>.json`
 - `userData/lang-<uid>.json`
 
@@ -80,15 +83,16 @@ Local files:
   - The largest are `organizationTab.ts` (2.2k lines), `profileTab.ts`, `projectsTab.ts` and `renderer.ts`.
   - `organizationTab` and `projectsTab` both contain project-management UI, and those parts overlap.
 - Shared UI is in `renderer/components/`, helpers in `renderer/utils/`. Caches (`logsCache`, `preferencesCache`, `dailyGoalCache`) use localStorage.
-- Global state lives on `window`: `isRecording`, `isPaused`, `isIncognito`, `markTabsDirty`, `setupRecordAndPauseBtns`, `showMainUIForUser`.
-- UI is built with template strings and `innerHTML` (~148 call sites). `escapeHtml` is copy-pasted into 8 files; the canonical copy is `renderer/utils/domUtils.ts`.
+- Some global state still lives on `window`: `isIncognito`, `markTabsDirty`, `showMainUIForUser`. Recording state is in `trackingControls.ts`.
+- UI is built with template strings and `innerHTML` (~148 call sites). There is one `escapeHtml` (`renderer/utils/domUtils.ts`), and it escapes quotes too.
 - CSS is one file per feature in `renderer/styles/`, all imported in `renderer.ts`. Theming uses CSS variables (`--accent`).
 
 ### Conventions to follow when changing code
 - **New data feature:** add a `src/supabase/<domain>.ts` function that throws on error. Add a handler in `src/ipc/<domain>Handlers.ts` that calls `getCurrentUser()` and never takes `userId` from the renderer (exception: admin ops on *other* users). Import the handler file in `src/index.ts`. Call it from the renderer with `safeIpcInvoke(channel, args, { fallback })`.
 - **DB change:** add `database/patches/00N_description.sql` (idempotent, `IF NOT EXISTS` / `CREATE OR REPLACE`). Fold the change into `schema.sql` / `functions_and_triggers.sql` too, so fresh installs match, and update `src/types/database.types.ts`.
 - **Tests:** go in `tests/` and use the chainable mock in `tests/helpers/supabaseMock.ts`. New query functions should get tests in the same style.
-- **Strings into innerHTML:** use `escapeHtml` from `renderer/utils/domUtils.ts`. Don't add another copy.
+- **Strings into innerHTML:** always escape with `escapeHtml` from `renderer/utils/domUtils.ts`, in element content *and* attributes. Don't add another copy. `showConfirmationModal` and the notification sidebar escape their inputs themselves; pass plain text.
+- **Smoke-test a packaged build without touching the real install:** set `DTT_USER_DATA_DIR=<dir>` (separate profile, no protocol registration) and `SENTRY_DSN=` (an empty value disables Sentry), and point `USERPROFILE` at a scratch dir (offline queue).
 - **Data changes:** after mutating data, call `markTabsDirty(...)` for the tabs it affects and invalidate the relevant cache.
 - **Days are local calendar days.** Use `toLocalDateString` / `localDayStartISO` / `localDayEndISO` from `src/utils/timeFormat.ts`, never `split("T")[0]` on a timestamp.
 - **Config that must work in shipped builds:** read it with `getEnv()` (`src/buildEnv.ts`) and add the key to the allowlist in `webpack.plugins.ts`. Never allowlist secrets, because the values ship inside the app.
@@ -210,11 +214,16 @@ In priority order (cheapest and highest value first):
 - **Team-analytics SQL still buckets sessions by UTC day** (`start_time::DATE` in patch 006). Fixing that needs a stored local date or tz per session.
 - `.env.production` is not loaded by the build; only `.env.local` and `.env` are.
 
-**Phase B — structural cleanup (enables everything after)**
-- [ ] B1 Extract the tracking engine from `src/index.ts` into `src/tracking/` (state machine, sources, sinks) with unit tests (#22)
-- [ ] B2 Single owner for recording state (main), with the renderer subscribing (#16)
-- [ ] B3 Batch usage writes: buffer ticks in memory and flush every ~60s as one insert plus one summary upsert. Cuts requests by about 12×.
-- [ ] B4 Remove dead code, deduplicate `escapeHtml`, simplify `getAllSessions` (#19–21)
+**Phase B — structural cleanup** — B1–B4 done on `phase-a-fixes` (2026-10-14)
+- [x] B1 Tracking engine extracted into `src/tracking/` (see Part 1), with unit tests for the clock, idle policy, sampler and batcher. `src/index.ts` is now app lifecycle, window, tray, auth sync and OAuth. Also fixed: the saved idle timeout and tracking interval were never applied after a restart; they are now loaded on sign-in.
+- [x] B2 Main owns recording state, broadcasts `tracking-state`, and the renderer mirrors it (`renderer/trackingControls.ts`). Tray calls the tracker directly. Fixed: calendar "start scheduled session" clicked the record button and so *stopped* a running session.
+- [x] B3 `usageBatcher.ts`: one insert per minute plus one summary upsert per group, and no per-tick `getUser()` network call. Roughly 18 → 2–3 requests/min while recording.
+- [x] B4 Removed `src/config.ts`, `src/utils/ipcHelp.ts`, the updater `.d.ts` stubs and `@ts-ignore`s, `startSession`/`endSession`, `getEditorByExecutable`/`setCustomAppsUser`, and unused constants. `getAllSessions` deduplicated.
+  - **Security fix:** 7 of the 8 `escapeHtml` copies didn't escape quotes, and other org members' usernames went into attributes with them (with Node enabled in the renderer, that is a path to code execution). There is now one quote-safe `escapeHtml`, plus escaping added in Team Analytics, the invoice modal, the calendar, the confirmation modal and the notification sidebar.
+- [x] Also fixed during B:
+  - **Packaged builds rendered a blank window.** `webpack.renderer.config.ts` forced `publicPath: "/"`, which breaks `file://`.
+  - The offline queue discarded items when flushed while signed out (RLS failure treated as permanent). It now flushes only for the signed-in user and keeps items on auth errors.
+  - The OAuth callback no longer logs URLs that contain tokens.
 - [ ] B5 (larger, incremental) Preload + `contextBridge` typed API; turn off `nodeIntegration`; one Supabase client (#10, #11)
 
 **Phase C — AI-era tracking (Part 3)**

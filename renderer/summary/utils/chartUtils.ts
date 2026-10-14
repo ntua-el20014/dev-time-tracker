@@ -1,4 +1,5 @@
 import { formatTimeSpent } from "../../../src/utils/timeFormat";
+import { escapeHtml } from "../../utils/domUtils";
 import {
   getLocalDateString,
   getWeekDates,
@@ -87,7 +88,7 @@ export function renderCustomChartsSection() {
     chartContainer.className = "chart-item";
     chartContainer.innerHTML = `
       <div class="chart-header">
-        <h4>${chartData.config.title}</h4>
+        <h4>${escapeHtml(chartData.config.title)}</h4>
         <div class="chart-actions">
           <button class="chart-action-btn btn-secondary btn-small" data-action="refresh" data-index="${index}" title="Refresh with current data">🔄</button>
           <button class="chart-action-btn btn-secondary btn-small" data-action="duplicate" data-index="${index}" title="Duplicate chart">📋</button>

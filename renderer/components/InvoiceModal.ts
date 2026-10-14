@@ -1,4 +1,5 @@
 import { safeIpcInvoke } from "../utils/ipcHelpers";
+import { escapeHtml } from "../utils/domUtils";
 import { getLocalDateString } from "../../src/utils/timeFormat";
 import {
   generateInvoicePDF,
@@ -280,7 +281,7 @@ export async function showInvoiceGenerationModal(
         const checkboxText = projectCheckbox?.textContent ?? "";
         const matched = checkboxText.match(/(\d+) billable/);
         const sessionCount = parseInt(matched?.[1] ?? "0", 10);
-        projectsSummary += `<li>${project.name} (${sessionCount} sessions) - $${project.hourly_rate}/hr</li>`;
+        projectsSummary += `<li>${escapeHtml(project.name)} (${sessionCount} sessions) - $${project.hourly_rate}/hr</li>`;
       }
     });
 

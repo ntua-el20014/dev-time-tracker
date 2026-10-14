@@ -1,4 +1,5 @@
 import { renderPercentBar } from "./components";
+import { escapeHtml } from "./utils/domUtils";
 import {
   getMonday,
   getWeekDates,
@@ -382,7 +383,7 @@ async function renderRecentActivity() {
                     (s: SessionRow) =>
                       `<div class="bubble-session-row">
               <span class="bubble-main">
-                ${s.title}
+                ${escapeHtml(s.title)}
                 <span class="bubble-duration">${Math.floor(s.duration / 60)}m ${
                   s.duration % 60
                 }s</span>
@@ -716,10 +717,3 @@ function fmtDuration(minutes: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}

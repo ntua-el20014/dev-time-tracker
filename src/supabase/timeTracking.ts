@@ -6,78 +6,8 @@ import { localDayStartISO, localDayEndISO } from "../utils/timeFormat";
 type SessionInsert =
   Database["public"]["Tables"]["time_tracking_sessions"]["Insert"];
 
-/**
- * Start a new tracking session
- */
-export async function startSession(
-  userId: string,
-  projectId?: string,
-  description?: string,
-) {
-  const now = new Date().toISOString();
-
-  const sessionData: SessionInsert = {
-    user_id: userId,
-    project_id: projectId || null,
-    description: description || null,
-    start_time: now,
-    duration: 0,
-    title: description || "Untitled Session",
-    is_billable: false,
-  };
-
-  const { data, error } = await supabase
-    .from("time_tracking_sessions")
-    .insert(sessionData as any)
-    .select()
-    .single();
-
-  if (error) {
-    throw error;
-  }
-  return data;
-}
-
-/**
- * End a tracking session by calculating and updating its duration
- */
-export async function endSession(sessionId: string) {
-  // Get the session to calculate duration
-  const { data: session, error: fetchError } = await supabase
-    .from("time_tracking_sessions")
-    .select("start_time")
-    .eq("id", sessionId)
-    .single();
-
-  if (fetchError) {
-    throw fetchError;
-  }
-  if (!session) {
-    throw new Error("Session not found");
-  }
-
-  const now = new Date().toISOString();
-  const startTime = new Date((session as any).start_time);
-  const endTime = new Date(now);
-  const durationSeconds = Math.floor(
-    (endTime.getTime() - startTime.getTime()) / 1000,
-  );
-
-  const { data, error } = await (supabase as any)
-    .from("time_tracking_sessions")
-    .update({
-      duration: durationSeconds,
-      updated_at: now,
-    })
-    .eq("id", sessionId)
-    .select()
-    .single();
-
-  if (error) {
-    throw error;
-  }
-  return data;
-}
+const SESSION_COLUMNS =
+  "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at";
 
 /**
  * Get sessions with duration less than or equal to specified threshold
@@ -89,9 +19,7 @@ export async function getSmallSessions(
 ) {
   const { data, error } = await supabase
     .from("time_tracking_sessions")
-    .select(
-      "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
-    )
+    .select(SESSION_COLUMNS)
     .eq("user_id", userId)
     .lte("duration", maxDurationSeconds)
     .order("start_time", { ascending: false });
@@ -118,6 +46,35 @@ export async function deleteSessions(sessionIds: string[]) {
 }
 
 /**
+ * Session IDs carrying the given tag, or null if the user has no such tag.
+ */
+async function getSessionIdsForTag(
+  userId: string,
+  tagName: string,
+): Promise<string[] | null> {
+  const { data: tagData, error: tagError } = await supabase
+    .from("user_tags")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("name", tagName)
+    .single();
+
+  if (tagError || !tagData) {
+    return null;
+  }
+
+  const { data: sessionTagsData, error: sessionTagsError } = await supabase
+    .from("session_tags")
+    .select("session_id")
+    .eq("tag_id", (tagData as any).id);
+
+  if (sessionTagsError) {
+    throw sessionTagsError;
+  }
+  return (sessionTagsData || []).map((st: any) => st.session_id);
+}
+
+/**
  * Get all sessions for a user with optional filters
  */
 export async function getAllSessions(
@@ -132,88 +89,25 @@ export async function getAllSessions(
     offset?: number;
   },
 ) {
-  // If tag filter is specified, first get sessions with that tag
+  // A tag filter narrows the query to that tag's sessions
+  let taggedSessionIds: string[] | null = null;
   if (filters?.tag) {
-    // Get the tag ID for the given tag name
-    const { data: tagData, error: tagError } = await supabase
-      .from("user_tags")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("name", filters.tag)
-      .single();
-
-    if (tagError || !tagData) {
-      // Tag not found, return empty array
+    taggedSessionIds = await getSessionIdsForTag(userId, filters.tag);
+    if (!taggedSessionIds || taggedSessionIds.length === 0) {
       return [];
     }
-
-    // Get session IDs that have this tag
-    const { data: sessionTagsData, error: sessionTagsError } = await supabase
-      .from("session_tags")
-      .select("session_id")
-      .eq("tag_id", (tagData as any).id);
-
-    if (sessionTagsError) {
-      throw sessionTagsError;
-    }
-
-    const sessionIds = (sessionTagsData || []).map((st: any) => st.session_id);
-
-    if (sessionIds.length === 0) {
-      return [];
-    }
-
-    // Build query with session IDs filter
-    let query = supabase
-      .from("time_tracking_sessions")
-      .select(
-        "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
-      )
-      .eq("user_id", userId)
-      .in("id", sessionIds)
-      .order("start_time", { ascending: false });
-
-    // Apply other filters
-    if (filters?.projectId) {
-      query = query.eq("project_id", filters.projectId);
-    }
-    if (filters?.startDate) {
-      query = query.gte("start_time", localDayStartISO(filters.startDate));
-    }
-    if (filters?.endDate) {
-      query = query.lte("start_time", localDayEndISO(filters.endDate));
-    }
-    if (filters?.isBillable !== undefined) {
-      query = query.eq("is_billable", filters.isBillable);
-    }
-    if (filters?.limit) {
-      query = query.limit(filters.limit);
-    }
-    if (filters?.offset) {
-      query = query.range(
-        filters.offset,
-        filters.offset + (filters.limit || 50) - 1,
-      );
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw error;
-    }
-    return data || [];
   }
 
-  // No tag filter - proceed with regular query
   let query = supabase
     .from("time_tracking_sessions")
-    .select(
-      "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
-    )
-    .eq("user_id", userId)
-    .order("start_time", { ascending: false });
+    .select(SESSION_COLUMNS)
+    .eq("user_id", userId);
 
-  // Apply filters
+  if (taggedSessionIds) {
+    query = query.in("id", taggedSessionIds);
+  }
+  query = query.order("start_time", { ascending: false });
+
   if (filters?.projectId) {
     query = query.eq("project_id", filters.projectId);
   }
@@ -250,9 +144,7 @@ export async function getAllSessions(
 export async function getSessionById(sessionId: string) {
   const { data, error } = await supabase
     .from("time_tracking_sessions")
-    .select(
-      "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
-    )
+    .select(SESSION_COLUMNS)
     .eq("id", sessionId)
     .single();
 
@@ -366,9 +258,7 @@ export async function getSessionsInDateRange(
 ) {
   const { data, error } = await supabase
     .from("time_tracking_sessions")
-    .select(
-      "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at",
-    )
+    .select(SESSION_COLUMNS)
     .eq("user_id", userId)
     .gte("start_time", localDayStartISO(startDate))
     .lte("start_time", localDayEndISO(endDate))
