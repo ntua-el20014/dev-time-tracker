@@ -81,8 +81,7 @@ jobs:
           NOTES: ${{ inputs.release_notes }}
         run: |
           if [ -n "$NOTES" ]; then
-            printf '%s
-' "$NOTES" > notes.md
+            printf '%s' "$NOTES" > notes.md
           elif [ -z "${{ steps.vars.outputs.last_tag }}" ]; then
             git log --pretty=format:'- %s (%h)' --no-merges > notes.md
           else
