@@ -21,12 +21,8 @@ jobs:
             artifact_name: macos-artifacts
 
     env:
-      UPDATER_ENABLED: true
-      UPDATER_ALLOW_DEV: true
-      UPDATER_AUTO_CHECK: false
-      UPDATER_AUTO_DOWNLOAD: false
-      UPDATER_GITHUB_OWNER: ${{ github.repository_owner }}
-      UPDATER_GITHUB_REPO: ${{ github.repository }}
+      # Preview builds must not update themselves from published releases
+      UPDATER_ENABLED: "false"
 
     steps:
       - name: Checkout repository

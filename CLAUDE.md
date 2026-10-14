@@ -223,7 +223,7 @@ In priority order (cheapest and highest value first):
 - [x] A8 CSP header built from `SUPABASE_CONFIG.URL` plus `*.supabase.co`. The `index.html` meta CSP allows `*.supabase.co`, so a self-hosted domain must be added there by hand.
 
 **Open findings from Phase A**
-- **The updater probably can't work with the current makers.** `electron-updater` needs `latest.yml` and NSIS (Windows) / AppImage / DMG artifacts. Forge's Squirrel/zip/deb/rpm makers don't produce them, so the updater stays disabled (opt-in via `UPDATER_ENABLED`). Options: switch to Electron's built-in `autoUpdater` with Squirrel + update.electronjs.org (Forge's path), or move packaging to electron-builder. Needs a decision.
+- [x] **Updater (resolved):** replaced `electron-updater` (incompatible with Forge's Squirrel output) with Electron's built-in `autoUpdater` and update.electronjs.org (`src/updater.ts`). Windows only, on by default in installed builds. Squirrel install events are handled (`electron-squirrel-startup` in `src/index.ts`). `release.yml` now builds on a Windows runner and uploads RELEASES/.nupkg/Setup.exe; before this, releases had no Windows build at all. Updates reach users only from **published** releases, and the release version must be higher than the installed one.
 - **Idle time before the auto-pause is still counted** (the 5 idle minutes before detection count as work). Decide this together with C4 ("supervising" time).
 - **Team-analytics SQL still buckets sessions by UTC day** (`start_time::DATE` in the `get_org_*` functions). Fixing that needs a stored local date or tz per session.
 - `.env.production` is not loaded by the build; only `.env.local` and `.env` are.

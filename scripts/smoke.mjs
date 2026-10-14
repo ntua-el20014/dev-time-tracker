@@ -156,6 +156,13 @@ try {
     steps.nonHttpOpenRejected = await ev(`window.electronAPI.invoke("open-oauth-url", "file:///C:/Windows/System32/calc.exe").then(() => "opened", e => "rejected")`);
     results.interact = steps;
   }
+  results.updater = (
+    await send("Runtime.evaluate", {
+      expression: `window.electronAPI.invoke("updater:get-state")`,
+      awaitPromise: true,
+      returnByValue: true,
+    })
+  ).result?.result?.value;
   results.landingText = await evaluate(
     `(document.getElementById("userLanding")?.innerText || "").replace(/\s+/g, " ").slice(0, 200)`,
   );

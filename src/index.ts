@@ -58,6 +58,14 @@ import "./ipc/updaterHandlers";
 import { initSentryMain, reportError } from "./sentryMain";
 import { initUpdater, setUpdaterStateSink } from "./updater";
 
+// ── Windows installer events ──────────────────────────────────────
+// Squirrel runs the app with --squirrel-install/--squirrel-updated/
+// --squirrel-uninstall to create or remove shortcuts; handle and exit.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+if (require("electron-squirrel-startup")) {
+  app.quit();
+}
+
 // ── Separate profile for development / smoke tests ────────────────
 // DTT_USER_DATA_DIR runs the app with its own userData dir (auth session,
 // custom apps, single-instance lock) and leaves the OS protocol handler
