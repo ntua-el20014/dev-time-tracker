@@ -370,7 +370,8 @@ export async function showInvoiceGenerationModal(
 
       const doc = generateInvoicePDF(invoiceData);
       const filename = `Invoice_${formatDate(new Date()).replace(/\s/g, "_")}.pdf`;
-      downloadInvoicePDF(doc, filename);
+      const saved = await downloadInvoicePDF(doc, filename);
+      if (!saved) return; // cancelled: keep the modal open
 
       modal.remove();
       overlay.remove();

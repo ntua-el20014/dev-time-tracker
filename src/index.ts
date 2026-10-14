@@ -6,6 +6,7 @@ import {
   Menu,
   nativeImage,
   globalShortcut,
+  shell,
 } from "electron";
 import os from "os";
 import path from "path";
@@ -130,6 +131,7 @@ ipcMain.handle(
 
 let mainWindow: BrowserWindow | null = null;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
+declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 let tray: Tray | null = null;
 
 /** Global incognito toggle. Avoids Ctrl+Shift+I (DevTools / editor chat). */
@@ -377,9 +379,13 @@ function createWindow() {
     width: 1150,
     height: 800,
     webPreferences: {
-      contextIsolation: false,
-      nodeIntegration: true,
-      webSecurity: true, // Re-enable web security to allow CSP
+      // The renderer has no Node access; it talks to main only through the
+      // IPC bridge in src/preload.ts (window.electronAPI).
+      preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
     },
   });
 
@@ -446,8 +452,18 @@ ipcMain.handle("flush-offline-queue", async () => {
 });
 
 // Handle OAuth redirect to open external browser
+// Only http(s): openExternal on file:// or custom schemes could launch
+// local programs if a compromised renderer called this.
 ipcMain.handle("open-oauth-url", async (_event, url: string) => {
-  const { shell } = require("electron");
+  let protocol = "";
+  try {
+    protocol = new URL(url).protocol;
+  } catch {
+    // invalid URL
+  }
+  if (protocol !== "https:" && protocol !== "http:") {
+    throw new Error("open-oauth-url only opens http(s) URLs");
+  }
   await shell.openExternal(url);
 });
 

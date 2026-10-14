@@ -34,7 +34,10 @@ export const createSupabaseClient = () => {
     auth: {
       persistSession: true,
       storage: electronStorage,
-      autoRefreshToken: true,
+      // Only the renderer refreshes tokens. Main gets fresh ones through the
+      // sync-auth-session IPC. Two clients refreshing the same rotating
+      // refresh token can invalidate each other and sign the user out.
+      autoRefreshToken: typeof window !== "undefined",
       detectSessionInUrl: false, // Important for Electron
       flowType: "pkce", // Use PKCE flow for better security
     },

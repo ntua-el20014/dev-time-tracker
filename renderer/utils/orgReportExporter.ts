@@ -1,4 +1,4 @@
-import { ipcRenderer } from "electron";
+import { savePdf } from "./saveFile";
 import jsPDF from "jspdf";
 import { showNotification, showInAppNotification } from "../components";
 import { safeIpcInvoke } from "./ipcHelpers";
@@ -94,16 +94,12 @@ export async function exportOrgAnalyticsReport(
       members,
     };
 
-    const { filePath } = await ipcRenderer.invoke("show-save-dialog", {
+    const doc = buildOrganizationReportPDF(reportData);
+    const saved = await savePdf(doc, {
       title: "Export Organization Report as PDF",
       defaultPath: buildDefaultReportName(orgName, filters),
-      filters: [{ name: "PDF File", extensions: ["pdf"] }],
     });
-
-    if (!filePath) return;
-
-    const doc = buildOrganizationReportPDF(reportData);
-    doc.save(filePath);
+    if (!saved) return;
     showInAppNotification("Organization report exported successfully!");
   } catch {
     showNotification("Export failed. Please try again.");

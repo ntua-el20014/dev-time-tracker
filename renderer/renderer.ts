@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ipcRenderer } from "electron";
+import { ipcRenderer } from "./ipc";
 import { initSentryRenderer, setSentryUser, clearSentryUser, addBreadcrumb } from "../src/sentryRenderer";
 import { renderLogs } from "./logsTab";
 import { refreshProfile } from "./profileTab";

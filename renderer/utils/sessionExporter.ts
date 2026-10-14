@@ -1,4 +1,5 @@
-import { ipcRenderer } from "electron";
+import { ipcRenderer } from "../ipc";
+import { savePdf } from "./saveFile";
 import jsPDF from "jspdf";
 import type { SessionRow, DailySummaryRow } from "../../shared/types";
 import { showNotification, showInAppNotification } from "../components";
@@ -255,17 +256,11 @@ export class SessionExporter {
     averageSessionSeconds: number;
     dateRange: { start: string; end: string };
   }): Promise<boolean> {
-    const { filePath } = await ipcRenderer.invoke("show-save-dialog", {
+    const doc = buildPersonalReportPDF(reportData);
+    return await savePdf(doc, {
       title: "Export PDF Report",
       defaultPath: `dev-tracker-report-${reportData.dateRange.start}-to-${reportData.dateRange.end}.pdf`,
-      filters: [{ name: "PDF File", extensions: ["pdf"] }],
     });
-
-    if (!filePath) return false;
-
-    const doc = buildPersonalReportPDF(reportData);
-    doc.save(filePath);
-    return true;
   }
 }
 

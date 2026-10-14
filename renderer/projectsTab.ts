@@ -1,4 +1,4 @@
-import { ipcRenderer } from "electron";
+import { ipcRenderer } from "./ipc";
 import { escapeHtml } from "./utils/domUtils";
 import { ProjectWithMembers } from "../shared/types";
 import { getCurrentUserRole, safeIpcInvoke, withLoading } from "./utils";

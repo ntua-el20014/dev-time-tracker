@@ -4,7 +4,7 @@
  * "tracking-state" and sends requests. Never flip the state locally — ask
  * main and render what it reports back.
  */
-import { ipcRenderer } from "electron";
+import { ipcRenderer } from "./ipc";
 
 export interface TrackingState {
   isRecording: boolean;

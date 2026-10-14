@@ -22,17 +22,20 @@ Baseline as of 2026-10-14: tests, type-check and lint are all green. Keep them g
 
 ### Processes and the boundary between them
 ```
-renderer/  (UI, nodeIntegration=true, contextIsolation=false)
-   │  ipcRenderer.invoke(channel, ...args)   ← wrapped by renderer/utils/ipcHelpers.ts safeIpcInvoke()
+renderer/  (UI — contextIsolation, sandbox, NO Node access)
+   │  import { ipcRenderer } from "renderer/ipc.ts"   ← shim over window.electronAPI
+   │  safeIpcInvoke() (renderer/utils/ipcHelpers.ts) wraps it with error handling
    ▼
-src/ipc/*Handlers.ts  (main)  — ~137 ipcMain.handle channels, each resolves the user itself via getCurrentUser()
+src/preload.ts  — contextBridge: window.electronAPI = { invoke, send, on, removeAllListeners }
+   ▼
+src/ipc/*Handlers.ts + src/tracking/tracker.ts  (main) — ipcMain.handle channels; each resolves the user itself
    ▼
 src/supabase/*.ts  — thin query modules, one per domain, throw on error
    ▼
 Supabase (RLS enforces per-user / per-org access)
 ```
-- The preload script `src/preload.ts` is **empty**. The renderer `import`s from `electron` and even from `src/` directly.
-- **There are two Supabase clients.** The renderer has one (backed by localStorage). Main has one (backed by an in-memory store). The renderer pushes its tokens to main through the `sync-auth-session` IPC (`src/index.ts`, top). Some renderer code skips IPC and queries Supabase directly: `renderer/utils/organizationApi.ts`, `src/supabase/orgAnalytics.ts` (imported by `teamAnalyticsTab`), `ConnectionStatus.ts`, and `oauthHandler.ts`.
+- **The renderer cannot `import` from `"electron"` or use Node built-ins.** It is built for the `web` target. Use `renderer/ipc.ts`. Treat everything coming from the renderer as untrusted input in main. Examples: `open-oauth-url` only opens http(s); exports only write to dialog-approved paths.
+- **There are still two Supabase clients.** The renderer has one (localStorage) and main has one (in-memory). The renderer pushes its tokens to main through `sync-auth-session`. **Only the renderer client auto-refreshes tokens** (`autoRefreshToken` is on only when `window` exists), so the two can't rotate the refresh token out from under each other. Some renderer code still queries Supabase directly: `renderer/utils/organizationApi.ts`, `src/supabase/orgAnalytics.ts` (via `teamAnalyticsTab`), `ConnectionStatus.ts`, `oauthHandler.ts`.
 - The handler files register themselves as an import side effect (`import "./ipc/xHandlers"` in `src/index.ts`). `src/utils/langMap.ts` also registers handlers this way.
 
 ### The tracking engine (`src/tracking/`)
@@ -91,6 +94,7 @@ Local files:
 - **New data feature:** add a `src/supabase/<domain>.ts` function that throws on error. Add a handler in `src/ipc/<domain>Handlers.ts` that calls `getCurrentUser()` and never takes `userId` from the renderer (exception: admin ops on *other* users). Import the handler file in `src/index.ts`. Call it from the renderer with `safeIpcInvoke(channel, args, { fallback })`.
 - **DB change:** add `database/patches/00N_description.sql` (idempotent, `IF NOT EXISTS` / `CREATE OR REPLACE`). Fold the change into `schema.sql` / `functions_and_triggers.sql` too, so fresh installs match, and update `src/types/database.types.ts`.
 - **Tests:** go in `tests/` and use the chainable mock in `tests/helpers/supabaseMock.ts`. New query functions should get tests in the same style.
+- **Renderer ↔ main:** import `ipcRenderer` from `renderer/ipc.ts`, never from `"electron"`. Files are saved by main: use `savePdf()` (`renderer/utils/saveFile.ts`) or the `show-save-dialog` → `export-custom-*` pair, never jsPDF's `doc.save()`.
 - **Strings into innerHTML:** always escape with `escapeHtml` from `renderer/utils/domUtils.ts`, in element content *and* attributes. Don't add another copy. `showConfirmationModal` and the notification sidebar escape their inputs themselves; pass plain text.
 - **Smoke-test a packaged build without touching the real install:** set `DTT_USER_DATA_DIR=<dir>` (separate profile, no protocol registration) and `SENTRY_DSN=` (an empty value disables Sentry), and point `USERPROFILE` at a scratch dir (offline queue).
 - **Data changes:** after mutating data, call `markTabsDirty(...)` for the tabs it affects and invalidate the relevant cache.
@@ -214,7 +218,7 @@ In priority order (cheapest and highest value first):
 - **Team-analytics SQL still buckets sessions by UTC day** (`start_time::DATE` in patch 006). Fixing that needs a stored local date or tz per session.
 - `.env.production` is not loaded by the build; only `.env.local` and `.env` are.
 
-**Phase B — structural cleanup** — B1–B4 done on `phase-a-fixes` (2026-10-14)
+**Phase B — structural cleanup** — done on `phase-a-fixes` (2026-10-14)
 - [x] B1 Tracking engine extracted into `src/tracking/` (see Part 1), with unit tests for the clock, idle policy, sampler and batcher. `src/index.ts` is now app lifecycle, window, tray, auth sync and OAuth. Also fixed: the saved idle timeout and tracking interval were never applied after a restart; they are now loaded on sign-in.
 - [x] B2 Main owns recording state, broadcasts `tracking-state`, and the renderer mirrors it (`renderer/trackingControls.ts`). Tray calls the tracker directly. Fixed: calendar "start scheduled session" clicked the record button and so *stopped* a running session.
 - [x] B3 `usageBatcher.ts`: one insert per minute plus one summary upsert per group, and no per-tick `getUser()` network call. Roughly 18 → 2–3 requests/min while recording.
@@ -224,7 +228,14 @@ In priority order (cheapest and highest value first):
   - **Packaged builds rendered a blank window.** `webpack.renderer.config.ts` forced `publicPath: "/"`, which breaks `file://`.
   - The offline queue discarded items when flushed while signed out (RLS failure treated as permanent). It now flushes only for the signed-in user and keeps items on auth errors.
   - The OAuth callback no longer logs URLs that contain tokens.
-- [ ] B5 (larger, incremental) Preload + `contextBridge` typed API; turn off `nodeIntegration`; one Supabase client (#10, #11)
+- [x] B5 Renderer isolation (commit after B1–B4): `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. The preload exposes `window.electronAPI`; `renderer/ipc.ts` keeps the `ipcRenderer` shape, so call sites barely changed. The renderer builds for the `web` target. Sentry's preload hook is wired in. Hardening done along the way:
+  - PDF exports go through main (`save-file`); jsPDF's `save()` would have silently become a browser download.
+  - CSV/JSON exports only write to paths from `show-save-dialog` (single use).
+  - `open-oauth-url` only opens http(s).
+  - Removed the unused `signInWithGitHub` that needed `require("electron")`.
+  - Only the renderer's Supabase client refreshes tokens.
+  - Verified with a packaged-app smoke test and a dev-mode smoke test over CDP (UI renders, no Node in the page, record/pause/stop and incognito round-trip through main, export/open hardening). Signed-in flows were **not** exercised (that would need a test account).
+  - Still open: **one Supabase client** (move the renderer's direct queries behind IPC); an IPC channel allowlist in the preload; dropping `'unsafe-eval'` from the production CSP.
 
 **Phase C — AI-era tracking (Part 3)**
 - [ ] C1 Project attribution from workspace/cwd → git root → project mapping

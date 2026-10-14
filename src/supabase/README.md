@@ -41,9 +41,9 @@ Signs in a user with email and password credentials.
 
 Creates a new user account with email, password, and username. Includes email redirect configuration for OAuth callback.
 
-### `signInWithGitHub()`
+### `signInWithGitHubElectron()` (renderer/utils/oauthHandler.ts)
 
-Initiates GitHub OAuth authentication. Opens the OAuth URL in the system's default browser using Electron's shell.
+Starts GitHub OAuth and asks the main process (`open-oauth-url` IPC) to open the URL in the system browser. The callback returns via the `dev-time-tracker://` protocol.
 
 ### `resetPasswordForEmail(email: string)`
 

@@ -2,7 +2,7 @@
  * IPC call wrapper with network error handling.
  * Provides consistent error handling for all Supabase-backed IPC calls.
  */
-import { ipcRenderer } from "electron";
+import { ipcRenderer } from "../ipc";
 import { showInAppNotification } from "../components/Notifications";
 
 /**

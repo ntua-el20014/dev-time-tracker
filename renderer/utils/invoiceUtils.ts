@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { savePdf } from "./saveFile";
 import type { SessionRow as Session } from "../../shared/types";
 
 export interface InvoiceCustomization {
@@ -257,11 +258,12 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
   return doc;
 }
 
+/** Ask where to save the invoice and write it. False if cancelled. */
 export function downloadInvoicePDF(
   doc: jsPDF,
   filename: string = "invoice.pdf",
-): void {
-  doc.save(filename);
+): Promise<boolean> {
+  return savePdf(doc, { title: "Save Invoice", defaultPath: filename });
 }
 
 export function formatDate(date: Date | string): string {

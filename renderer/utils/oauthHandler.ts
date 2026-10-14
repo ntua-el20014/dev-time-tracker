@@ -1,4 +1,5 @@
 import { supabase } from "../../src/supabase/client";
+import { ipcRenderer } from "../ipc";
 import { showInAppNotification } from "../components/Notifications";
 import { showModal } from "../components/Modals";
 import {
@@ -6,26 +7,12 @@ import {
   attachPasswordStrengthIndicator,
 } from "./passwordValidator";
 
-// Safely get ipcRenderer only in renderer context
-const getIpcRenderer = () => {
-  if (typeof window !== "undefined" && (window as any).require) {
-    return (window as any).require("electron").ipcRenderer;
-  }
-  return null;
-};
 
 /**
  * Initialize OAuth callback listener for Electron
  * This handles the deep link callback after OAuth authentication
  */
 export function initializeOAuthListener(onSuccess: (session: any) => void) {
-  const ipcRenderer = getIpcRenderer();
-  if (!ipcRenderer) {
-    // eslint-disable-next-line no-console
-    console.error("ipcRenderer not available - not in renderer context");
-    return;
-  }
-
   // Remove all existing listeners to prevent duplicates
   ipcRenderer.removeAllListeners("oauth-callback");
 
@@ -190,13 +177,8 @@ export async function signInWithGitHubElectron() {
 
     // Open OAuth URL in external browser via IPC
     if (data.url) {
-      const ipcRenderer = getIpcRenderer();
-      if (ipcRenderer) {
-        await ipcRenderer.invoke("open-oauth-url", data.url);
-        showInAppNotification("Opening GitHub in your browser...");
-      } else {
-        showInAppNotification("Error: Cannot open browser in this context");
-      }
+      await ipcRenderer.invoke("open-oauth-url", data.url);
+      showInAppNotification("Opening GitHub in your browser...");
     }
 
     return data;

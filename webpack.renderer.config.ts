@@ -33,6 +33,7 @@ export const rendererConfig: Configuration = {
   resolve: {
     extensions: [".js", ".ts", ".jsx", ".tsx", ".css"],
   },
-  target: "electron-renderer", // NOT preload unless this is preload
+  // No target: Forge builds the renderer for "web" (no Node integration) and
+  // the preload as a sandboxed preload. See src/preload.ts / renderer/ipc.ts.
   devtool: "source-map",
 };

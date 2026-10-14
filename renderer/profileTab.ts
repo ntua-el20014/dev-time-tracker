@@ -1,6 +1,6 @@
 import { applyAccentColor } from "./renderer";
 import { escapeHtml } from "./utils/domUtils";
-import { ipcRenderer } from "electron";
+import { ipcRenderer } from "./ipc";
 import {
   renderPercentBar,
   renderPieChartJS,

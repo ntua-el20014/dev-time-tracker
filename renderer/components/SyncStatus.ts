@@ -11,7 +11,7 @@
  * Also triggers an immediate flush when the browser comes back online.
  */
 
-import { ipcRenderer } from "electron";
+import { ipcRenderer } from "../ipc";
 import { onConnectionStateChange, ConnectionState } from "./ConnectionStatus";
 
 // ── Types (mirror main-process SyncStatus) ──────────────────────────
