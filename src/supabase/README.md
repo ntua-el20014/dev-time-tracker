@@ -53,10 +53,6 @@ Sends a password reset email to the specified address. The reset link redirects 
 
 Updates the current user's password.
 
-### `createUserProfile(profile: { id: string; username: string; org_id?: string })`
-
-Creates a user profile in the database with the specified details.
-
 ### `getUserProfile(userId: string)`
 
 Retrieves a user profile by user ID.

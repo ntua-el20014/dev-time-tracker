@@ -262,15 +262,13 @@ export async function removeUserFromOrganization(
     throw new Error("You cannot remove members with equal or higher role");
   }
 
-  // Supabase RLS policies cause update() to be typed as never
-  const result = await supabase
-    .from("user_profiles")
-    // @ts-ignore - Supabase RLS typing limitation
-    .update({ org_id: null, role: "employee" })
-    .eq("id", userId)
-    .eq("org_id", actorOrgId);
+  // Server-side function: the database re-checks admin rights, and a direct
+  // UPDATE would be rejected by RLS once the member leaves the org.
+  const { error } = await (supabase.rpc as any)("remove_org_member", {
+    p_user_id: userId,
+  });
 
-  if (result.error) throw result.error;
+  if (error) throw error;
 }
 
 /**

@@ -281,7 +281,6 @@ export interface Database {
           window_title: string | null;
           language: string | null;
           language_extension: string | null;
-          icon_url: string | null;
           timestamp: TimestampString;
           created_at: TimestampString;
         };
@@ -294,7 +293,6 @@ export interface Database {
           window_title?: string | null;
           language?: string | null;
           language_extension?: string | null;
-          icon_url?: string | null;
           timestamp: TimestampString;
           created_at?: TimestampString;
         };
@@ -305,7 +303,6 @@ export interface Database {
           window_title?: string | null;
           language?: string | null;
           language_extension?: string | null;
-          icon_url?: string | null;
           timestamp?: TimestampString;
         };
         Relationships: [

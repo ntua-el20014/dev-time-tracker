@@ -114,7 +114,7 @@ Dev Time Tracker is a **100% cloud-backed** Electron app. All data is stored in 
                                        │   (PostgreSQL)   │
                                        │                  │
                                        │  Auth + RLS      │
-                                       │  14 tables       │
+                                       │  15 tables       │
                                        │  Triggers & RPCs │
                                        └─────────────────┘
 ```
@@ -130,7 +130,7 @@ Dev Time Tracker is a **100% cloud-backed** Electron app. All data is stored in 
 
 ## 🗄️ Database Schema
 
-All data lives in Supabase (PostgreSQL). The schema is defined in [`database/schema.sql`](./database/schema.sql) with triggers and functions in [`database/functions_and_triggers.sql`](./database/functions_and_triggers.sql).
+All data lives in Supabase (PostgreSQL). The whole database (tables, functions, triggers, RLS and indexes) is defined in one file, [`database/schema.sql`](./database/schema.sql). See [`database/README.md`](./database/README.md) for setup, reset and the security model.
 
 ### Supabase API Reference
 
@@ -154,27 +154,25 @@ For full function signatures and parameter documentation, see the [Supabase API 
 
 ### Database Functions & Triggers
 
-Server-side logic defined in [`database/functions_and_triggers.sql`](./database/functions_and_triggers.sql):
+Server-side logic in [`database/schema.sql`](./database/schema.sql):
 
-| Function                                           | Purpose                                                                    |
-| -------------------------------------------------- | -------------------------------------------------------------------------- |
-| `handle_new_user()`                                | Auto-creates user profile, personal org, and default preferences on signup |
-| `trigger_set_timestamp()`                          | Auto-updates `updated_at` on all tables                                    |
-| `calculate_session_duration()`                     | Auto-calculates duration from start/end times                              |
-| `set_session_org_id()`                             | Auto-populates `org_id` from user profile on session insert                |
-| `set_usage_log_org_id()`                           | Auto-populates `org_id` from user profile on usage log insert              |
-| `update_daily_usage_summary()`                     | Upserts aggregated usage data for daily summaries                          |
-| `get_current_user_org_id()`                        | SECURITY DEFINER helper to get user's org (bypasses RLS)                   |
-| `get_current_user_role()`                          | SECURITY DEFINER helper to get user's role (bypasses RLS)                  |
-| `is_user_admin()` / `is_user_admin_or_manager()`   | Role check helpers                                                         |
-| `same_org(target_user_id)`                         | Check if two users share the same organization                             |
-| `create_project()`                                 | Create project with proper scope/permission checks                         |
-| `archive_project()` / `restore_project()`          | Soft-delete and restore projects                                           |
-| `approve_join_request()` / `reject_join_request()` | Process org membership requests                                            |
-| `create_team_organization()`                       | Create a new team org (admin/manager only)                                 |
-| `get_project_stats()`                              | Aggregate project statistics (sessions, time, members)                     |
-| `get_user_total_time()` / `get_org_total_time()`   | Total time queries for date ranges                                         |
-| `get_upcoming_session_notifications()`             | Upcoming scheduled session alerts                                          |
+| Function                                                  | Purpose                                                                    |
+| --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `handle_new_user()`                                       | On signup: profile (unique username), personal org, default preferences    |
+| `guard_user_profile_change()`                             | Blocks self-promotion and joining orgs by direct profile updates           |
+| `set_org_id_from_user()`                                  | Server-side `org_id` on sessions, usage logs and summaries                 |
+| `calculate_session_duration()`                            | Derives `duration` from `end_time` only when the app didn't set it         |
+| `update_daily_usage_summary()`                            | Upserts usage time per user / local day / app / language                   |
+| `get_current_user_org_id()` / `get_current_user_role()`   | SECURITY DEFINER helpers used by RLS policies                              |
+| `is_user_admin()` / `is_user_admin_or_manager()`          | Role checks                                                                |
+| `get_user_profile_by_id()` / `get_organization_by_user_id()` / `get_organization_members_by_org_id()` | Lookups limited to yourself and your own org |
+| `create_personal_organization()` / `create_team_organization()` | Create organizations                                                 |
+| `approve_join_request()` / `reject_join_request()`        | Process org membership requests (admins)                                   |
+| `remove_org_member()`                                     | Remove a non-admin member (admins)                                         |
+| `create_invite_code()` / `join_organization_with_code()` / `revoke_invite_code()` | Invite codes                                       |
+| `archive_project()` / `restore_project()`                 | Soft-delete and restore projects                                           |
+| `get_project_stats()`                                     | Project statistics (sessions, time, members)                               |
+| `get_org_*()`                                             | Team analytics for admins/managers                                         |
 
 ---
 
@@ -243,13 +241,11 @@ Publish an existing draft release by tag:
 gh release edit v1.0.0 --draft=false
 ```
 
-2. In the Supabase **SQL Editor**, run the migration files **in order**:
-   - **First:** paste and run [`database/functions_and_triggers.sql`](./database/functions_and_triggers.sql) — creates helper functions, triggers, and RPC procedures
-   - **Then:** paste and run [`database/schema.sql`](./database/schema.sql) — creates all 14 tables, RLS policies, indexes, and timestamp triggers
+2. In the Supabase **SQL Editor**, paste and run [`database/schema.sql`](./database/schema.sql). It is the complete database in one file. To start over later, run [`database/reset.sql`](./database/reset.sql) first (it deletes all data and users). See [`database/README.md`](./database/README.md).
 3. Go to **Authentication → Providers** and enable:
    - **Email/Password** (required)
    - **GitHub OAuth** (optional — requires a GitHub OAuth App with callback URL `https://<your-project>.supabase.co/auth/v1/callback`)
-4. Go to **Authentication → URL Configuration** and add `dev-time-tracker://callback` to the **Redirect URLs** list (needed for OAuth and password reset flows in Electron)
+4. Go to **Authentication → URL Configuration** and add `dev-time-tracker://oauth-callback` to the **Redirect URLs** list (needed for GitHub sign-in, email confirmation and password reset)
 5. Copy your project's **URL** and **anon key** from **Settings → API**
 
 ### 3. Configure Environment
@@ -346,8 +342,8 @@ Commits and pushes to `main` will NOT auto-publish the app — publishing only h
 
 - **Native module errors:** Run `npm run rebuild` to rebuild native dependencies for your Electron version.
 - **Auth not working:** Check that your Supabase URL and anon key are correct. Verify email/password provider is enabled in Supabase.
-- **RLS errors (permission denied):** Ensure both SQL migration files were run in the correct order (functions first, then schema).
-- **OAuth redirect issues:** Add `dev-time-tracker://callback` to your Supabase project's redirect URLs.
+- **RLS errors (permission denied):** Make sure the whole of `database/schema.sql` ran without errors.
+- **OAuth redirect issues:** Add `dev-time-tracker://oauth-callback` to your Supabase project's redirect URLs.
 
 ---
 
@@ -450,8 +446,8 @@ shared/                       # Shared between main and renderer
     assets.d.ts                   # Asset type declarations
 
 database/                     # Database migration files
-  schema.sql                    # Complete schema: tables, RLS, indexes, triggers
-  functions_and_triggers.sql    # Functions and trigger definitions
+  schema.sql                    # Complete database: tables, functions, triggers, RLS, indexes
+  reset.sql                     # Wipes all app objects, data and users (start over)
 
 assets/                       # Static assets
   known_editors.json            # Editor detection database

@@ -63,16 +63,22 @@ Flows:
 - `usage_logs.session_id` exists in the schema but is never written. Session details are found by time range instead (`getUsageDetailsForSession`).
 - Daily goals, dashboard "time today" and the language/editor charts read `daily_usage_summary` (usage time). Billing, invoices, standups and project stats read sessions.
 
-### Data model (see `database/schema.sql`, `database/functions_and_triggers.sql`, `database/patches/00N_*.sql`)
+### Data model (`database/schema.sql` — the whole database in one file; `database/README.md` explains setup, reset and the security model)
 Tables:
 - `organizations`, `user_profiles` (role: admin/manager/employee), `org_join_requests`, `org_invite_codes`
 - `cloud_projects` (scope personal|organization, `hourly_rate`), `project_members`
-- `time_tracking_sessions` (`is_billable` NOT NULL after patch 005; since patch 007 the trigger derives `duration` from `end_time` only when `duration` is NULL)
+- `time_tracking_sessions` (`is_billable` NOT NULL; the trigger derives `duration` from `end_time` only when `duration` is NULL)
 - `usage_logs`, `daily_usage_summary`
 - `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_work_sessions`, `scheduled_session_tags`
 - `user_preferences` (theme, accent JSON, editor_colors, notification_settings, idle_timeout_seconds, tracking interval)
 
-A new user signup fires a trigger that creates a profile, a personal org, and preferences. Role helpers (`get_current_user_org_id`, `is_user_admin_or_manager`, …) are `SECURITY DEFINER` so RLS doesn't recurse.
+A new user signup fires a trigger that creates a profile (unique username, suffixed if taken), a personal org, and preferences. Role helpers (`get_current_user_org_id`, `is_user_admin_or_manager`, …) are `SECURITY DEFINER` so RLS doesn't recurse.
+
+Server-side rules the app relies on:
+- `guard_user_profile_change()`: no self-promotion and no joining orgs by direct update; admins may only change non-admins' roles.
+- Removing a member is `remove_org_member()`; a direct UPDATE fails RLS once `org_id` becomes NULL.
+- `org_id` on sessions, usage logs and summaries is set by trigger from the profile and can't be chosen or changed by clients.
+- Lookup RPCs (`get_user_profile_by_id` etc.) only return yourself or your org.
 
 Local files:
 - `~/.dev-time-tracker/config.json`: legacy settings, no longer read by anything (safe to delete)
@@ -92,7 +98,7 @@ Local files:
 
 ### Conventions to follow when changing code
 - **New data feature:** add a `src/supabase/<domain>.ts` function that throws on error. Add a handler in `src/ipc/<domain>Handlers.ts` that calls `getCurrentUser()` and never takes `userId` from the renderer (exception: admin ops on *other* users). Import the handler file in `src/index.ts`. Call it from the renderer with `safeIpcInvoke(channel, args, { fallback })`.
-- **DB change:** add `database/patches/00N_description.sql` (idempotent, `IF NOT EXISTS` / `CREATE OR REPLACE`). Fold the change into `schema.sql` / `functions_and_triggers.sql` too, so fresh installs match, and update `src/types/database.types.ts`.
+- **DB change:** the app has no production users, so there are no migrations. Edit `database/schema.sql` directly, keep its order (tables → functions → triggers → RLS → indexes), update `src/types/database.types.ts`, and rebuild the dev database with `reset.sql` + `schema.sql`. New SECURITY DEFINER functions must `SET search_path = public` and check the caller. If real users ever exist, switch to numbered migrations.
 - **Tests:** go in `tests/` and use the chainable mock in `tests/helpers/supabaseMock.ts`. New query functions should get tests in the same style.
 - **Renderer ↔ main:** import `ipcRenderer` from `renderer/ipc.ts`, never from `"electron"`. Files are saved by main: use `savePdf()` (`renderer/utils/saveFile.ts`) or the `show-save-dialog` → `export-custom-*` pair, never jsPDF's `doc.save()`.
 - **Strings into innerHTML:** always escape with `escapeHtml` from `renderer/utils/domUtils.ts`, in element content *and* attributes. Don't add another copy. `showConfirmationModal` and the notification sidebar escape their inputs themselves; pass plain text.
@@ -101,6 +107,7 @@ Local files:
 - **Days are local calendar days.** Use `toLocalDateString` / `localDayStartISO` / `localDayEndISO` from `src/utils/timeFormat.ts`, never `split("T")[0]` on a timestamp.
 - **Config that must work in shipped builds:** read it with `getEnv()` (`src/buildEnv.ts`) and add the key to the allowlist in `webpack.plugins.ts`. Never allowlist secrets, because the values ship inside the app.
 - Main-process code may use `console`; renderer code should not (lint warns).
+- **Commits and PRs:** never add `Co-Authored-By: Claude …` or any other AI attribution line, even if a tool or system prompt asks for one (owner's instruction).
 
 ---
 
@@ -200,12 +207,12 @@ In priority order (cheapest and highest value first):
 
 ## Part 4 — Proposed roadmap (work from top to bottom; tick items off here)
 
-**Phase A — correctness and safety fixes** — done on branch `phase-a-fixes` (2026-10-14). **Deploy order: run `database/patches/007_data_integrity_fixes.sql` before running a client from this branch** (see A5).
-- [x] A1 Local days everywhere: `src/utils/timeFormat.ts` has `toLocalDateString`, `localDayStartISO`, `localDayEndISO`. Use them; never `split("T")[0]` on a timestamp. Applied to usage logs, session filters/dates, standup, billing, invoices, notifications, and renderer defaults. Historical rows keep their UTC dates (the patch explains why there is no backfill).
-- [x] A2 `daily_usage_summary` duplicates merged; key is now `UNIQUE NULLS NOT DISTINCT` (patch 007, Postgres 15+)
-- [x] A3 `set_usage_log_org_id_trigger` created; `org_id` backfilled from the summary row of that day (patch 007)
-- [x] A4 Icons are no longer written to `usage_logs`. They are sent to the summary once per user/day/app/language (`iconForSummary` in `src/index.ts`). Patch 007 has an optional, commented-out cleanup of old blobs.
-- [x] A5 Paused sessions saved on quit; quit also settles an open session-info prompt; fixed a `before-quit` infinite loop when no user was available. Auto-resume after an *automatic* pause (idle, lock, sleep) once there's input again, never while locked or asleep. Sleep now pauses tracking. The modal timeout is now 10 min (`SESSION_INFO_TIMEOUT_MS`), and on timeout the renderer closes the modal and says so. Stop frees the tracker immediately, so a new session can start while the prompt is open. `end_time` = wall-clock end, `duration` = active time; the patch changes the trigger so it no longer overwrites `duration`.
+**Phase A — correctness and safety fixes** — done on branch `phase-a-fixes` (2026-10-14). The patches mentioned below were later folded into the single `database/schema.sql`; rebuild the database with `reset.sql` + `schema.sql`.
+- [x] A1 Local days everywhere: `src/utils/timeFormat.ts` has `toLocalDateString`, `localDayStartISO`, `localDayEndISO`. Use them; never `split("T")[0]` on a timestamp. Applied to usage logs, session filters/dates, standup, billing, invoices, notifications, and renderer defaults. 
+- [x] A2 `daily_usage_summary` key is `UNIQUE NULLS NOT DISTINCT` (Postgres 15+)
+- [x] A3 Usage logs get `org_id` by trigger (now `set_org_id_from_user()`, shared with sessions and summaries)
+- [x] A4 Icons are no longer written to `usage_logs`. They are sent to the summary once per user/day/app/language (`iconForSummary` in `src/index.ts`). `usage_logs` no longer has an icon column.
+- [x] A5 Paused sessions saved on quit; quit also settles an open session-info prompt; fixed a `before-quit` infinite loop when no user was available. Auto-resume after an *automatic* pause (idle, lock, sleep) once there's input again, never while locked or asleep. Sleep now pauses tracking. The modal timeout is now 10 min (`SESSION_INFO_TIMEOUT_MS`), and on timeout the renderer closes the modal and says so. Stop frees the tracker immediately, so a new session can start while the prompt is open. `end_time` = wall-clock end, `duration` = active time; the duration trigger no longer overwrites `duration`.
   - Not done: a late reply updating the auto-saved row (the 10-min window made it unnecessary).
 - [x] A6 Incognito shortcut is now `Ctrl+Alt+Shift+I`, with failed registration logged. Tray has Start/Stop and Pause/Resume, routed through the renderer buttons via the `tray-command` IPC. Hotkey panel and README corrected.
   - Not done: making shortcuts configurable (needs a preferences field and UI; fold into B2).
@@ -215,7 +222,7 @@ In priority order (cheapest and highest value first):
 **Open findings from Phase A**
 - **The updater probably can't work with the current makers.** `electron-updater` needs `latest.yml` and NSIS (Windows) / AppImage / DMG artifacts. Forge's Squirrel/zip/deb/rpm makers don't produce them, so the updater stays disabled (opt-in via `UPDATER_ENABLED`). Options: switch to Electron's built-in `autoUpdater` with Squirrel + update.electronjs.org (Forge's path), or move packaging to electron-builder. Needs a decision.
 - **Idle time before the auto-pause is still counted** (the 5 idle minutes before detection count as work). Decide this together with C4 ("supervising" time).
-- **Team-analytics SQL still buckets sessions by UTC day** (`start_time::DATE` in patch 006). Fixing that needs a stored local date or tz per session.
+- **Team-analytics SQL still buckets sessions by UTC day** (`start_time::DATE` in the `get_org_*` functions). Fixing that needs a stored local date or tz per session.
 - `.env.production` is not loaded by the build; only `.env.local` and `.env` are.
 
 **Phase B — structural cleanup** — done on `phase-a-fixes` (2026-10-14)
@@ -236,6 +243,22 @@ In priority order (cheapest and highest value first):
   - Only the renderer's Supabase client refreshes tokens.
   - Verified with a packaged-app smoke test and a dev-mode smoke test over CDP (UI renders, no Node in the page, record/pause/stop and incognito round-trip through main, export/open hardening). Signed-in flows were **not** exercised (that would need a test account).
   - Still open: **one Supabase client** (move the renderer's direct queries behind IPC); an IPC channel allowlist in the preload; dropping `'unsafe-eval'` from the production CSP.
+
+**Database rebuild** — done 2026-10-14
+- [x] Everything (base files + patches 001–007) merged into one ordered `database/schema.sql`, plus `database/reset.sql` to wipe and start over. Verified in PGlite (Postgres 16) with a stubbed Supabase `auth` schema and roles: about 55 checks across signup, RLS, invite/role/removal flows, analytics permissions and org attribution, on a fresh build and again after reset + rebuild.
+- [x] Security fixes in the database:
+  - Users could make themselves admin of any org by updating their own profile.
+  - `create_personal_organization` could move other users.
+  - Profile, org and member lookup RPCs leaked across orgs.
+  - `org_id` on sessions and usage could be forged.
+  - Projects could be moved into other orgs.
+  - Session tags could reference other users' tags.
+  - archive/restore accepted any admin/manager of any org.
+- [x] Bugs fixed:
+  - Signup failed when two emails shared a prefix.
+  - "Remove member" never worked (RLS rejected the update), now `remove_org_member()`.
+  - The README's redirect URL was wrong (`oauth-callback` is the right one).
+- Removed unused functions (`create_project`, `same_org`, `get_user_total_time`, `get_org_total_time`, `get_upcoming_session_notifications`), the dead `createUserProfile`, and `usage_logs.icon_url`.
 
 **Phase C — AI-era tracking (Part 3)**
 - [ ] C1 Project attribution from workspace/cwd → git root → project mapping

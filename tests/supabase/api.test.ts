@@ -20,7 +20,6 @@ import {
   resetPasswordForEmail,
   resendVerificationEmail,
   updatePassword,
-  createUserProfile,
   getUserProfile,
   updateUserProfileData,
   updateUserProfile,
@@ -124,16 +123,7 @@ describe("supabase api", () => {
     });
   });
 
-  it("creates and fetches user profiles", async () => {
-    mockResult({
-      data: { id: "user-1", username: "alice" },
-      error: null,
-    });
-
-    await expect(
-      createUserProfile({ id: "user-1", username: "alice" }),
-    ).resolves.toEqual({ id: "user-1", username: "alice" });
-
+  it("fetches user profiles", async () => {
     mockResult({
       data: { id: "user-1", username: "alice" },
       error: null,

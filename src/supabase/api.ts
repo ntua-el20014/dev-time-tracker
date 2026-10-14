@@ -112,23 +112,6 @@ export async function updatePassword(newPassword: string) {
 }
 
 // User profile management
-export async function createUserProfile(profile: {
-  id: string;
-  username: string;
-  org_id?: string;
-}) {
-  const { data, error } = await supabase
-    .from("user_profiles")
-    .insert(profile as any)
-    .select()
-    .single();
-
-  if (error) {
-    throw error;
-  }
-  return data;
-}
-
 export async function getUserProfile(userId: string) {
   const { data, error } = await supabase
     .from("user_profiles")

@@ -516,7 +516,7 @@ describe("organizations", () => {
 
   // ───────────── removeUserFromOrganization ─────────────
   describe("removeUserFromOrganization", () => {
-    it("sets user org_id to null", async () => {
+    it("calls the remove_org_member function", async () => {
       // Provide actor profile, target profile, then the update result
       mockResults([
         { data: [{ id: "test-user-id", org_id: "org-1", role: "admin" }], error: null },
@@ -526,8 +526,11 @@ describe("organizations", () => {
 
       await removeUserFromOrganization("user-2");
 
-      const updateCalls = getCallsFor("update");
-      expect(updateCalls[0].args[0]).toEqual({ org_id: null, role: "employee" });
+      const rpcCalls = getCallsFor("rpc");
+      expect(rpcCalls.at(-1)?.args).toEqual([
+        "remove_org_member",
+        { p_user_id: "user-2" },
+      ]);
     });
   });
 
