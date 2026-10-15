@@ -14,7 +14,8 @@ This project’s CSS is modularized by feature/component for maintainability:
 ## layout.css
 
 - Main container and layout (`.container`, `.header`)
-- Tab bar and tab content (`.tab-bar`, `.tab`, `.tab-content`)
+- App shell: sidebar rail, nav items, rail timer, main area, sub-view switcher (`.app-shell`, `.app-nav`, `.nav-item`, `.nav-timer`, `.app-main`, `.subnav`)
+- Home's collapsible App activity section (`.app-activity`)
 
 ## table.css
 
@@ -42,7 +43,7 @@ This project’s CSS is modularized by feature/component for maintainability:
 
 ## profile.css
 
-- Profile tab sidebar/menu buttons (`.profile-chapter-btn`)
+- Settings chapter menu buttons (`.profile-chapter-btn`)
 - Tag color chip and color grid picker (`.tag-color-chip`, `.color-grid-picker`)
 - Logout button
 
@@ -53,7 +54,7 @@ This project’s CSS is modularized by feature/component for maintainability:
 
 ## dashboard.css
 
-- Dashboard tab layout and quick stats
+- Home (dashboard) layout and quick stats
 - Bubble styles for language/editor/session/streak
 - Calendar and charts in dashboard
 

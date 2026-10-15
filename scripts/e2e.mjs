@@ -191,20 +191,35 @@ try {
   check("user 1 is admin of it", p1?.role === "admin");
   await u1.shot("u1-dashboard.png");
 
-  const tabs = await u1.ev(`[...document.querySelectorAll(".tab")].filter(t => t.style.display !== "none").map(t => t.dataset.tab)`);
-  for (const tab of tabs) {
-    await u1.ev(`document.querySelector('.tab[data-tab="${tab}"]').click()`);
+  // Sidebar: every visible view, and every visible sub-view inside it
+  const navVisible = (view) => u1.ev(`!document.querySelector('.nav-item[data-view="${view}"]').hidden`);
+  check("solo user: Team is not in the sidebar", !(await navVisible("team")));
+  const views = await u1.ev(`[...document.querySelectorAll(".nav-item[data-view]")].filter(n => !n.hidden).map(n => n.dataset.view)`);
+  for (const view of views) {
+    await u1.ev(`document.querySelector('.nav-item[data-view="${view}"]').click()`);
     await sleep(2500);
-    const len = await u1.ev(`(document.getElementById("tab-${tab}")?.innerText || "").trim().length`);
-    check(`tab "${tab}" renders`, len > 0, `${len} chars`);
-    await u1.shot(`u1-tab-${tab}.png`);
+    const subs = await u1.ev(`[...document.querySelectorAll('#view-${view} .subnav-btn')].filter(b => !b.hidden).map(b => b.dataset.sub)`);
+    for (const sub of subs.length ? subs : [null]) {
+      if (sub) {
+        await u1.ev(`document.querySelector('#view-${view} .subnav-btn[data-sub="${sub}"]').click()`);
+        await sleep(2500);
+      }
+      const name = sub ? `${view}/${sub}` : view;
+      const len = await u1.ev(`(document.querySelector('#view-${view} ${sub ? `.subview[data-sub="${sub}"]` : ""}')?.innerText || "").trim().length`);
+      check(`view "${name}" renders`, len > 0, `${len} chars`);
+      await u1.shot(`u1-view-${name.replace("/", "-")}.png`);
+    }
   }
-  await u1.ev(`document.querySelector('.tab[data-tab="dashboard"]').click()`);
+  await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
+  const timerIdle = await u1.ev(`document.getElementById("navTimerStatus").textContent`);
+  check("rail timer says not recording", timerIdle === "Not recording", timerIdle);
 
   const title = `E2E session ${new Date().toISOString().slice(11, 19)}`;
   await u1.ev(`document.getElementById("recordBtn").click()`);
   check("record button starts tracking", await u1.waitFor(`document.getElementById("recordBtn").title === "Finish Recording"`, 5000));
   await sleep(13000);
+  const clock = await u1.ev(`document.getElementById("navTimerClock").textContent`);
+  check("rail timer counts the session", /^0:00:1\d$/.test(clock), clock);
   await u1.ev(`document.getElementById("recordBtn").click()`);
   check("stop shows the session-info modal", await answerSessionInfo(u1, title));
   let saved;
@@ -283,16 +298,23 @@ try {
   const p2role = (await u2.invoke("org:get-current-user-profile")).v;
   check("user 2 is manager", p2role?.role === "manager");
 
-  // Team analytics tab as admin
-  await u1.ev(`document.querySelector('.tab[data-tab="teamAnalytics"]')?.click()`);
+  // Team appears for user 1 now that the org has two members. The join
+  // happened in user 2's app, so user 1 re-checks on organization:changed
+  // (in real use: window focus, or an org change made in this window).
+  await u1.ev(`window.dispatchEvent(new Event("organization:changed"))`);
+  check("Team appears once the org has another member", await u1.waitFor(`!document.querySelector('.nav-item[data-view="team"]').hidden`, 8000));
+
+  // Team → Analytics as admin
+  await u1.ev(`document.querySelector('.nav-item[data-view="team"]').click()`);
+  await u1.ev(`document.querySelector('#view-team .subnav-btn[data-sub="analytics"]').click()`);
   await sleep(3000);
-  const taText = await u1.ev(`document.getElementById("tab-teamAnalytics")?.innerText || ""`);
+  const taText = await u1.ev(`document.getElementById("teamAnalyticsContent")?.innerText || ""`);
   check("team analytics renders for admin", taText.trim().length > 0);
   const range = { start: new Date(Date.now() - 86400000).toLocaleDateString("en-CA"), end: new Date(Date.now() + 86400000).toLocaleDateString("en-CA") };
   const ras = await rawApi(u1, "POST", "rpc/get_org_analytics_summary", { p_org_id: org1.id, p_start_date: range.start, p_end_date: range.end });
   check("analytics RPC counts the session", ras.status === 200 && /"total_sessions":[1-9]/.test(ras.body), ras.body);
   const shownSessions = Number((taText.match(/TOTAL SESSIONS\s*(\d+)/i) || [])[1] ?? -1);
-  check("Team Analytics tab refreshed after the session was saved (was stale)", shownSessions >= 1, `shows ${shownSessions}`);
+  check("Team Analytics refreshed after the session was saved (was stale)", shownSessions >= 1, `shows ${shownSessions}`);
   await u1.shot("u1-team-analytics.png");
 
   const remove = await u1.invoke("org:remove-user", p2.id);

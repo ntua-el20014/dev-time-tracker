@@ -76,14 +76,10 @@
   color: var(--muted-text, #888);
 }
 
-/* Floating notification bell (to the right of incognito button) */
+/* Notification bell (sidebar timer, next to the incognito button) */
 #notifBell {
-  position: fixed;
-  bottom: 46px;
-  right: 20px;
-  z-index: 9999;
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 2px solid var(--border);
   background: var(--bg-secondary);

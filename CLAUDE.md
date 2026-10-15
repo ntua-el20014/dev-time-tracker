@@ -90,12 +90,16 @@ Local files:
 - `userData/lang-<uid>.json`
 
 ### Renderer layout
-- `renderer/renderer.ts` is the entry point. It handles auth bootstrapping, tab switching with a **dirty-flag** system (`markTabsDirty`, which is also exposed on `window`), the record/pause buttons, in-window hotkeys, and the session-info modal.
-- Tabs live in `renderer/*Tab.ts` and each exports a `render*()` function.
-  - The largest are `organizationTab.ts` (2.2k lines), `profileTab.ts`, `projectsTab.ts` and `renderer.ts`.
-  - `organizationTab` and `projectsTab` both contain project-management UI, and those parts overlap.
+- **Layout (since U1):** a left sidebar rail (`public/index.html`) with Home · Sessions · Projects · Team · Settings, and the rail timer (record/pause/incognito/bell, elapsed active time) pinned at the bottom. Sessions and Team have sub-views (a `.subnav` segmented control).
+- `renderer/navigation.ts` owns views, sub-views and the **dirty-flag** system. Each *page* (old tab ids: `dashboard`, `today`, `summary`, `calendar`, `insights`, `projects`, `organization`, `teamAnalytics`, `settings`) is registered with its render function in `renderer.ts` (`registerPage`), renders on first visit, and re-renders only after `markTabsDirty(...)` (also on `window`). `refreshPages(...)` marks dirty and re-renders what is on screen. Navigate with `navigateTo(view, sub?)`, never by clicking DOM buttons.
+  - `today` is Home's collapsible "App activity" section and only renders while it is open.
+  - **Team** shows only when `shouldShowTeam()` (`renderer/utils/teamVisibility.ts`) says there is a team: other members, pending join requests, a usable invite code, or the user's own pending request. Re-checked on sign-in, `organization:changed`, and window focus (≥30 s apart). `pinNavItem("team")` (Settings → Account & team, org wizard) keeps it visible until sign-out. Team → Analytics is admins/managers only.
+- `renderer/renderer.ts` is the entry point: auth bootstrapping, page registration, the record/pause buttons and rail timer (counts up from `activeSeconds` in the `tracking-state` broadcast), in-window hotkeys (`Ctrl+1…9` = Nth visible sidebar item), and the session-info modal.
+- Page renderers live in `renderer/*Tab.ts` and each exports a `render*()` function: `dashboardTab` (Home, incl. daily-goal set/delete), `logsTab` (App activity), `summaryTab`/`calendarTab`/`insightsTab` (Sessions), `projectsTab`, `organizationTab`/`teamAnalyticsTab` (Team), `settingsTab` (chapters: Preferences, Integrations, Shortcuts, Account & team; was `profileTab`).
+  - The largest are `organizationTab.ts` (2.2k lines), `settingsTab.ts`, `projectsTab.ts` and `renderer.ts`.
+  - `organizationTab` and `projectsTab` both contain project-management UI, and those parts overlap (U2).
 - Shared UI is in `renderer/components/`, helpers in `renderer/utils/`. Caches (`logsCache`, `preferencesCache`, `dailyGoalCache`) use localStorage.
-- Some global state still lives on `window`: `isIncognito`, `markTabsDirty`, `showMainUIForUser`. Recording state is in `trackingControls.ts`.
+- Some global state still lives on `window`: `isIncognito`, `markTabsDirty`, `showMainUIForUser`. Recording state is in `trackingControls.ts`; navigation state in `navigation.ts`.
 - UI is built with template strings and `innerHTML` (~148 call sites). There is one `escapeHtml` (`renderer/utils/domUtils.ts`), and it escapes quotes too.
 - CSS is one file per feature in `renderer/styles/`, all imported in `renderer.ts`. Theming uses CSS variables (`--accent`).
 
@@ -271,13 +275,58 @@ In priority order (cheapest and highest value first):
 - [ ] C5 Browser URL classification
 - [ ] C6 Dashboard: human vs agent time, lines changed, agent cost per project; agent cost as an optional invoice line item
 
+**Phase U — UI restructure (Part 5); interleave with Phase C**
+- [x] U1 Sidebar shell; Settings split out of My Profile; Team item shown only when there is a team — done on `ui-u1-sidebar` (2026-10-15). Also: Insights view (editor/language charts, goal history) in Sessions; Today table folded into Home as collapsible "App activity"; daily-goal set/delete moved to Home's goal box; rail timer shows active time (`activeSeconds` added to `TrackingState`); Integrations chapter holds custom-apps/lang.json. Verified by unit tests (`tests/renderer/teamVisibility.test.ts`), smoke test and e2e (walks every view/sub-view, checks Team hidden for solo and shown after a member joins, rail timer counts).
+  - Not done in U1: Billing item (U2), project picker before Start (U3), a richer Home timeline (U3).
+- [ ] U2 One Projects UI (#23, split `organizationTab.ts`); Billing promoted to a top-level item
+- [ ] U3 Home (timer + project picker before Start + timeline) and Sessions (List / Calendar / Insights), built alongside C1/C4
+
 **Phase D — later / optional**
 - [ ] Always-on auto-segmentation with the review inbox
 - [ ] Privacy: title-upload toggle, local-only mode
-- [ ] Merge the duplicated project UIs (#23); split `organizationTab.ts`
 
-## Open questions for the owner (answer before starting Phase C)
-- Who is the main user: solo freelancer (billing-first) or teams (org analytics-first)? That decides whether C6 or team views come first.
-- Is it acceptable to install a Claude Code hook into the user's `~/.claude/settings.json` (with consent), or should the app stay passive (transcripts and process detection only)?
-- Should "Supervising" time count as billable by default?
-- Keep manual Start/Stop as the main model, or move to always-on with afterwards review?
+## Owner decisions for Phase C (answered 2026-10-15)
+1. **Primary user: solo freelancer, billing-first.** Prioritize C6: per-project human/agent time, agent cost, and agent cost as an invoice line item. Team views come later.
+2. **Hooks: start passive** (transcripts + process detection). Then add an opt-in **"Connect Claude Code"** action that:
+   - previews the change before applying it,
+   - backs up `~/.claude/settings.json`,
+   - merges with existing hooks (never overwrites),
+   - can uninstall cleanly.
+   The receiver listens on localhost only and takes metadata only — never prompt or response content.
+3. **Supervising time is billable by default**, shown as a separate slice, with a per-project toggle. It only counts while an agent heartbeat arrived in the last ~10 min. Idle time before an auto-pause is trimmed unless it was supervising (resolves the "idle time before auto-pause" open finding).
+4. **Manual Start/Stop stays the main model.** Build C1 and C4 so they also work outside a session, to enable an opt-in always-on mode in Phase D.
+
+**Phase C order:** C1 → C4 → C3 (passive first) → C2 → C6 → C5.
+
+---
+
+## Part 5 — UI restructure (decided 2026-10-15; U1 done, see Part 4)
+
+### Why
+- 8 top tabs: Dashboard, Today, Summary, Calendar, Projects, My Profile, Organization, Team Analytics.
+- **Three of them show "my time".** Dashboard has goal, earnings, stats, charts and standup. Today is the per-app log. Summary lists sessions and holds the review panel.
+- **Billing is buried.** It is a sub-tab under Projects → "Billable Hours", with the invoice modal there, even though billing is the main use case.
+- **My Profile is a junk drawer:** editor/language charts, goal history, settings, tags, accent colour, notifications, export, updates, help, shortcuts, org card.
+- **Projects and Organization both manage projects** (#23).
+- **Organization is noise for a solo user.** Every user gets an automatic personal org, so solo users see admin UI for a team of one.
+
+### Target structure (owner's choices)
+**Left sidebar** (icon + label rail). The running timer is pinned at the bottom of the rail, with the notification bell beside it.
+
+| Item | Contents |
+|---|---|
+| **Home** | Above the fold: big Start/Stop, with the **project picker before Start** (prefilled by C1), then today's timeline. Below: goal progress, unbilled earnings and this week's billable hours, next scheduled session, standup button. The per-app "Today" log becomes a **collapsed "App activity" section**. |
+| **Sessions** | Views: **List** (today's Summary, by date or by session, plus the review inbox, which becomes the Phase D always-on inbox), **Calendar** (past and scheduled sessions together; replaces the Calendar tab), **Insights** (editor/language charts and goal history moved from Profile; later C2 git stats and agent stats). |
+| **Projects** | One project UI, replacing both the Projects tab and Organization → Projects. Each project page has stats, and after C6 human / supervising / agent time, lines changed and agent cost, plus the per-project "supervising is billable" toggle. |
+| **Billing** | Top-level. Unbilled work, rates, invoices (with agent cost as an optional line item, C6), earnings. |
+| **Team** | **Shown only when the org has more than one member or pending invites.** Members, invites, join requests, team analytics; sections are shown by role. |
+| ⚙ **Settings** | Account/profile, preferences (theme, accent, idle, interval), tags, notifications, shortcuts, data export, updates, help, **Integrations** (Connect Claude Code from C3, custom apps), and a "Create / join a team" entry for solo users. |
+
+### Stop flow change
+The project is chosen at Start. The Stop dialog only confirms or edits the title, project and billable flag; its timeout and fallback behaviour stay the same.
+
+### Suggested order
+1. Do the shell first: sidebar, Settings split out of Profile, Team visibility by org size. It is mostly moving existing render functions around.
+2. Then merge the project UIs (#23) and promote Billing.
+3. Build Home and Sessions views alongside C1 and C4, so the picker before Start and the supervising slice land in their final place.
+4. The C6 widgets then go straight into Projects and Billing.

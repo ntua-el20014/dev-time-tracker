@@ -21,66 +21,166 @@
   margin-bottom: 16px;
 }
 
-.tab-bar {
+/* ── App shell: sidebar rail + main area ─────────────────────────── */
+.app-shell {
+  width: 100vw;
+  height: 100vh;
   display: flex;
-  gap: 8px;
-  justify-content: center;
-  background: var(--table-head);
-  padding: 0 24px;
-  width: 95%;
-  max-width: 1400px;
-  margin: 0 auto;
-  border-radius: 0 0 12px 12px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  min-height: 48px;
-  height: 48px;
-  align-items: flex-end;
-  flex-wrap: nowrap;
-  overflow-x: visible;
   box-sizing: border-box;
 }
 
-.tab {
-  padding: 10px 24px;
-  background: var(--row-odd);
-  border: none;
-  border-radius: 8px 8px 0 0;
-  cursor: pointer;
-  color: var(--fg);
-  font-weight: bold;
-  font-size: 15px;
-  outline: none;
-  transition: background 0.2s;
-  white-space: nowrap;
-  min-width: 0;
-  flex-shrink: 1;
+.app-shell [hidden] {
+  display: none !important;
 }
 
-.tab.active {
+.app-nav {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 10px;
+  background: var(--table-head);
+  border-right: 1px solid var(--border);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.nav-items,
+.nav-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.nav-item:hover {
+  background: var(--row-hover);
+}
+
+.nav-item.active {
   background: var(--accent);
   color: var(--accent-text);
 }
 
-.tab-content {
-  display: none;
-  min-height: 400px;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
+.nav-item:focus-visible,
+.subnav-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-.tab-content.active {
-  display: block;
+.nav-icon {
+  width: 22px;
+  text-align: center;
+  font-size: 18px;
 }
 
-#mainUI {
-  width: 100%;
-  margin: 0 auto;
+.nav-timer {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--row-odd);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-timer-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.nav-timer-status {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.nav-timer-clock {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-timer.recording .nav-timer-clock {
+  color: var(--accent);
+}
+
+.nav-timer.paused .nav-timer-clock {
+  opacity: 0.6;
+}
+
+.nav-timer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+
+.subnav {
+  display: flex;
+  gap: 4px;
+  width: 95%;
+  max-width: 1400px;
+  margin: 20px auto 0;
   box-sizing: border-box;
-  display: block;
+}
+
+.subnav-btn {
+  padding: 8px 18px;
+  background: var(--row-odd);
+  border: none;
+  border-radius: 8px;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.subnav-btn.active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.app-activity {
+  margin-top: 24px;
+}
+
+.app-activity > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1.05em;
+  color: var(--accent);
+  padding: 8px 0;
+}
+
+.app-activity[open] > summary {
+  margin-bottom: 12px;
 }
 
 /* Summary filter container styles */
@@ -112,13 +212,37 @@
     margin: 0 auto;
   }
 
-  .tab-bar {
+  .subnav {
     width: 98%;
-    padding: 0 15px;
+  }
+}
+
+/* Narrow windows: icon-only rail */
+@media (max-width: 900px) {
+  .app-nav {
+    flex-basis: 72px;
+    padding: 12px 6px;
   }
 
-  #mainUI {
-    min-width: 0;
-    width: 100%;
+  .nav-item {
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  .nav-label,
+  .nav-timer-status {
+    display: none;
+  }
+
+  .nav-timer {
+    padding: 8px 4px;
+  }
+
+  .nav-timer-clock {
+    font-size: 13px;
+  }
+
+  .nav-timer-controls {
+    flex-direction: column;
   }
 }

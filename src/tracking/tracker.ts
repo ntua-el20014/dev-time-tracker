@@ -44,6 +44,8 @@ export interface TrackingState {
   /** Paused by idle/lock/sleep rather than by the user */
   autoPaused: boolean;
   isIncognito: boolean;
+  /** Active seconds of the current session when this state was taken */
+  activeSeconds: number;
 }
 
 /** Sessions shorter than this (active seconds) are not saved. */
@@ -83,7 +85,11 @@ function notify(message: string) {
 }
 
 export function getTrackingState(): TrackingState {
-  return { ...clock.state, isIncognito };
+  return {
+    ...clock.state,
+    isIncognito,
+    activeSeconds: clock.activeSeconds(new Date()),
+  };
 }
 
 function emitState() {

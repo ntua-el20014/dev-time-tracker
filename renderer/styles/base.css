@@ -55,11 +55,7 @@ h1 {
 }
 
 #recordBtn {
-  position: fixed;
-  top: 60px;
-  left: 24px;
-  z-index: 1001;
-  padding: 8px 24px;
+  padding: 6px 18px;
   border-radius: 8px;
   background: var(--accent);
   color: #222;
@@ -72,8 +68,8 @@ h1 {
 }
 
 #recordBtn img {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   display: block;
 }
 
@@ -85,11 +81,7 @@ h1 {
 }
 
 #pauseBtn {
-  position: fixed;
-  top: 112px;
-  left: 24px;
-  z-index: 1001;
-  padding: 8px 24px;
+  padding: 6px 14px;
   border-radius: 8px;
   background: var(--row-hover);
   color: var(--fg);
@@ -105,8 +97,8 @@ h1 {
 }
 
 #pauseBtn img {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   display: block;
 }
 

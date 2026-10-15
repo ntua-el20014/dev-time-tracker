@@ -1,13 +1,9 @@
 /* ── Incognito Mode ───────────────────────────────────────────────── */
 
-/* Incognito toggle button (next to record/pause) */
+/* Incognito toggle button (sidebar timer, next to record/pause) */
 #incognitoBtn {
-  position: fixed;
-  bottom: 46px;
-  right: 72px;
-  z-index: 9999;
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 2px solid var(--border);
   background: var(--bg-secondary);

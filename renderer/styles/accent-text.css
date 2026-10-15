@@ -195,7 +195,8 @@
   color: var(--accent-text) !important;
 }
 
-/* Tab navigation */
-.tab.active {
+/* Sidebar and sub-view navigation */
+.nav-item.active,
+.subnav-btn.active {
   color: var(--accent-text) !important;
 }

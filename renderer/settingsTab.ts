@@ -2,8 +2,6 @@ import { applyAccentColor } from "./renderer";
 import { escapeHtml } from "./utils/domUtils";
 import { ipcRenderer } from "./ipc";
 import {
-  renderPercentBar,
-  renderPieChartJS,
   showColorGridPicker,
   showAvatarPicker,
   showConfirmationModal,
@@ -13,7 +11,6 @@ import {
 import { loadHotkey, setUserTheme } from "./theme";
 import {
   getCurrentUserId,
-  prettyDate,
   getCustomAvatars,
   addCustomAvatar,
   removeCustomAvatar,
@@ -29,6 +26,7 @@ import {
 import { updateCachedPreference } from "./utils/preferencesCache";
 import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
 import { getLangIconUrl } from "../src/utils/langIconUrl";
+import { isNavItemVisible, navigateTo, pinNavItem } from "./navigation";
 import type { Tag, UpdaterState } from "../shared/types";
 
 
@@ -75,178 +73,6 @@ function ensureUpdaterListener() {
     applyUpdaterState(state),
   );
   updaterListenerRegistered = true;
-}
-
-async function renderEditorUsage(container: HTMLElement) {
-  type EditorUsageRow = { app: string; total_time: number };
-  const usage: EditorUsageRow[] = await safeIpcInvoke("get-editor-usage", [], {
-    fallback: [],
-  });
-  if (!usage || usage.length === 0) {
-    container.innerHTML = "<p>No data available.</p>";
-    return;
-  }
-  const config: Record<string, string> = await safeIpcInvoke(
-    "get-editor-colors",
-    [],
-    { fallback: {} as Record<string, string> },
-  );
-  const defaultColors = ["#4f8cff", "#ffb347", "#7ed957", "#ff6961", "#b19cd9"];
-  const colorMap: { [key: string]: string } = {};
-  usage.forEach((row: EditorUsageRow, i: number) => {
-    colorMap[row.app] =
-      config[row.app] || defaultColors[i % defaultColors.length];
-  });
-  usage.sort(
-    (a: EditorUsageRow, b: EditorUsageRow) => b.total_time - a.total_time,
-  );
-  const total = usage.reduce(
-    (sum: number, row: EditorUsageRow) => sum + row.total_time,
-    0,
-  );
-  const items = usage.map((row: EditorUsageRow) => ({
-    label: row.app,
-    percent: (row.total_time / total) * 100,
-    color: colorMap[row.app],
-  }));
-  container.innerHTML = `
-    <h2>Editor Usage Breakdown</h2>
-    ${renderPercentBar(items)}
-    <ul class="editor-usage-list">
-      ${usage
-        .map((row: EditorUsageRow) => {
-          const percent = ((row.total_time / total) * 100).toFixed(1);
-          const color = colorMap[row.app];
-          return `<li class="editor-usage-item">
-          <span class="editor-usage-app" style="color:${color};">${row.app}</span>
-          <span class="editor-usage-percent">${percent}%</span>
-          <div class="color-picker-wrapper" data-app="${row.app}" style="background-color: ${color};">
-            <input type="color" value="${color}" data-app="${row.app}" class="editor-color-input" />
-          </div>
-        </li>`;
-        })
-        .join("")}
-    </ul>
-    <div class="info-note">
-      Pick your color for each editor and press <b>Enter</b>.
-    </div>
-  `;
-
-  container.querySelectorAll('input[type="color"]').forEach((input) => {
-    input.addEventListener("change", (e: Event) => {
-      const target = e.target as HTMLInputElement;
-      const app = target.dataset.app;
-      const color = target.value;
-      safeIpcInvoke("set-editor-color", [app, color], { fallback: null });
-      refreshProfile();
-    });
-  });
-}
-
-async function renderLanguageUsage(container: HTMLElement) {
-  type LanguageUsageRow = { language: string; total_time: number };
-  const usage: LanguageUsageRow[] = await safeIpcInvoke(
-    "get-language-usage",
-    [],
-    { fallback: [] },
-  );
-  if (!usage || usage.length === 0) {
-    container.innerHTML = "<p>No data available.</p>";
-    return;
-  }
-  usage.sort(
-    (a: LanguageUsageRow, b: LanguageUsageRow) => b.total_time - a.total_time,
-  );
-  const total = usage.reduce(
-    (sum: number, row: LanguageUsageRow) => sum + row.total_time,
-    0,
-  );
-  const defaultColors = [
-    "#4f8cff",
-    "#ffb347",
-    "#7ed957",
-    "#ff6961",
-    "#b19cd9",
-    "#f67280",
-    "#355c7d",
-  ];
-  const items = usage.map((row: LanguageUsageRow, i: number) => ({
-    label: row.language,
-    percent: (row.total_time / total) * 100,
-    color: defaultColors[i % defaultColors.length],
-  }));
-
-  container.innerHTML = `
-  <h2>Language Usage Breakdown</h2>
-  <div class="language-usage-flex">
-    <div>
-      <div id="languagePieChart" class="language-pie-chart"></div>
-    </div>
-  </div>
-  <div class="language-pie-info">
-    <b>How to map unknown file extensions to languages:</b><br>
-    Edit the file <code>lang.json</code> in your app data folder:<br>
-    <div class="centered-btn">
-      <button id="openLangJsonBtn" class="open-lang-json-btn">
-        Open lang.json
-      </button>
-    </div>
-    Example content:
-    <pre>
-{
-  ".foo": "My Custom Language",
-  ".bar": "AnotherLang"
-}</pre>
-    <div class="info-note">
-      After saving, your changes will be applied automatically.
-    </div>
-  </div>
-  <div class="language-pie-info" style="margin-top: 16px;">
-    <b>How to add custom apps for tracking:</b><br>
-    Edit the file <code>custom-apps.json</code> in your app data folder:<br>
-    <div class="centered-btn">
-      <button id="openCustomAppsBtn" class="open-lang-json-btn">
-        Open custom-apps.json
-      </button>
-    </div>
-    Example content:
-    <pre>
-{
-  "editors": [
-    { "name": "My IDE", "execNames": ["myide", "myide.exe"] }
-  ],
-  "devTools": [],
-  "browsers": []
-}</pre>
-    <div class="info-note">
-      Add any app under <b>editors</b>, <b>devTools</b>, or <b>browsers</b>.<br>
-      Use the exact executable name (without path). Changes apply on next tracking tick.
-    </div>
-  </div>
-  `;
-
-  renderPieChartJS("languagePieChart", items, 420);
-
-  window.removeEventListener("theme-changed", rerenderPieChartOnThemeChange);
-
-  function rerenderPieChartOnThemeChange() {
-    renderPieChartJS("languagePieChart", items, 180);
-  }
-  window.addEventListener("theme-changed", rerenderPieChartOnThemeChange);
-
-  const openBtn = container.querySelector("#openLangJsonBtn");
-  if (openBtn) {
-    openBtn.addEventListener("click", () => {
-      safeIpcInvoke("open-lang-json", [], { fallback: null });
-    });
-  }
-
-  const openCustomAppsBtn = container.querySelector("#openCustomAppsBtn");
-  if (openCustomAppsBtn) {
-    openCustomAppsBtn.addEventListener("click", () => {
-      safeIpcInvoke("open-custom-apps-json", [], { fallback: null });
-    });
-  }
 }
 
 async function renderSettings(container: HTMLElement) {
@@ -308,7 +134,7 @@ async function renderSettings(container: HTMLElement) {
 
   // Build the complete HTML first, then set it all at once
   container.innerHTML = `
-    <h2>Settings</h2>
+    <h2>Preferences</h2>
     <div class="settings-row">
       <label for="idleTimeoutRange" class="settings-label">Idle Timeout:</label>
       <input type="range" id="idleTimeoutRange" min="60" max="300" step="30" value="${idleTimeout}" class="settings-range">
@@ -900,65 +726,73 @@ async function renderSettings(container: HTMLElement) {
   }
 }
 
-async function renderDailyGoalHistory(container: HTMLElement) {
-  // Fetch all daily goals for the user, newest first
-  const goals: {
-    date: string;
-    time: number;
-    description: string;
-    isCompleted: number;
-  }[] = await safeIpcInvoke("get-all-daily-goals", [], { fallback: [] });
-
+/** Settings → Integrations: files that teach the tracker about apps and languages. */
+function renderIntegrations(container: HTMLElement) {
   container.innerHTML = `
-    <h2>Daily Goal History</h2>
-    ${
-      goals.length === 0
-        ? `<p>No daily goals set yet.</p>`
-        : `<table class="goal-history-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Time (min)</th>
-                <th>Description</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${goals
-                .map(
-                  (g) => `
-                <tr>
-                  <td>${prettyDate(g.date)}</td>
-                  <td>${g.time}</td>
-                  <td>${escapeHtml(g.description || "")}</td>
-                  <td>
-                    ${
-                      g.isCompleted
-                        ? '<span style="color:green;">Completed</span>'
-                        : '<span style="color:#aaa;">Not completed</span>'
-                    }
-                  </td>
-                </tr>
-              `,
-                )
-                .join("")}
-            </tbody>
-          </table>`
-    }
-    <div class="info-note" style="margin-top:12px;">
-      Only one daily goal can be set per day. Completed goals are marked in green.
+  <h2>Integrations</h2>
+  <div class="language-pie-info">
+    <b>Track more apps:</b><br>
+    Edit the file <code>custom-apps.json</code> in your app data folder:<br>
+    <div class="centered-btn">
+      <button id="openCustomAppsBtn" class="open-lang-json-btn">
+        Open custom-apps.json
+      </button>
     </div>
+    Example content:
+    <pre>
+{
+  "editors": [
+    { "name": "My IDE", "execNames": ["myide", "myide.exe"] }
+  ],
+  "devTools": [],
+  "browsers": []
+}</pre>
+    <div class="info-note">
+      Add any app under <b>editors</b>, <b>devTools</b>, or <b>browsers</b>.<br>
+      Use the exact executable name (without path). Changes apply on next tracking tick.
+    </div>
+  </div>
+  <div class="language-pie-info" style="margin-top: 16px;">
+    <b>Map unknown file extensions to languages:</b><br>
+    Edit the file <code>lang.json</code> in your app data folder:<br>
+    <div class="centered-btn">
+      <button id="openLangJsonBtn" class="open-lang-json-btn">
+        Open lang.json
+      </button>
+    </div>
+    Example content:
+    <pre>
+{
+  ".foo": "My Custom Language",
+  ".bar": "AnotherLang"
+}</pre>
+    <div class="info-note">
+      After saving, your changes will be applied automatically.
+    </div>
+  </div>
   `;
+
+  container.querySelector("#openLangJsonBtn")?.addEventListener("click", () => {
+    safeIpcInvoke("open-lang-json", [], { fallback: null });
+  });
+  container
+    .querySelector("#openCustomAppsBtn")
+    ?.addEventListener("click", () => {
+      safeIpcInvoke("open-custom-apps-json", [], { fallback: null });
+    });
 }
 
-async function renderOrganizationSection(container: HTMLElement) {
+/** Settings → Account & team: who you are, your org, and the way into Team. */
+async function renderAccountSection(container: HTMLElement) {
   const profile = await getCurrentUserProfile();
   const org = await getCurrentOrganization();
 
   if (!profile) {
-    container.innerHTML = `<h2>Organization</h2><p>Could not load your profile.</p>`;
+    container.innerHTML = `<h2>Account &amp; team</h2><p>Could not load your profile.</p>`;
     return;
   }
+
+  const teamVisible = isNavItemVisible("team");
 
   const roleBadgeClass = `role-badge role-${profile.role || "employee"}`;
   const roleLabel = profile.role
@@ -966,7 +800,7 @@ async function renderOrganizationSection(container: HTMLElement) {
     : "Employee";
 
   container.innerHTML = `
-    <h2>Organization</h2>
+    <h2>Account &amp; team</h2>
     <div class="org-profile-section">
       <div class="org-profile-card">
         <div class="org-profile-row">
@@ -990,10 +824,24 @@ async function renderOrganizationSection(container: HTMLElement) {
             ? `
         <div class="org-profile-row">
           <label>Org ID:</label>
-          <span class="org-uuid" title="${org.id}" style="font-size:0.85em;opacity:0.7;">${org.id}</span>
+          <span class="org-uuid" title="${escapeHtml(org.id)}" style="font-size:0.85em;opacity:0.7;">${escapeHtml(org.id)}</span>
         </div>
         `
             : ""
+        }
+      </div>
+      <div class="team-entry" style="margin-top: 1.5rem;">
+        ${
+          teamVisible
+            ? `<p>Members, invites and team analytics are in the <b>Team</b> section.</p>
+               <button id="openTeamBtn" class="btn btn-primary">Open Team</button>`
+            : `<h3>Working with others?</h3>
+               <p class="info-note">
+                 Create a team organization, or join one with an invite code.
+                 The Team section stays in the sidebar once your organization
+                 has other members.
+               </p>
+               <button id="openTeamBtn" class="btn btn-primary">Set up a team</button>`
         }
       </div>
       ${
@@ -1006,14 +854,15 @@ async function renderOrganizationSection(container: HTMLElement) {
         Leaving will remove you from this organization. You can create a new one or join another afterwards.
       </div>
       `
-          : `
-      <div class="info-note" style="margin-top:1rem;">
-        You're not in an organization. Go to the <b>Organization</b> tab to create or join one.
-      </div>
-      `
+          : ""
       }
     </div>
   `;
+
+  container.querySelector("#openTeamBtn")?.addEventListener("click", () => {
+    pinNavItem("team");
+    navigateTo("team", "organization");
+  });
 
   // Leave org handler
   const leaveBtn = container.querySelector("#leaveOrgBtn") as HTMLButtonElement;
@@ -1031,7 +880,7 @@ async function renderOrganizationSection(container: HTMLElement) {
             resetOrgWizardDismissed();
             (window as any).markTabsDirty("organization");
             window.dispatchEvent(new Event("organization:changed"));
-            renderOrganizationSection(container);
+            renderAccountSection(container);
             setTimeout(() => showOrgSetupWizard(), 800);
           } catch (error) {
             showNotification(
@@ -1044,50 +893,44 @@ async function renderOrganizationSection(container: HTMLElement) {
   }
 }
 
-export async function refreshProfile() {
-  const profileDiv = document.getElementById("profileContent");
-  if (!profileDiv) return;
+const CHAPTERS: Record<string, (el: HTMLElement) => void | Promise<void>> = {
+  preferences: renderSettings,
+  integrations: renderIntegrations,
+  shortcuts: renderHotkeys,
+  account: renderAccountSection,
+};
 
-  profileDiv.innerHTML = `
+export async function renderSettingsView() {
+  const settingsDiv = document.getElementById("settingsContent");
+  if (!settingsDiv) return;
+
+  settingsDiv.innerHTML = `
   <div class="profile-main-flex">
-    <nav id="profileSidebar" class="profile-sidebar">
+    <nav class="profile-sidebar" aria-label="Settings sections">
       <ul class="profile-chapter-list">
-        <li><button class="profile-chapter-btn" data-chapter="editor">Editors</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="language">Languages</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="goals">Daily Goals</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="settings">Settings</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="hotkeys">Hotkeys</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="organization">Organization</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="preferences">Preferences</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="integrations">Integrations</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="shortcuts">Shortcuts</button></li>
+        <li><button class="profile-chapter-btn" data-chapter="account">Account &amp; team</button></li>
       </ul>
       <button id="logoutBtn" class="logout-btn">Log Out</button>
     </nav>
-    <div id="profileChapterContent" class="profile-chapter-content"></div>
+    <div id="settingsChapterContent" class="profile-chapter-content"></div>
   </div>
   `;
 
-  const contentDiv = profileDiv.querySelector(
-    "#profileChapterContent",
+  const contentDiv = settingsDiv.querySelector(
+    "#settingsChapterContent",
   ) as HTMLElement;
-  const buttons = profileDiv.querySelectorAll(".profile-chapter-btn");
+  const buttons = settingsDiv.querySelectorAll(".profile-chapter-btn");
 
   async function showChapter(chapter: string) {
+    const render = CHAPTERS[chapter];
+    if (!render) return;
     contentDiv.innerHTML = "";
     await withLoading(contentDiv, "Loading…", async () => {
-      if (chapter === "editor") {
-        await renderEditorUsage(contentDiv);
-      } else if (chapter === "language") {
-        await renderLanguageUsage(contentDiv);
-      } else if (chapter === "settings") {
-        await renderSettings(contentDiv);
-      } else if (chapter === "hotkeys") {
-        await renderHotkeys(contentDiv);
-      } else if (chapter === "goals") {
-        await renderDailyGoalHistory(contentDiv);
-      } else if (chapter === "organization") {
-        await renderOrganizationSection(contentDiv);
-      }
+      await render(contentDiv);
     });
-    // Highlight active
     buttons.forEach((btn) => {
       btn.classList.toggle(
         "active",
@@ -1096,19 +939,16 @@ export async function refreshProfile() {
     });
   }
 
-  // Default to editor usage
-  showChapter("editor");
+  showChapter("preferences");
   buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
       const chapter = (btn as HTMLButtonElement).dataset.chapter;
-      if (chapter) {
-        showChapter(chapter);
-      }
+      if (chapter) showChapter(chapter);
     });
   });
 
   // Logout button logic
-  const logoutBtn = profileDiv.querySelector("#logoutBtn") as HTMLButtonElement;
+  const logoutBtn = settingsDiv.querySelector("#logoutBtn") as HTMLButtonElement;
   logoutBtn.onmouseenter = () => {
     logoutBtn.style.background =
       "linear-gradient(90deg, #f09819 0%, #ff5858 100%)";
@@ -1170,7 +1010,7 @@ function renderHotkeys(container: HTMLElement) {
       )} + ${keyImg("p")}</span> Pause/Resume recording</li>
       <li><span style="min-width:180px;display:inline-block;">${keyImg(
         "ctrl",
-      )} + ${keyImg("hashtag")}</span> Switch to tab (# = 1,2,3...)</li>
+      )} + ${keyImg("hashtag")}</span> Go to sidebar item # (1 = Home, counting down)</li>
       <li><span style="min-width:180px;display:inline-block;">Ctrl + Alt + Shift + I</span> Toggle incognito (works from any app)</li>
     </ul>
     <div class="info-note" style="margin-top:16px;">

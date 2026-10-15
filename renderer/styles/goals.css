@@ -52,3 +52,18 @@
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
+/* Home: goal box above the dashboard title */
+#dashboard-goal-progress {
+  margin-bottom: 12px;
+}
+
+#dashboard-goal-progress > .goal-btn {
+  display: block;
+  margin: 0 auto;
+}
+
+#dashboard-goal-progress .daily-goal-div {
+  justify-content: space-between;
+  padding: 0;
+}

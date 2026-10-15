@@ -32,18 +32,14 @@ export class PaginationManager<T> {
       setTimeout(() => {
         // Try multiple scrollable containers with smooth scrolling
         const summaryContent = document.getElementById("summaryContent");
-        const tabSummary = document.getElementById("tab-summary");
         const container = document.querySelector(".container");
-        const mainContent = document.querySelector(".main-content");
-        const tabContent = document.querySelector(".tab-content.active");
+        const mainContent = document.querySelector(".app-main");
 
         // First, try smooth scrolling for all potential containers
         [
           summaryContent,
-          tabSummary,
           container,
           mainContent,
-          tabContent,
           document.body,
           document.documentElement,
         ].forEach((element) => {
@@ -204,18 +200,14 @@ export class DateBasedPaginationManager {
       setTimeout(() => {
         // Try multiple scrollable containers with smooth scrolling
         const summaryContent = document.getElementById("summaryContent");
-        const tabSummary = document.getElementById("tab-summary");
         const container = document.querySelector(".container");
-        const mainContent = document.querySelector(".main-content");
-        const tabContent = document.querySelector(".tab-content.active");
+        const mainContent = document.querySelector(".app-main");
 
         // First, try smooth scrolling for all potential containers
         [
           summaryContent,
-          tabSummary,
           container,
           mainContent,
-          tabContent,
           document.body,
           document.documentElement,
         ].forEach((element) => {

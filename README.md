@@ -50,7 +50,9 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 - **Connection Status:**  
   Live indicator (Online / Offline / Limited) with graceful degradation.
 - **Hotkeys & Tray:**  
-  Start/stop and pause tracking and switch tabs with in-app shortcuts (Ctrl+R, Ctrl+P, Ctrl+1–8), or from the tray icon. Toggle incognito from any app with Ctrl+Alt+Shift+I.
+  Start/stop and pause tracking with in-app shortcuts (Ctrl+R, Ctrl+P) or from the tray icon, and jump between sidebar sections with Ctrl+1–5. Toggle incognito from any app with Ctrl+Alt+Shift+I.
+- **Sidebar layout:**  
+  Home (timer, today, goal, earnings), Sessions (List / Calendar / Insights), Projects, Settings, and Team, which appears once your organization has other members (or someone is waiting to join).
 - **Customizable Themes:**  
   Switch between dark and light mode, pick custom accent colors for each theme. Settings sync across devices.
 - **Data Export:**  
@@ -68,7 +70,7 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 | **Linux (Wayland)** | ❌ Not supported       | `@miniben90/x-win` does not support the Wayland protocol. As a workaround, run the app under **XWayland** (e.g., launch with `GDK_BACKEND=x11`). Pure Wayland compositors without XWayland will not report active window data. |
 
 > **Custom Apps:** If your editor, terminal, or browser isn't recognized automatically, open  
-> **Profile → Language Usage → Open custom-apps.json** and add its executable name.  
+> **Settings → Integrations → Open custom-apps.json** and add its executable name.  
 > Changes take effect on the next tracking tick—no restart required.
 
 ---
@@ -85,14 +87,14 @@ Dev Time Tracker is a **100% cloud-backed** Electron app. All data is stored in 
 │  │   Renderer       │ ◄─────────────► │   Main Process     │ │
 │  │   (Frontend)     │                 │                    │ │
 │  │                  │                 │  IPC Handlers      │ │
-│  │  Tabs:           │                 │   ├─ session       │ │
-│  │   Dashboard      │                 │   ├─ usage         │ │
-│  │   Summary        │                 │   ├─ tag           │ │
-│  │   Calendar       │                 │   ├─ goal          │ │
-│  │   Logs           │                 │   ├─ project       │ │
+│  │  Sidebar:        │                 │   ├─ session       │ │
+│  │   Home           │                 │   ├─ usage         │ │
+│  │   Sessions       │                 │   ├─ tag           │ │
+│  │    (List/Cal/    │                 │   ├─ goal          │ │
+│  │     Insights)    │                 │   ├─ project       │ │
 │  │   Projects       │                 │   ├─ scheduled     │ │
-│  │   Organization   │                 │   ├─ preferences   │ │
-│  │   Profile        │                 │   ├─ user          │ │
+│  │   Team           │                 │   ├─ preferences   │ │
+│  │   Settings       │                 │   ├─ user          │ │
 │  │                  │                 │   ├─ organization  │ │
 │  │  Components:     │                 │   └─ export        │ │
 │  │   Charts         │                 │                    │ │
@@ -300,7 +302,7 @@ npm run clean      # Remove build artifacts (.webpack, dist, out)
 - A manual package preview workflow builds installers on Linux, Windows, and macOS without publishing them.
 - **Auto-update (Windows):**
   - The installed app uses Electron's built-in updater with [update.electronjs.org](https://github.com/electron/update.electronjs.org), which serves the latest **published** GitHub release of this public repo. There's no server to run.
-  - It checks 30s after start and then hourly, downloads in the background, and offers "Restart to install" in My Profile.
+  - It checks 30s after start and then hourly, downloads in the background, and offers "Restart to install" in Settings → Preferences.
   - macOS needs a signed build (set `UPDATER_ENABLED=true` for it). Linux has no auto-update.
   - Set `UPDATER_ENABLED=false` to turn updates off; `UPDATER_GITHUB_REPO` / `UPDATER_FEED_URL` change the source.
 - Windows signing is enabled when `WINDOWS_CERTIFICATE_FILE` is set. Optional extras: `WINDOWS_CERTIFICATE_PASSWORD` and `WINDOWS_TIMESTAMP_SERVER`.
@@ -402,16 +404,19 @@ src/                          # Main process (Electron backend)
     fileOps.ts                    # File operations (CSV/ZIP export helpers)
 
 renderer/                     # Renderer process (frontend UI)
-  renderer.ts                   # Main entry: auth flow, tab initialization, tracking UI
+  renderer.ts                   # Main entry: auth flow, page registration, tracking UI, rail timer
+  navigation.ts                 # Sidebar views, sub-views, and per-page dirty flags
   trackingControls.ts           # Mirror of main's tracking state + start/stop/pause requests
   theme.ts                      # Theme management and switching
-  dashboardTab.ts               # Dashboard: calendar, recent activity, quick stats
-  summaryTab.ts                 # Summary: charts, sessions, custom analytics
-  calendarTab.ts                # Calendar: monthly activity heatmap
-  logsTab.ts                    # Logs: today's activity, daily goals
+  dashboardTab.ts               # Home: daily goal, earnings, calendar widget, quick stats, standup
+  logsTab.ts                    # Home → App activity: time per app/language today
+  summaryTab.ts                 # Sessions → List: charts, sessions, custom analytics
+  calendarTab.ts                # Sessions → Calendar: scheduled sessions
+  insightsTab.ts                # Sessions → Insights: editor/language breakdown, goal history
   projectsTab.ts                # Projects: personal and org project management
-  organizationTab.ts            # Organization: members, roles, join requests
-  profileTab.ts                 # Profile: settings, hotkeys, editor colors, about
+  organizationTab.ts            # Team → Organization: members, roles, invites, join requests
+  teamAnalyticsTab.ts           # Team → Analytics (admins/managers)
+  settingsTab.ts                # Settings: preferences, integrations, shortcuts, account & team
   components.ts                 # Reusable UI components barrel
   components/                   # UI component modules
     LandingPage.ts                # Auth: sign-in, sign-up, onboarding

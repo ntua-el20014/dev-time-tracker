@@ -6,6 +6,7 @@
 
 import { showInAppNotification } from "./Notifications";
 import { escapeHtml } from "../utils/domUtils";
+import { navigateTo, pinNavItem } from "../navigation";
 import {
   getCurrentOrganization,
   createTeamOrganization,
@@ -421,11 +422,11 @@ function renderDoneStep(content: HTMLDivElement, state: WizardState): void {
           <span class="role-badge role-admin">Admin</span>
         </div>
       </div>
-      <p class="org-wizard-hint">You can manage your organization, invite members, and create projects from the <b>Organization</b> tab.</p>
+      <p class="org-wizard-hint">You can manage your organization, invite members, and create projects from the <b>Team</b> section in the sidebar.</p>
     </div>
     <div class="org-wizard-footer">
-      <button class="org-wizard-primary" id="wizard-finish-btn">Go to Dashboard</button>
-      <button class="org-wizard-secondary" id="wizard-go-org-btn">Open Organization Tab</button>
+      <button class="org-wizard-primary" id="wizard-finish-btn">Go to Home</button>
+      <button class="org-wizard-secondary" id="wizard-go-org-btn">Open Team</button>
     </div>
   `;
 
@@ -437,11 +438,8 @@ function renderDoneStep(content: HTMLDivElement, state: WizardState): void {
   content.querySelector("#wizard-go-org-btn")?.addEventListener("click", () => {
     cleanup();
     dismissWizard();
-    // Switch to the organization tab
-    const orgTab = document.querySelector(
-      '.tab[data-tab="organization"]',
-    ) as HTMLButtonElement;
-    if (orgTab) orgTab.click();
+    pinNavItem("team");
+    navigateTo("team", "organization");
   });
 }
 

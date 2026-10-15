@@ -11,6 +11,8 @@ export interface TrackingState {
   isPaused: boolean;
   autoPaused: boolean;
   isIncognito: boolean;
+  /** Active seconds of the current session when main sent this state */
+  activeSeconds: number;
 }
 
 let state: TrackingState = {
@@ -18,6 +20,7 @@ let state: TrackingState = {
   isPaused: false,
   autoPaused: false,
   isIncognito: false,
+  activeSeconds: 0,
 };
 const listeners = new Set<(state: TrackingState) => void>();
 

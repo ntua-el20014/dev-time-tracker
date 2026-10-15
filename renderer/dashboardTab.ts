@@ -8,11 +8,106 @@ import {
   safeIpcInvoke,
   withLoading,
   getDailyGoalCached,
+  invalidateDailyGoalCache,
 } from "./utils";
 import { getLangIconUrl } from "../src/utils/langIconUrl";
 import { showInAppNotification } from "./components/Notifications";
+import { showModal } from "./components/Modals";
 import { renderEarningsWidget } from "./components/BillableHoursSummary";
 import type { DailySummaryRow, SessionRow } from "../shared/types";
+
+/**
+ * Today's goal: progress against it, or a button to set one. Progress counts
+ * usage time (daily_usage_summary), like the goal checker in renderer.ts.
+ */
+async function renderGoalBox(goalDiv: HTMLElement) {
+  const today = new Date().toLocaleDateString("en-CA");
+  const { goal: dailyGoal, totalMins } = await getDailyGoalCached(today);
+  const refresh = () => {
+    invalidateDailyGoalCache(today);
+    void renderGoalBox(goalDiv);
+  };
+
+  if (!dailyGoal) {
+    goalDiv.innerHTML = `<button id="setDailyGoalBtn" class="goal-btn">🎯 Set a daily goal</button>`;
+    goalDiv
+      .querySelector("#setDailyGoalBtn")
+      ?.addEventListener("click", () => showSetGoalModal(today, refresh));
+    return;
+  }
+
+  const percent = Math.min(100, (totalMins / dailyGoal.time) * 100);
+  goalDiv.innerHTML = `
+    <div class="daily-goal-div" style="margin-bottom:8px;">
+      <span class="daily-goal-info${dailyGoal.isCompleted ? " completed" : ""}">
+        <b>Daily Goal:</b> ${totalMins.toFixed(0)} / ${
+          dailyGoal.time
+        } mins (${percent.toFixed(0)}%)${
+          dailyGoal.description ? " — " + escapeHtml(dailyGoal.description) : ""
+        }
+      </span>
+      <button id="deleteDailyGoalBtn" class="btn-delete btn-small">Delete</button>
+    </div>
+    ${renderPercentBar(
+      [
+        {
+          label: "Progress",
+          percent,
+          color: percent >= 100 ? "#4caf50" : "var(--accent)",
+        },
+        { label: "", percent: 100 - percent, color: "#eee" },
+      ],
+      18,
+      8,
+    )}
+  `;
+  goalDiv
+    .querySelector("#deleteDailyGoalBtn")
+    ?.addEventListener("click", async () => {
+      await safeIpcInvoke("delete-daily-goal", [today], { fallback: null });
+      showInAppNotification("Daily goal deleted.");
+      refresh();
+    });
+}
+
+function showSetGoalModal(today: string, onSaved: () => void) {
+  showModal({
+    title: "Set Daily Goal",
+    fields: [
+      {
+        name: "time",
+        label: "Time (minutes):",
+        type: "text",
+        required: true,
+      },
+      { name: "description", label: "Description:", type: "text" },
+    ],
+    submitText: "Set Goal",
+    onSubmit: async (values) => {
+      const mins = Number(values.time);
+      const now = new Date();
+      const endOfDay = new Date(now);
+      endOfDay.setHours(23, 59, 59, 999);
+      const maxMins = Math.floor((endOfDay.getTime() - now.getTime()) / 60000);
+      if (maxMins <= 5) {
+        showInAppNotification("You have no time left today to set a goal.");
+        return;
+      }
+      if (isNaN(mins) || mins < 5 || mins > maxMins) {
+        showInAppNotification(`Goal must be between 5 and ${maxMins} minutes.`);
+        return;
+      }
+
+      await safeIpcInvoke(
+        "set-daily-goal",
+        [today, mins, values.description || ""],
+        { fallback: null },
+      );
+      showInAppNotification("Daily goal set!");
+      onSaved();
+    },
+  });
+}
 
 export async function renderDashboard() {
   const container = document.getElementById("dashboardContent");
@@ -46,35 +141,9 @@ export async function renderDashboard() {
     earningsDiv.appendChild(earningsWidget);
   }
 
-  // --- Daily Goal Progress Bar ---
-  const today = new Date().toLocaleDateString("en-CA");
-  const { goal: dailyGoal, totalMins } = await getDailyGoalCached(today);
-
+  // --- Daily Goal ---
   const goalDiv = document.getElementById("dashboard-goal-progress");
-  if (goalDiv && dailyGoal) {
-    const percent = Math.min(100, (totalMins / dailyGoal.time) * 100);
-    goalDiv.innerHTML = `
-      <div style="margin-bottom:8px;">
-        <b>Daily Goal:</b> ${totalMins.toFixed(0)} / ${
-          dailyGoal.time
-        } mins (${percent.toFixed(0)}%)
-      </div>
-      ${renderPercentBar(
-        [
-          {
-            label: "Progress",
-            percent,
-            color: percent >= 100 ? "#4caf50" : "var(--accent)",
-          },
-          { label: "", percent: 100 - percent, color: "#eee" },
-        ],
-        18,
-        8,
-      )}
-    `;
-  } else if (goalDiv) {
-    goalDiv.innerHTML = "";
-  }
+  if (goalDiv) await renderGoalBox(goalDiv);
 
   // --- Calendar Widget ---
   const calendarDiv = document.getElementById("dashboard-calendar");

@@ -10,105 +10,125 @@
   <body>
     <div id="root">
       <div id="userLanding"></div>
-      <div id="mainUI" style="display: none">
-        <div class="tab-bar">
-          <button class="tab active" data-tab="dashboard">Dashboard</button>
-          <button class="tab" data-tab="today">Today</button>
-          <button class="tab" data-tab="summary">Summary</button>
-          <button class="tab" data-tab="calendar">Calendar</button>
-          <button
-            class="tab"
-            data-tab="projects"
-            id="projects-tab"
-            style="display: none"
-          >
-            Projects
-          </button>
-          <button class="tab" data-tab="profile">My Profile</button>
-          <button class="tab" data-tab="organization">Organization</button>
-          <button
-            class="tab"
-            data-tab="teamAnalytics"
-            id="teamAnalytics-tab"
-            style="display: none"
-          >
-            Team Analytics
-          </button>
+      <div id="mainUI" class="app-shell" style="display: none">
+        <nav id="appNav" class="app-nav" aria-label="Main">
+          <div class="nav-items">
+            <button class="nav-item active" data-view="home">
+              <span class="nav-icon" aria-hidden="true">🏠</span>
+              <span class="nav-label">Home</span>
+            </button>
+            <button class="nav-item" data-view="sessions">
+              <span class="nav-icon" aria-hidden="true">🗂️</span>
+              <span class="nav-label">Sessions</span>
+            </button>
+            <button class="nav-item" data-view="projects">
+              <span class="nav-icon" aria-hidden="true">📁</span>
+              <span class="nav-label">Projects</span>
+            </button>
+            <button class="nav-item" data-view="team" hidden>
+              <span class="nav-icon" aria-hidden="true">👥</span>
+              <span class="nav-label">Team</span>
+            </button>
+          </div>
+          <div class="nav-footer">
+            <button class="nav-item" data-view="settings">
+              <span class="nav-icon" aria-hidden="true">⚙️</span>
+              <span class="nav-label">Settings</span>
+            </button>
+            <div class="nav-timer" id="navTimer">
+              <div class="nav-timer-readout">
+                <span id="navTimerStatus" class="nav-timer-status">Not recording</span>
+                <span id="navTimerClock" class="nav-timer-clock">0:00:00</span>
+              </div>
+              <div class="nav-timer-controls">
+                <button id="recordBtn" title="Start/Stop recording (Ctrl+R)">
+                  <img id="recordIcon" src="" alt="Record" />
+                </button>
+                <button id="pauseBtn" style="display: none" title="Pause/Resume (Ctrl+P)">
+                  <img id="pauseIcon" src="" alt="Pause" />
+                </button>
+                <button
+                  id="incognitoBtn"
+                  title="Toggle Incognito Mode (Ctrl+Alt+Shift+I)"
+                >
+                  <span id="incognitoIcon">🕶️</span>
+                </button>
+                <button
+                  id="notifBell"
+                  title="Notifications"
+                  aria-label="Notifications"
+                >
+                  🔔
+                </button>
+              </div>
+            </div>
+          </div>
+        </nav>
 
-          <button
-            id="notifBell"
-            title="Notifications"
-            aria-label="Notifications"
-          >
-            🔔
-          </button>
-        </div>
-        <div id="tab-dashboard" class="tab-content" style="display: none">
-          <div class="container">
-            <div id="dashboardContent"></div>
-          </div>
-        </div>
-        <div id="tab-today" class="tab-content" style="display: none">
-          <div class="container">
-            <table id="logTable">
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>Application</th>
-                  <th></th>
-                  <th>Language</th>
-                  <th>Time Spent Today</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-        <div id="tab-summary" class="tab-content" style="display: none">
-          <div class="container">
-            <div id="summaryContent"></div>
-          </div>
-        </div>
-        <div id="tab-calendar" class="tab-content" style="display: none">
-          <div class="container">
-            <div id="calendarContent"></div>
-          </div>
-        </div>
-        <div id="tab-projects" class="tab-content" style="display: none">
-          <div class="container">
-            <div id="projectsContent"></div>
-          </div>
-        </div>
-        <div id="tab-teamAnalytics" class="tab-content" style="display: none">
-          <div class="container">
-            <div id="teamAnalyticsContent"></div>
-          </div>
-        </div>
-        <div id="tab-organization" class="tab-content" style="display: none">
-          <div class="container">
-            <div id="organizationContent"></div>
-          </div>
-        </div>
-        <div id="tab-profile" class="tab-content" style="display: none">
-          <div class="container">
-            <h1>My Profile</h1>
-            <div id="profileContent"></div>
-          </div>
-        </div>
-        <button id="recordBtn">
-          <img id="recordIcon" src="" alt="Record" />
-        </button>
-        <button id="pauseBtn" style="display: none">
-          <img
-            id="pauseIcon"
-            src=""
-            alt="Pause"
-            style="width: 36px; height: 36px"
-          />
-        </button>
-        <button id="incognitoBtn" title="Toggle Incognito Mode (Ctrl+Alt+Shift+I)">
-          <span id="incognitoIcon">🕶️</span>
-        </button>
+        <main class="app-main">
+          <section id="view-home" class="view">
+            <div class="container">
+              <div id="dashboardContent"></div>
+              <details id="appActivity" class="app-activity">
+                <summary>App activity today</summary>
+                <table id="logTable">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>Application</th>
+                      <th></th>
+                      <th>Language</th>
+                      <th>Time Spent Today</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </details>
+            </div>
+          </section>
+
+          <section id="view-sessions" class="view" hidden>
+            <div class="subnav" role="tablist" aria-label="Sessions views">
+              <button class="subnav-btn active" data-sub="list" role="tab">List</button>
+              <button class="subnav-btn" data-sub="calendar" role="tab">Calendar</button>
+              <button class="subnav-btn" data-sub="insights" role="tab">Insights</button>
+            </div>
+            <div class="subview" data-sub="list">
+              <div class="container"><div id="summaryContent"></div></div>
+            </div>
+            <div class="subview" data-sub="calendar" hidden>
+              <div class="container"><div id="calendarContent"></div></div>
+            </div>
+            <div class="subview" data-sub="insights" hidden>
+              <div class="container"><div id="insightsContent"></div></div>
+            </div>
+          </section>
+
+          <section id="view-projects" class="view" hidden>
+            <div class="container"><div id="projectsContent"></div></div>
+          </section>
+
+          <section id="view-team" class="view" hidden>
+            <div class="subnav" role="tablist" aria-label="Team views">
+              <button class="subnav-btn active" data-sub="organization" role="tab">Organization</button>
+              <button class="subnav-btn" data-sub="analytics" role="tab" hidden>Analytics</button>
+            </div>
+            <div class="subview" data-sub="organization">
+              <div class="container"><div id="organizationContent"></div></div>
+            </div>
+            <div class="subview" data-sub="analytics" hidden>
+              <div class="container"><div id="teamAnalyticsContent"></div></div>
+            </div>
+          </section>
+
+          <section id="view-settings" class="view" hidden>
+            <div class="container">
+              <h1>Settings</h1>
+              <div id="settingsContent"></div>
+            </div>
+          </section>
+        </main>
+
         <div
           id="incognitoBanner"
           class="incognito-banner"

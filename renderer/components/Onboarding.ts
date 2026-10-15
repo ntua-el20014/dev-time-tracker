@@ -26,21 +26,21 @@ const onboardingSteps: OnboardingStep[] = [
     content:
       "Set daily coding time goals to stay motivated and track your consistency. Goals help you maintain regular coding habits.",
     icon: "🎯",
-    action: "Try setting a goal in the Today tab",
+    action: "Try setting a goal on Home",
   },
   {
     title: "Analyze Your Data",
     content:
-      "View detailed analytics in the Summary tab - see which languages you use most, track your productivity patterns, and create custom charts.",
+      "Open Sessions to browse your sessions, plan ahead in the Calendar, and see which editors and languages you use most under Insights.",
     icon: "📊",
-    action: "Explore the Summary tab when you have some data",
+    action: "Explore Sessions when you have some data",
   },
   {
     title: "Customize Your Experience",
     content:
-      "Personalize themes, set up global hotkeys, manage tags, and configure idle timeouts in your Profile settings.",
+      "Personalize themes, manage tags, review shortcuts, and configure idle timeouts in Settings (bottom of the sidebar).",
     icon: "⚙️",
-    action: "Check out the Profile tab for customization options",
+    action: "Check out Settings for customization options",
   },
 ];
 

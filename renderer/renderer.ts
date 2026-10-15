@@ -2,7 +2,8 @@
 import { ipcRenderer } from "./ipc";
 import { initSentryRenderer, setSentryUser, clearSentryUser, addBreadcrumb } from "../src/sentryRenderer";
 import { renderLogs } from "./logsTab";
-import { refreshProfile } from "./profileTab";
+import { renderSettingsView } from "./settingsTab";
+import { renderInsights } from "./insightsTab";
 import { renderSummary } from "./summaryTab";
 import { renderDashboard } from "./dashboardTab";
 import { renderCalendar } from "./calendarTab";
@@ -19,6 +20,18 @@ import {
 import { renderLandingPage } from "./components";
 import { safeIpcInvoke } from "./utils";
 import { isCurrentUserManagerOrAdmin, clearRoleCache } from "./utils";
+import { loadTeamSignals, shouldShowTeam } from "./utils/teamVisibility";
+import {
+  initNavigation,
+  markTabsDirty,
+  navigateTo,
+  navigateToIndex,
+  refreshPages,
+  registerPage,
+  resetNavigation,
+  setNavItemVisible,
+  setSubViewVisible,
+} from "./navigation";
 import { getDailyGoalCached, invalidateDailyGoalCache } from "./utils";
 import { invalidateLogsCache } from "./utils";
 import {
@@ -87,163 +100,63 @@ import {
   type TrackingState,
 } from "./trackingControls";
 
-// ── Tab dirty-flag system ──────────────────────────────────────────
-// Tracks whether each tab needs re-rendering. A tab is "dirty" when
-// underlying data has changed since it was last rendered.  On first
-// visit a tab is always rendered (it hasn't been initialised yet).
+// ── Pages ──────────────────────────────────────────────────────────
+// Each page renders on its first visit and then only when marked dirty
+// (see navigation.ts). Page ids are the old tab ids.
 
-const _tabDirty: Record<string, boolean> = {};
-const _tabRendered: Record<string, boolean> = {};
+registerPage("dashboard", renderDashboard);
+registerPage("today", () => renderLogs());
+registerPage("summary", () => {
+  (window as any).__resetSummaryTabState = true;
+  return renderSummary();
+});
+registerPage("calendar", renderCalendar);
+registerPage("insights", renderInsights);
+registerPage("projects", renderProjects);
+registerPage("organization", renderOrganizationTab);
+registerPage("teamAnalytics", renderTeamAnalytics);
+registerPage("settings", renderSettingsView);
 
-/** Mark one or more tabs as needing re-render on next visit. */
-function markTabsDirty(...tabIds: string[]) {
-  for (const id of tabIds) _tabDirty[id] = true;
-}
-
-/** Returns true if the tab should re-render (first visit OR dirty). */
-function shouldRenderTab(tabId: string): boolean {
-  if (!_tabRendered[tabId]) return true; // first visit
-  return !!_tabDirty[tabId];
-}
-
-/** Call after a tab has been successfully rendered. */
-function markTabClean(tabId: string) {
-  _tabRendered[tabId] = true;
-  _tabDirty[tabId] = false;
-}
-
-// Expose for other renderer modules (e.g. logsTab goal mutations)
+// Expose for other renderer modules (e.g. organizationTab mutations)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (window as any).markTabsDirty = markTabsDirty;
 
-function setupTabs() {
-  const tabs = Array.from(
-    document.querySelectorAll(".tab"),
-  ) as HTMLButtonElement[];
-  const tabContents = Array.from(
-    document.querySelectorAll(".tab-content"),
-  ) as HTMLDivElement[];
-
-  // Remove old listeners by replacing each tab with a clone
-  tabs.forEach((tab, i) => {
-    const newTab = tab.cloneNode(true) as HTMLButtonElement;
-    tab.parentNode?.replaceChild(newTab, tab);
-    tabs[i] = newTab;
-  });
-
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", async () => {
-      tabs.forEach((t) => t.classList.remove("active"));
-      tabContents.forEach((tc) => {
-        tc.classList.remove("active");
-        tc.style.display = "none";
-      });
-
-      tab.classList.add("active");
-      const tabId = tab.getAttribute("data-tab");
-      const content = document.getElementById(`tab-${tabId}`);
-      if (content) {
-        content.classList.add("active");
-        content.style.display = "";
-      }
-
-      // Re-render only if tab has new data (first visit or dirty)
-      if (tabId === "dashboard") {
-        if (shouldRenderTab("dashboard")) {
-          renderDashboard();
-          markTabClean("dashboard");
-        }
-      }
-      if (tabId === "today") {
-        if (shouldRenderTab("today")) {
-          renderLogs();
-          markTabClean("today");
-        }
-      }
-      if (tabId === "profile") refreshProfile();
-      if (tabId === "summary") {
-        if (shouldRenderTab("summary")) {
-          (window as any).__resetSummaryTabState = true;
-          renderSummary();
-          markTabClean("summary");
-        }
-      }
-      if (tabId === "calendar") {
-        if (shouldRenderTab("calendar")) {
-          renderCalendar();
-          markTabClean("calendar");
-        }
-      }
-      if (tabId === "projects") {
-        if (shouldRenderTab("projects")) {
-          renderProjects();
-          markTabClean("projects");
-        }
-      }
-      if (tabId === "teamAnalytics") {
-        if (shouldRenderTab("teamAnalytics")) {
-          renderTeamAnalytics();
-          markTabClean("teamAnalytics");
-        }
-      }
-      if (tabId === "organization") {
-        if (shouldRenderTab("organization")) {
-          renderOrganizationTab();
-          markTabClean("organization");
-        }
-      }
-    });
-  });
-}
-
-async function setupRoleBasedTabVisibility() {
-  const isManagerOrAdmin = await isCurrentUserManagerOrAdmin();
-  const projectsTab = document.querySelector(
-    '.tab[data-tab="projects"]',
-  ) as HTMLButtonElement;
-  const teamAnalyticsTab = document.querySelector(
-    '.tab[data-tab="teamAnalytics"]',
-  ) as HTMLButtonElement;
-
-  if (projectsTab) {
-    projectsTab.style.display = "";
-  }
-
-  if (teamAnalyticsTab) {
-    if (isManagerOrAdmin) {
-      teamAnalyticsTab.style.display = "";
-    } else {
-      teamAnalyticsTab.style.display = "none";
-    }
-  }
-}
-
 /**
- * Mark tabs as needing a re-render and refresh the active one right away
- * if it is among them (inactive tabs re-render on their next visit).
+ * Team shows only when there is a team (see utils/teamVisibility.ts);
+ * its Analytics view only for admins and managers.
  */
-function refreshTabs(...tabIds: string[]) {
-  markTabsDirty(...tabIds);
-  const active = document.querySelector(".tab.active") as HTMLElement | null;
-  const activeId = active?.getAttribute("data-tab");
-  if (active && activeId && tabIds.includes(activeId)) {
-    active.dispatchEvent(new Event("click"));
-  }
+let lastTeamCheck = 0;
+
+async function updateTeamVisibility() {
+  lastTeamCheck = Date.now();
+  const [signals, isManagerOrAdmin] = await Promise.all([
+    loadTeamSignals(),
+    isCurrentUserManagerOrAdmin(),
+  ]);
+  setNavItemVisible("team", shouldShowTeam(signals));
+  setSubViewVisible("team", "analytics", isManagerOrAdmin);
 }
+
+// Others join and leave from their own machines, which sends no event here:
+// re-check when the window regains focus (at most every 30 s).
+window.addEventListener("focus", () => {
+  const signedIn = document.getElementById("mainUI")?.style.display !== "none";
+  if (!signedIn || Date.now() - lastTeamCheck < 30_000) return;
+  void updateTeamVisibility();
+});
 
 window.addEventListener("organization:changed", () => {
   clearRoleCache();
-  void setupRoleBasedTabVisibility();
-  refreshTabs("teamAnalytics", "projects");
+  void updateTeamVisibility();
+  refreshPages("teamAnalytics", "projects", "settings");
 });
 
 // A session was saved: everything that lists or sums sessions is stale
 ipcRenderer.on("session-saved", () => {
-  refreshTabs("dashboard", "summary", "projects", "teamAnalytics");
+  refreshPages("dashboard", "summary", "projects", "teamAnalytics");
 });
 
 function initUI() {
-  const localToday = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD format
   initTheme();
 
   ipcRenderer.on("os-info", (_event: any, data: { os?: string }) => {
@@ -251,53 +164,62 @@ function initUI() {
   });
 
   ipcRenderer.on("window-tracked", () => {
-    // New usage data arrived — mark affected tabs dirty
-    markTabsDirty("dashboard", "today", "summary");
-
-    // Only refresh logs if Today tab is active
-    const todayTab = document.querySelector(
-      '.tab[data-tab="today"]',
-    ) as HTMLButtonElement;
-    const todayContent = document.getElementById("tab-today");
-    if (
-      todayTab?.classList.contains("active") &&
-      todayContent?.classList.contains("active")
-    ) {
-      invalidateLogsCache();
-      renderLogs(localToday);
-      markTabClean("today");
-    }
+    // New usage data arrived: usage-based pages are stale. Refresh the App
+    // activity table right away if it is open; the rest wait for a visit.
+    invalidateLogsCache();
+    markTabsDirty("dashboard", "summary", "insights");
+    refreshPages("today");
   });
 
-  setupTabs();
-
-  // --- Make Dashboard tab active by default ---
-  const tabs = Array.from(
-    document.querySelectorAll(".tab"),
-  ) as HTMLButtonElement[];
-  const tabContents = Array.from(
-    document.querySelectorAll(".tab-content"),
-  ) as HTMLDivElement[];
-  tabs.forEach((t) => t.classList.remove("active"));
-  tabContents.forEach((tc) => {
-    tc.classList.remove("active");
-    tc.style.display = "none";
-  });
-
-  const dashboardTab = document.querySelector(
-    '.tab[data-tab="dashboard"]',
-  ) as HTMLButtonElement;
-  const dashboardContent = document.getElementById("tab-dashboard");
-  if (dashboardTab && dashboardContent) {
-    dashboardTab.classList.add("active");
-    dashboardContent.classList.add("active");
-    dashboardContent.style.display = "";
-    renderDashboard();
-  }
+  initNavigation();
+  navigateTo("home");
 }
 
-/** Render the record/pause buttons from main's tracking state. */
+function formatClock(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const sec = totalSeconds % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+// The rail timer counts up locally from the active seconds main last
+// reported, and resyncs on every tracking-state broadcast.
+let timerBaseSeconds = 0;
+let timerBaseAt = 0;
+let timerTicker: ReturnType<typeof setInterval> | null = null;
+
+function renderTimer(state: TrackingState) {
+  const box = document.getElementById("navTimer");
+  const status = document.getElementById("navTimerStatus");
+  const clockEl = document.getElementById("navTimerClock");
+  if (!box || !status || !clockEl) return;
+
+  const running = state.isRecording && !state.isPaused;
+  box.classList.toggle("recording", running);
+  box.classList.toggle("paused", state.isRecording && state.isPaused);
+  status.textContent = !state.isRecording
+    ? "Not recording"
+    : state.isPaused
+      ? state.autoPaused
+        ? "Paused (idle)"
+        : "Paused"
+      : "Recording";
+
+  timerBaseSeconds = state.isRecording ? state.activeSeconds ?? 0 : 0;
+  timerBaseAt = Date.now();
+  const draw = () => {
+    const extra = running ? Math.floor((Date.now() - timerBaseAt) / 1000) : 0;
+    clockEl.textContent = formatClock(timerBaseSeconds + extra);
+  };
+  draw();
+
+  if (timerTicker) clearInterval(timerTicker);
+  timerTicker = running ? setInterval(draw, 1000) : null;
+}
+
+/** Render the record/pause buttons and the rail timer from main's state. */
 function renderTrackingButtons(state: TrackingState) {
+  renderTimer(state);
   const recordBtn = document.getElementById("recordBtn") as HTMLButtonElement;
   const recordIcon = document.getElementById("recordIcon") as HTMLImageElement;
   const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
@@ -386,69 +308,11 @@ function setupHotkeys() {
       return;
     }
 
-    // Ctrl+1: Dashboard tab
-    if (e.ctrlKey && e.key === "1") {
+    // Ctrl+1…9: sidebar items, top to bottom
+    if (e.ctrlKey && /^[1-9]$/.test(e.key)) {
       e.preventDefault();
-      document
-        .querySelector('.tab[data-tab="dashboard"]')
-        ?.dispatchEvent(new Event("click"));
-    }
-    // Ctrl+2: Today tab
-    if (e.ctrlKey && e.key === "2") {
-      e.preventDefault();
-      document
-        .querySelector('.tab[data-tab="today"]')
-        ?.dispatchEvent(new Event("click"));
-    }
-    // Ctrl+3: Summary tab
-    if (e.ctrlKey && e.key === "3") {
-      e.preventDefault();
-      document
-        .querySelector('.tab[data-tab="summary"]')
-        ?.dispatchEvent(new Event("click"));
-    }
-    // Ctrl+4: Calendar tab
-    if (e.ctrlKey && e.key === "4") {
-      e.preventDefault();
-      document
-        .querySelector('.tab[data-tab="calendar"]')
-        ?.dispatchEvent(new Event("click"));
-    }
-    // Ctrl+5: Projects tab (only if user has access)
-    if (e.ctrlKey && e.key === "5") {
-      e.preventDefault();
-      const projectsTab = document.querySelector(
-        '.tab[data-tab="projects"]',
-      ) as HTMLButtonElement;
-      // Only trigger if the tab is visible (user has access)
-      if (projectsTab && projectsTab.style.display !== "none") {
-        projectsTab.dispatchEvent(new Event("click"));
-      }
-    }
-    // Ctrl+6: Profile tab
-    if (e.ctrlKey && e.key === "6") {
-      e.preventDefault();
-      document
-        .querySelector('.tab[data-tab="profile"]')
-        ?.dispatchEvent(new Event("click"));
-    }
-    // Ctrl+7: Organization tab
-    if (e.ctrlKey && e.key === "7") {
-      e.preventDefault();
-      document
-        .querySelector('.tab[data-tab="organization"]')
-        ?.dispatchEvent(new Event("click"));
-    }
-    // Ctrl+8: Team Analytics tab (only if user has access)
-    if (e.ctrlKey && e.key === "8") {
-      e.preventDefault();
-      const teamAnalyticsTab = document.querySelector(
-        '.tab[data-tab="teamAnalytics"]',
-      ) as HTMLButtonElement;
-      // Only trigger if the tab is visible (user has access)
-      if (teamAnalyticsTab && teamAnalyticsTab.style.display !== "none") {
-        teamAnalyticsTab.dispatchEvent(new Event("click"));
-      }
+      navigateToIndex(Number(e.key));
+      return;
     }
 
     // Ctrl+P: Pause/Resume
@@ -720,14 +584,7 @@ ipcRenderer.on(
             message:
               "Would you like to open the calendar to start the session?",
             confirmText: "Open Calendar",
-            onConfirm: () => {
-              const calendarTab = document.querySelector(
-                '.tab[data-tab="calendar"]',
-              ) as HTMLButtonElement;
-              if (calendarTab) {
-                calendarTab.click();
-              }
-            },
+            onConfirm: () => navigateTo("sessions", "calendar"),
           });
         }, 2000);
       }
@@ -836,7 +693,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       setupRecordAndPauseBtns();
       // Main may already be recording (e.g. after a window reload)
       void refreshTrackingState();
-      setupRoleBasedTabVisibility();
+      void updateTeamVisibility();
     }
     if (landing) landing.style.display = "none";
 
@@ -985,18 +842,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           invalidateDailyGoalCache();
           invalidatePreferencesCache();
           invalidateLogsCache();
-          // Reset tab dirty flags so all tabs re-render on next login
-          markTabsDirty(
-            "dashboard",
-            "today",
-            "summary",
-            "calendar",
-            "projects",
-            "organization",
-          );
-          Object.keys(_tabRendered).forEach((k) => {
-            _tabRendered[k] = false;
-          });
+          // Every page re-renders for the next user
+          resetNavigation();
+          setNavItemVisible("team", false);
           if (mainUI) mainUI.style.display = "none";
           if (landing) {
             landing.style.display = "";
@@ -1075,12 +923,8 @@ async function checkDailyGoalProgress() {
       } catch (err) {
         void err;
       }
-      // Re-render dashboard/logs and mark clean since we just refreshed
-      markTabsDirty("dashboard", "today");
-      renderDashboard();
-      markTabClean("dashboard");
-      renderLogs(today);
-      markTabClean("today");
+      // The goal box on Home shows completion
+      refreshPages("dashboard");
     }
   } catch (error) {
     // No user logged in yet, skip daily goal check
