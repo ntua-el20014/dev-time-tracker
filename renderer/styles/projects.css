@@ -955,3 +955,51 @@
   opacity: 0.9;
   transform: translateY(-1px);
 }
+
+/* Projects page: Personal / Organization groups */
+.projects-group-title {
+  margin: 24px 0 12px;
+  font-size: 1.1em;
+  color: var(--accent);
+}
+
+.members-modal-content select {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--fg);
+}
+
+/* Billing: per-project invoice action and the Home → Billing link */
+.billable-invoice-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.billable-invoice-btn:hover {
+  border-color: var(--accent);
+}
+
+.dashboard-billing-link {
+  display: block;
+  margin: 8px auto 0;
+}
+
+/* Billing: billable time that has no project */
+.billable-unassigned {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border-left: 4px solid #f0a020;
+  background: var(--bg-secondary);
+}

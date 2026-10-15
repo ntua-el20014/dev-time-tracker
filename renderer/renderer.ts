@@ -8,6 +8,7 @@ import { renderSummary } from "./summaryTab";
 import { renderDashboard } from "./dashboardTab";
 import { renderCalendar } from "./calendarTab";
 import { renderProjects } from "./projectsTab";
+import { renderBilling } from "./billingTab";
 import { renderOrganizationTab } from "./organizationTab";
 import { renderTeamAnalytics } from "./teamAnalyticsTab";
 import { initTheme, updateRecordBtn, updatePauseBtn } from "./theme";
@@ -113,6 +114,7 @@ registerPage("summary", () => {
 registerPage("calendar", renderCalendar);
 registerPage("insights", renderInsights);
 registerPage("projects", renderProjects);
+registerPage("billing", renderBilling);
 registerPage("organization", renderOrganizationTab);
 registerPage("teamAnalytics", renderTeamAnalytics);
 registerPage("settings", renderSettingsView);
@@ -148,12 +150,12 @@ window.addEventListener("focus", () => {
 window.addEventListener("organization:changed", () => {
   clearRoleCache();
   void updateTeamVisibility();
-  refreshPages("teamAnalytics", "projects", "settings");
+  refreshPages("teamAnalytics", "projects", "billing", "settings");
 });
 
 // A session was saved: everything that lists or sums sessions is stale
 ipcRenderer.on("session-saved", () => {
-  refreshPages("dashboard", "summary", "projects", "teamAnalytics");
+  refreshPages("dashboard", "summary", "projects", "billing", "teamAnalytics");
 });
 
 function initUI() {
@@ -333,7 +335,7 @@ ipcRenderer.on("get-session-info", async () => {
     // Load available projects for selection
     let projects: any[] = [];
     try {
-      projects = await safeIpcInvoke("get-user-projects", [], {
+      projects = await safeIpcInvoke("get-projects-for-user", [], {
         fallback: [],
         showNotification: false,
       });

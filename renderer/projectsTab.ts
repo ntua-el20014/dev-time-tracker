@@ -1,205 +1,194 @@
-import { ipcRenderer } from "./ipc";
+/**
+ * Projects: the one place to create, edit, archive and staff projects,
+ * personal and organization alike (the Team view links here).
+ *
+ * What each button may do follows the database rules (database/schema.sql):
+ * - edit: the project's manager, or an org admin for org projects
+ * - archive/restore: the project's manager, or an org admin/manager
+ * - members: org projects only (a personal project is visible to its owner
+ *   alone), and only the project's manager may change them
+ */
 import { escapeHtml } from "./utils/domUtils";
-import { ProjectWithMembers } from "../shared/types";
-import { getCurrentUserRole, safeIpcInvoke, withLoading } from "./utils";
 import {
-  showInAppNotification,
-  showConfirmationModal,
-  showModal,
-  showInvoiceGenerationModal,
-} from "./components";
-import { renderBillableHoursSummary } from "./components/BillableHoursSummary";
+  getCurrentUserIdSafe,
+  getCurrentUserRole,
+  safeIpcInvoke,
+  withLoading,
+} from "./utils";
+import { showInAppNotification, showConfirmationModal } from "./components";
+import { isNavItemVisible, markTabsDirty } from "./navigation";
+import type {
+  CloudProjectWithManager,
+  ProjectMemberWithUser,
+  UserProfile,
+} from "../src/types/organization.types";
 
-let currentProjects: ProjectWithMembers[] = [];
-let currentUserRole: "admin" | "manager" | "employee" = "employee";
+type Project = CloudProjectWithManager & { members?: ProjectMemberWithUser[] };
+type Role = "admin" | "manager" | "employee";
 
-// Flag to prevent multiple member management modals
-let isMemberModalOpen = false;
+let projects: Project[] = [];
+let role: Role = "employee";
+let me = "";
+let showArchived = false;
+let listenerInstalled = false;
+
+const isArchived = (p: Project) => !!p.archived || !p.is_active;
+const isOrgAdminOrManager = () => role === "admin" || role === "manager";
+
+function canEdit(p: Project): boolean {
+  return p.manager_id === me || (p.scope === "organization" && role === "admin");
+}
+
+function canArchive(p: Project): boolean {
+  return (
+    p.manager_id === me || (p.scope === "organization" && isOrgAdminOrManager())
+  );
+}
+
+function canManageMembers(p: Project): boolean {
+  return p.scope === "organization" && p.manager_id === me;
+}
+
+/** Org projects only make sense once there is a team to share them with. */
+function canCreateOrgProjects(): boolean {
+  return isOrgAdminOrManager() && isNavItemVisible("team");
+}
+
+function findProject(id: string | undefined): Project | undefined {
+  return projects.find((p) => p.id === id);
+}
+
+/** Other pages show project names, colors and rates. */
+function projectsChanged() {
+  markTabsDirty("billing", "summary", "dashboard");
+  void renderProjects();
+}
 
 export async function renderProjects() {
-  const projectsContainer = document.getElementById("projectsContent");
-  if (!projectsContainer) return;
+  const container = document.getElementById("projectsContent");
+  if (!container) return;
 
-  // Load projects data (with loading indicator)
-  await withLoading(projectsContainer, "Loading projects…", async () => {
-    await loadProjects();
+  await withLoading(container, "Loading projects…", async () => {
+    me = getCurrentUserIdSafe() ?? "";
+    role = (await getCurrentUserRole()) as Role;
+    projects = await safeIpcInvoke<Project[]>(
+      "get-all-projects-with-members",
+      [],
+      { fallback: [] },
+    );
   });
 
-  projectsContainer.innerHTML = `
+  const active = projects.filter((p) => !isArchived(p));
+  const archived = projects.filter(isArchived);
+  const shown = showArchived ? archived : active;
+
+  container.innerHTML = `
     <div class="projects-container">
       <div class="projects-header">
-        <h1>Project Management</h1>
+        <h1>Projects</h1>
         <div class="projects-header-actions">
           <button id="newProjectBtn" class="btn-primary">+ New Project</button>
         </div>
       </div>
-      
-      <div class="projects-stats">
-        <div class="project-stat-card active-projects">
-          <div class="stat-number">${
-            currentProjects.filter((p) => p.is_active).length
-          }</div>
-          <div class="stat-label">Active Projects</div>
-        </div>
-        <div class="project-stat-card archived-projects">
-          <div class="stat-number">${
-            currentProjects.filter((p) => !p.is_active).length
-          }</div>
-          <div class="stat-label">Archived Projects</div>
-        </div>
-        <div class="project-stat-card total-projects">
-          <div class="stat-number">${currentProjects.length}</div>
-          <div class="stat-label">Total Projects</div>
-        </div>
+
+      <div class="projects-tabs" role="tablist">
+        <button class="projects-tab-btn ${showArchived ? "" : "active"}" data-filter="active" role="tab">Active (${active.length})</button>
+        <button class="projects-tab-btn ${showArchived ? "active" : ""}" data-filter="archived" role="tab">Archived (${archived.length})</button>
       </div>
 
-      <div class="projects-content">
-        <div class="projects-tabs">
-          <button class="projects-tab-btn active" data-tab="active">Active Projects</button>
-          <button class="projects-tab-btn" data-tab="archived">Archived Projects</button>
-          <button class="projects-tab-btn" data-tab="billable">Billable Hours</button>
-        </div>
-        
-        <div id="activeProjectsSection" class="projects-section">
-          ${renderProjectsList(currentProjects.filter((p) => p.is_active))}
-        </div>
-        
-        <div id="archivedProjectsSection" class="projects-section" style="display: none;">
-          ${renderProjectsList(currentProjects.filter((p) => !p.is_active))}
-        </div>
-        
-        <div id="billableProjectsSection" class="projects-section" style="display: none;">
-          <div class="billable-section-header">
-            <h2>Billable Hours & Invoicing</h2>
-            <button id="generateInvoiceBtn" class="btn-primary">📄 Generate Invoice</button>
-          </div>
-          <div id="billable-hours-container"></div>
-        </div>
+      <div class="projects-section">
+        ${renderGroups(shown)}
       </div>
     </div>
   `;
 
-  setupProjectsEventListeners();
-}
-
-async function loadProjects() {
-  try {
-    currentUserRole = (await getCurrentUserRole()) as
-      | "admin"
-      | "manager"
-      | "employee";
-    currentProjects = await safeIpcInvoke("get-all-projects-with-members", [], {
-      fallback: [],
-    });
-  } catch (error) {
-    showInAppNotification("Failed to load projects", 5000);
-    currentProjects = [];
+  if (!listenerInstalled) {
+    container.addEventListener("click", onProjectsClick);
+    listenerInstalled = true;
   }
 }
-function renderProjectsList(projects: ProjectWithMembers[]): string {
-  if (projects.length === 0) {
-    return `
-      <div class="empty-state">
-        <h3>No projects found</h3>
-        <p>Create your first project to get started with project-based time tracking.</p>
-      </div>
-    `;
-  }
 
+function renderGroups(list: Project[]): string {
+  if (list.length === 0) {
+    return showArchived
+      ? `<div class="empty-state"><h3>No archived projects</h3></div>`
+      : `<div class="empty-state">
+           <h3>No projects yet</h3>
+           <p>Create a project to group sessions, set an hourly rate and invoice the time.</p>
+         </div>`;
+  }
+  const personal = list.filter((p) => p.scope !== "organization");
+  const org = list.filter((p) => p.scope === "organization");
+  const grid = (items: Project[]) =>
+    `<div class="projects-grid">${items.map(renderCard).join("")}</div>`;
+  if (org.length === 0) return grid(personal);
   return `
-    <div class="projects-grid">
-      ${projects.map((project) => renderProjectCard(project)).join("")}
-    </div>
+    ${personal.length ? `<h2 class="projects-group-title">Personal</h2>${grid(personal)}` : ""}
+    <h2 class="projects-group-title">Organization</h2>${grid(org)}
   `;
 }
 
-function renderProjectCard(project: ProjectWithMembers): string {
-  const createdDate = new Date(project.created_at).toLocaleDateString();
-  const memberCount = project.members ? project.members.length : 0;
-  const isOrganizationProject = (project as any).scope === "organization";
-  const canManageOrganizationProject =
-    currentUserRole === "admin" || currentUserRole === "manager";
-  const canShowProjectActions =
-    !isOrganizationProject || canManageOrganizationProject;
+function renderCard(p: Project): string {
+  const id = escapeHtml(p.id);
+  const archived = isArchived(p);
+  const isOrg = p.scope === "organization";
+  const memberCount = p.members?.length ?? 0;
+  const actions = [
+    canEdit(p)
+      ? `<button class="project-action-btn" data-action="edit" data-project-id="${id}" title="Edit project">✏️</button>`
+      : "",
+    canManageMembers(p)
+      ? `<button class="project-action-btn" data-action="members" data-project-id="${id}" title="Manage members">👥</button>`
+      : "",
+    canArchive(p)
+      ? archived
+        ? `<button class="project-action-btn" data-action="restore" data-project-id="${id}" title="Restore project">↩️</button>`
+        : `<button class="project-action-btn" data-action="archive" data-project-id="${id}" title="Archive project">📦</button>`
+      : "",
+  ].join("");
 
   return `
-    <div class="project-card" data-project-id="${project.id}">
+    <div class="project-card" data-project-id="${id}">
       <div class="project-card-header">
-        <div class="project-color" style="background-color: ${
-          project.color || "#3b82f6"
-        }"></div>
-        <h3 class="project-name">${escapeHtml(project.name)}</h3>
-        <span class="project-scope-badge scope-${(project as any).scope || "personal"}">${(project as any).scope === "organization" ? "Org" : "Personal"}</span>
-        ${
-          canShowProjectActions
-            ? `
-        <div class="project-actions">
-          <button class="project-action-btn edit-project-btn" data-project-id="${
-            project.id
-          }" title="Edit Project">
-            ✏️
-          </button>
-          <button class="project-action-btn manage-members-btn" data-project-id="${
-            project.id
-          }" title="Manage Members">
-            👥
-          </button>
-          ${
-            project.is_active
-              ? `<button class="project-action-btn archive-project-btn" data-project-id="${project.id}" title="Archive Project">📦</button>`
-              : `<button class="project-action-btn restore-project-btn" data-project-id="${project.id}" title="Restore Project">↩️</button>`
-          }
-        </div>
-        `
-            : ""
-        }
+        <div class="project-color" style="background-color: ${escapeHtml(p.color || "#3b82f6")}"></div>
+        <h3 class="project-name">${escapeHtml(p.name)}</h3>
+        <span class="project-scope-badge scope-${isOrg ? "organization" : "personal"}">${isOrg ? "Org" : "Personal"}</span>
+        ${actions ? `<div class="project-actions">${actions}</div>` : ""}
       </div>
-      
+
       <div class="project-card-content">
         ${
-          project.description
-            ? `<p class="project-description">${escapeHtml(
-                project.description,
-              )}</p>`
-            : `<p class="project-description empty">No description provided</p>`
+          p.description
+            ? `<p class="project-description">${escapeHtml(p.description)}</p>`
+            : `<p class="project-description empty">No description</p>`
         }
-        
         <div class="project-meta">
           <div class="project-meta-item">
-            <span class="meta-label">Manager:</span>
-            <span class="meta-value">${escapeHtml(
-              project.manager_name || "Unknown",
-            )}</span>
-          </div>
-          <div class="project-meta-item">
-            <span class="meta-label">Members:</span>
-            <span class="meta-value">${memberCount} ${
-              memberCount === 1 ? "member" : "members"
-            }</span>
-          </div>
-          <div class="project-meta-item">
-            <span class="meta-label">Created:</span>
-            <span class="meta-value">${createdDate}</span>
-          </div>
-          <div class="project-meta-item">
-            <span class="meta-label">Status:</span>
-            <span class="meta-value status-${
-              project.is_active ? "active" : "archived"
-            }">
-              ${project.is_active ? "Active" : "Archived"}
-            </span>
-          </div>
-          <div class="project-meta-item">
-            <span class="meta-label">Hourly Rate:</span>
-            <span class="meta-value">$${
-              project.hourly_rate != null
-                ? Number(project.hourly_rate).toFixed(2)
+            <span class="meta-label">Hourly rate:</span>
+            <span class="meta-value">${
+              p.hourly_rate != null
+                ? `$${Number(p.hourly_rate).toFixed(2)}`
                 : "Not set"
             }</span>
           </div>
+          ${
+            isOrg
+              ? `<div class="project-meta-item">
+                   <span class="meta-label">Manager:</span>
+                   <span class="meta-value">${escapeHtml(p.manager?.username || "Unknown")}</span>
+                 </div>
+                 <div class="project-meta-item">
+                   <span class="meta-label">Members:</span>
+                   <span class="meta-value">${memberCount} ${memberCount === 1 ? "member" : "members"}</span>
+                 </div>`
+              : ""
+          }
+          <div class="project-meta-item">
+            <span class="meta-label">Created:</span>
+            <span class="meta-value">${new Date(p.created_at).toLocaleDateString()}</span>
+          </div>
         </div>
-        
-        <button class="project-stats-btn" data-project-id="${project.id}">
+        <button class="project-stats-btn" data-action="stats" data-project-id="${id}">
           View Statistics
         </button>
       </div>
@@ -207,911 +196,409 @@ function renderProjectCard(project: ProjectWithMembers): string {
   `;
 }
 
-function setupProjectsEventListeners() {
-  const projectsContainer = document.getElementById("projectsContent");
-  if (!projectsContainer) return;
+function onProjectsClick(e: Event) {
+  const target = e.target as HTMLElement;
 
-  // Tab switching
-  const tabButtons = projectsContainer.querySelectorAll(".projects-tab-btn");
-  tabButtons.forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
-      const target = e.target as HTMLButtonElement;
-      const tabType = target.dataset.tab;
-
-      // Update tab button states
-      tabButtons.forEach((b) => b.classList.remove("active"));
-      target.classList.add("active");
-
-      // Show/hide sections
-      const activeSection = document.getElementById("activeProjectsSection");
-      const archivedSection = document.getElementById(
-        "archivedProjectsSection",
-      );
-      const billableSection = document.getElementById(
-        "billableProjectsSection",
-      );
-
-      if (tabType === "active") {
-        if (activeSection) activeSection.style.display = "";
-        if (archivedSection) archivedSection.style.display = "none";
-        if (billableSection) billableSection.style.display = "none";
-      } else if (tabType === "archived") {
-        if (activeSection) activeSection.style.display = "none";
-        if (archivedSection) archivedSection.style.display = "";
-        if (billableSection) billableSection.style.display = "none";
-      } else if (tabType === "billable") {
-        if (activeSection) activeSection.style.display = "none";
-        if (archivedSection) archivedSection.style.display = "none";
-        if (billableSection) {
-          billableSection.style.display = "";
-          // Load billable hours summary
-          const container = billableSection.querySelector(
-            "#billable-hours-container",
-          );
-          if (container) {
-            await withLoading(
-              container as HTMLElement,
-              "Loading billable hours…",
-              async () => {
-                await renderBillableHoursSummary(container as HTMLElement);
-              },
-            );
-          }
-        }
-      }
-    });
-  });
-
-  // New project button
-  const newProjectBtn = document.getElementById("newProjectBtn");
-  if (newProjectBtn && !newProjectBtn.hasAttribute("data-listener-added")) {
-    newProjectBtn.addEventListener("click", showCreateProjectModal);
-    newProjectBtn.setAttribute("data-listener-added", "true");
-  }
-
-  // Generate invoice button
-  const generateInvoiceBtn = document.getElementById("generateInvoiceBtn");
-  if (
-    generateInvoiceBtn &&
-    !generateInvoiceBtn.hasAttribute("data-listener-added")
-  ) {
-    generateInvoiceBtn.addEventListener("click", () => {
-      showInvoiceGenerationModal();
-    });
-    generateInvoiceBtn.setAttribute("data-listener-added", "true");
-  }
-
-  // Project action buttons
-  projectsContainer.addEventListener("click", async (e) => {
-    const target = e.target as HTMLElement;
-
-    if (target.classList.contains("edit-project-btn")) {
-      const projectId = target.dataset.projectId!;
-      showEditProjectModal(projectId);
-    }
-
-    if (target.classList.contains("manage-members-btn")) {
-      const projectId = target.dataset.projectId!;
-      showManageMembersModal(projectId);
-    }
-
-    if (target.classList.contains("archive-project-btn")) {
-      const projectId = target.dataset.projectId!;
-      archiveProject(projectId);
-    }
-
-    if (target.classList.contains("restore-project-btn")) {
-      const projectId = target.dataset.projectId!;
-      restoreProject(projectId);
-    }
-
-    if (target.classList.contains("project-stats-btn")) {
-      const projectId = target.dataset.projectId!;
-      showProjectStats(projectId);
-    }
-  });
-}
-
-function showCreateProjectModal() {
-  // Prevent opening multiple modals
-  if (
-    document.getElementById("customModal") ||
-    document.getElementById("customModalOverlay")
-  ) {
+  if (target.closest("#newProjectBtn")) {
+    showProjectForm();
     return;
   }
 
-  // Clean up any existing modals first
-  const existingModal = document.getElementById("customModal");
-  const existingOverlay = document.getElementById("customModalOverlay");
-  if (existingModal) existingModal.remove();
-  if (existingOverlay) existingOverlay.remove();
+  const filterBtn = target.closest<HTMLElement>("[data-filter]");
+  if (filterBtn) {
+    showArchived = filterBtn.dataset.filter === "archived";
+    void renderProjects();
+    return;
+  }
 
-  // Create custom modal with color picker
+  const actionBtn = target.closest<HTMLElement>("[data-action]");
+  const project = findProject(actionBtn?.dataset.projectId);
+  if (!actionBtn || !project) return;
+  switch (actionBtn.dataset.action) {
+    case "edit":
+      showProjectForm(project);
+      break;
+    case "members":
+      void showMembersModal(project);
+      break;
+    case "archive":
+      confirmArchive(project, true);
+      break;
+    case "restore":
+      confirmArchive(project, false);
+      break;
+    case "stats":
+      void showStatsModal(project);
+      break;
+  }
+}
+
+// ── Modals ──────────────────────────────────────────────────────────
+
+/** Open a modal; returns its content element and a close function. */
+function openModal(title: string, bodyHtml: string, onClose?: () => void) {
+  document.getElementById("customModal")?.remove();
+  document.getElementById("customModalOverlay")?.remove();
+
   const overlay = document.createElement("div");
   overlay.id = "customModalOverlay";
   overlay.className = "custom-modal-overlay";
   overlay.style.display = "block";
-  document.body.appendChild(overlay);
 
   const modal = document.createElement("div");
   modal.id = "customModal";
   modal.className = "active";
-
   modal.innerHTML = `
     <div class="session-modal-content">
-      <button class="modal-close-btn">&times;</button>
-      <h2>Create New Project</h2>
-      <form id="projectForm">
-        <div style="margin-bottom: 15px;">
-          <label for="project-name">Project Name *</label><br>
-          <input id="project-name" name="name" type="text" required>
-        </div>
-        
-        <div style="margin-bottom: 15px;">
-          <label for="project-description">Description</label><br>
-          <textarea id="project-description" name="description"></textarea>
-        </div>
-        
-        <div style="margin-bottom: 15px;">
-          <label for="project-color">Project Color</label><br>
-          <div class="color-picker-container">
-            <input id="project-color" name="color" type="color" value="#3b82f6">
-          </div>
-        </div>
-
-        <div style="margin-bottom: 15px;">
-          <label for="project-hourly-rate">Hourly Rate (optional)</label><br>
-          <input id="project-hourly-rate" name="hourlyRate" type="number" min="0" step="0.01" placeholder="e.g. 75.00">
-        </div>
-        
-        <div class="session-modal-actions">
-          <button type="button" id="projectCancelBtn" class="btn-cancel">Cancel</button>
-          <button type="submit" class="btn-confirm">Create Project</button>
-        </div>
-      </form>
+      <button class="modal-close-btn" aria-label="Close">&times;</button>
+      <h2>${escapeHtml(title)}</h2>
+      <div class="project-modal-body">${bodyHtml}</div>
     </div>
   `;
-
+  document.body.appendChild(overlay);
   document.body.appendChild(modal);
 
-  const form = document.getElementById("projectForm") as HTMLFormElement;
-  const nameInput = document.getElementById("project-name") as HTMLInputElement;
-  const cancelBtn = document.getElementById(
-    "projectCancelBtn",
-  ) as HTMLButtonElement;
-  const closeBtn = modal.querySelector(".modal-close-btn") as HTMLButtonElement;
-
-  // Focus the name input
-  setTimeout(() => nameInput.focus(), 50);
-
-  // Handle form submission
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(form);
-    const hourlyRateValue = (formData.get("hourlyRate") as string).trim();
-    const hourlyRate = hourlyRateValue ? Number(hourlyRateValue) : null;
-
-    const result = await safeIpcInvoke(
-      "create-project",
-      [
-        formData.get("name") as string,
-        formData.get("description") as string,
-        formData.get("color") as string,
-        Number.isFinite(hourlyRate) ? hourlyRate : null,
-      ],
-      { fallback: null },
-    );
-    if (result) {
-      // Silent success - project created
-      renderProjects();
-    }
+  const content = modal.querySelector(".session-modal-content") as HTMLElement;
+  const close = () => {
     modal.remove();
     overlay.remove();
+    onClose?.();
   };
-
-  // Handle cancel and close
-  const closeModal = () => {
-    modal.remove();
-    overlay.remove();
+  modal.querySelector(".modal-close-btn")?.addEventListener("click", close);
+  overlay.addEventListener("click", close);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) close();
+  });
+  return {
+    body: modal.querySelector(".project-modal-body") as HTMLElement,
+    content,
+    close,
   };
-
-  cancelBtn.onclick = closeModal;
-  closeBtn.onclick = closeModal;
-
-  // Handle overlay click to close modal
-  overlay.onclick = (e) => {
-    if (e.target === overlay) {
-      closeModal();
-    }
-  };
-
-  // Handle modal background click to close modal
-  modal.onclick = (e) => {
-    if (e.target === modal) {
-      closeModal();
-    }
-  };
-
-  // Prevent modal content clicks from closing modal
-  modal
-    .querySelector(".session-modal-content")
-    ?.addEventListener("click", (e) => {
-      e.stopPropagation();
-    });
 }
 
-function showEditProjectModal(projectId: string | number) {
-  const project = currentProjects.find(
-    (p) => String(p.id) === String(projectId),
-  );
-  if (!project) return;
-
-  // Prevent opening multiple modals
-  if (
-    document.getElementById("customModal") ||
-    document.getElementById("customModalOverlay")
-  ) {
-    return;
-  }
-
-  // Clean up any existing modals first
-  const existingModal = document.getElementById("customModal");
-  const existingOverlay = document.getElementById("customModalOverlay");
-  if (existingModal) existingModal.remove();
-  if (existingOverlay) existingOverlay.remove();
-
-  // Create custom modal with color picker
-  const overlay = document.createElement("div");
-  overlay.id = "customModalOverlay";
-  overlay.className = "custom-modal-overlay";
-  overlay.style.display = "block";
-  document.body.appendChild(overlay);
-
-  const modal = document.createElement("div");
-  modal.id = "customModal";
-  modal.className = "active";
-
-  modal.innerHTML = `
-    <div class="session-modal-content">
-      <button class="modal-close-btn">&times;</button>
-      <h2>Edit Project</h2>
-      <form id="projectEditForm">
-        <label for="project-edit-name">Project Name *</label><br>
-        <input id="project-edit-name" name="name" type="text" value="${escapeHtml(
-          project.name,
-        )}" required>
-        
-        <label for="project-edit-description">Description</label><br>
-        <textarea id="project-edit-description" name="description">${escapeHtml(
-          project.description || "",
-        )}</textarea>
-        
-        <label for="project-edit-color">Project Color</label><br>
+function showProjectForm(project?: Project) {
+  const editing = !!project;
+  const offerScope = !editing && canCreateOrgProjects();
+  const { body, close } = openModal(
+    editing ? "Edit Project" : "New Project",
+    `
+    <form id="projectForm">
+      <div style="margin-bottom: 15px;">
+        <label for="project-name">Project name *</label><br>
+        <input id="project-name" name="name" type="text" required value="${escapeHtml(project?.name ?? "")}">
+      </div>
+      <div style="margin-bottom: 15px;">
+        <label for="project-description">Description</label><br>
+        <textarea id="project-description" name="description">${escapeHtml(project?.description ?? "")}</textarea>
+      </div>
+      <div style="margin-bottom: 15px;">
+        <label for="project-color">Color</label><br>
         <div class="color-picker-container">
-          <input id="project-edit-color" name="color" type="color" value="${
-            project.color || "#3b82f6"
-          }">
+          <input id="project-color" name="color" type="color" value="${escapeHtml(project?.color || "#3b82f6")}">
         </div>
+      </div>
+      <div style="margin-bottom: 15px;">
+        <label for="project-hourly-rate">Hourly rate (optional)</label><br>
+        <input id="project-hourly-rate" name="hourlyRate" type="number" min="0" step="0.01" placeholder="e.g. 75.00" value="${project?.hourly_rate ?? ""}">
+      </div>
+      ${
+        offerScope
+          ? `<fieldset style="margin-bottom: 15px; border: none; padding: 0;">
+               <legend>Who is it for?</legend>
+               <label><input type="radio" name="scope" value="personal" checked> Just me (personal)</label><br>
+               <label><input type="radio" name="scope" value="organization"> My organization (team members can be added)</label>
+             </fieldset>`
+          : ""
+      }
+      <div class="session-modal-actions">
+        <button type="button" id="projectCancelBtn" class="btn-cancel">Cancel</button>
+        <button type="submit" class="btn-confirm">${editing ? "Save" : "Create Project"}</button>
+      </div>
+    </form>
+    `,
+  );
 
-        <label for="project-edit-hourly-rate">Hourly Rate (optional)</label><br>
-        <input id="project-edit-hourly-rate" name="hourlyRate" type="number" min="0" step="0.01" value="${
-          project.hourly_rate ?? ""
-        }" placeholder="e.g. 75.00">
-        
-        <div class="session-modal-actions">
-          <button type="button" id="projectEditCancelBtn" class="btn-cancel">Cancel</button>
-          <button type="submit" class="btn-confirm">Update Project</button>
-        </div>
-      </form>
-    </div>
-  `;
+  const form = body.querySelector("#projectForm") as HTMLFormElement;
+  body.querySelector("#projectCancelBtn")?.addEventListener("click", close);
+  setTimeout(
+    () => (body.querySelector("#project-name") as HTMLInputElement)?.focus(),
+    50,
+  );
 
-  document.body.appendChild(modal);
-
-  const form = document.getElementById("projectEditForm") as HTMLFormElement;
-  const nameInput = document.getElementById(
-    "project-edit-name",
-  ) as HTMLInputElement;
-  const cancelBtn = document.getElementById(
-    "projectEditCancelBtn",
-  ) as HTMLButtonElement;
-  const closeBtn = modal.querySelector(".modal-close-btn") as HTMLButtonElement;
-
-  // Focus the name input
-  setTimeout(() => nameInput.focus(), 50);
-
-  // Handle form submission
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const formData = new FormData(form);
-    const hourlyRateValue = (formData.get("hourlyRate") as string).trim();
-    const hourlyRate = hourlyRateValue ? Number(hourlyRateValue) : null;
+    const data = new FormData(form);
+    const rateText = String(data.get("hourlyRate") ?? "").trim();
+    const rate = rateText ? Number(rateText) : null;
+    const hourlyRate = rate !== null && Number.isFinite(rate) ? rate : null;
+    const name = String(data.get("name") ?? "").trim();
+    const description = String(data.get("description") ?? "");
+    const color = String(data.get("color") ?? "#3b82f6");
 
-    const result = await safeIpcInvoke(
-      "update-project",
-      [
-        projectId,
-        formData.get("name") as string,
-        formData.get("description") as string,
-        formData.get("color") as string,
-        Number.isFinite(hourlyRate) ? hourlyRate : null,
-      ],
-      { fallback: null },
-    );
-    if (result) {
-      // Silent success - project updated
-      renderProjects();
-    }
-    modal.remove();
-    overlay.remove();
-  };
-
-  // Handle cancel and close
-  const closeModal = () => {
-    modal.remove();
-    overlay.remove();
-  };
-
-  cancelBtn.onclick = closeModal;
-  closeBtn.onclick = closeModal;
-
-  // Handle overlay click to close modal
-  overlay.onclick = (e) => {
-    if (e.target === overlay) {
-      closeModal();
-    }
-  };
-
-  // Handle modal background click to close modal
-  modal.onclick = (e) => {
-    if (e.target === modal) {
-      closeModal();
-    }
-  };
-
-  // Prevent modal content clicks from closing modal
-  modal
-    .querySelector(".session-modal-content")
-    ?.addEventListener("click", (e) => {
-      e.stopPropagation();
-    });
-}
-
-function archiveProject(projectId: string | number) {
-  const project = currentProjects.find(
-    (p) => String(p.id) === String(projectId),
-  );
-  if (!project) return;
-
-  showConfirmationModal({
-    title: "Archive Project",
-    message: `Are you sure you want to archive "${project.name}"? This will hide it from active projects but preserve all session history.`,
-    confirmText: "Archive",
-    onConfirm: async () => {
-      const result = await safeIpcInvoke("delete-project", [projectId], {
-        fallback: false,
-      });
-      if (result) {
-        showInAppNotification("Project archived successfully!", 2000);
-        renderProjects();
-      }
-    },
-  });
-}
-
-function restoreProject(projectId: string | number) {
-  const project = currentProjects.find(
-    (p) => String(p.id) === String(projectId),
-  );
-  if (!project) return;
-
-  showConfirmationModal({
-    title: "Restore Project",
-    message: `Are you sure you want to restore "${project.name}" to active projects?`,
-    confirmText: "Restore",
-    onConfirm: async () => {
-      const result = await safeIpcInvoke("restore-project", [projectId], {
-        fallback: false,
-      });
-      if (result) {
-        showInAppNotification("Project restored successfully!", 2000);
-        renderProjects();
-      }
-    },
-  });
-}
-
-async function showProjectStats(projectId: string | number) {
-  const project = currentProjects.find(
-    (p) => String(p.id) === String(projectId),
-  );
-  if (!project) return;
-
-  const stats = await safeIpcInvoke("get-project-stats", [projectId], {
-    fallback: {
-      total_sessions: 0,
-      total_time: 0,
-      member_count: 0,
-      last_activity: null,
-    },
-  });
-
-  const totalHours = Math.floor(stats.total_time / 3600);
-  const totalMinutes = Math.floor((stats.total_time % 3600) / 60);
-
-  // Create a proper statistics modal using the existing modal system
-  showModal({
-    title: `${project.name} - Statistics`,
-    fields: [], // No form fields, just display data
-    cancelText: "Close",
-    onCancel: () => {
-      // Modal will close automatically
-    },
-  });
-
-  // After the modal is created, replace the form content with statistics
-  setTimeout(() => {
-    const modal = document.getElementById("customModal");
-    const form = modal?.querySelector("form");
-    if (form) {
-      form.innerHTML = `
-        <div class="project-stats-modal">
-          <div class="stats-grid">
-            <div class="stat-item">
-              <div class="stat-value">${stats.total_sessions}</div>
-              <div class="stat-label">Total Sessions</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value">${totalHours}h ${totalMinutes}m</div>
-              <div class="stat-label">Total Time</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value">${stats.member_count}</div>
-              <div class="stat-label">Members</div>
-            </div>
-          </div>
-          
-          ${
-            stats.last_activity
-              ? `
-            <div class="stats-timeline">
-              <div class="timeline-item">
-                <strong>Last Activity:</strong> ${new Date(
-                  stats.last_activity,
-                ).toLocaleDateString()}
-              </div>
-            </div>
-          `
-              : `
-            <div class="empty-stats">
-              <p>No sessions recorded for this project yet.</p>
-            </div>
-          `
-          }
-          
-          <div class="session-modal-actions">
-            <button type="button" id="statsModalCloseBtn" class="btn-cancel">Close</button>
-          </div>
-        </div>
-      `;
-
-      // Add close button handler
-      const closeBtn = form.querySelector("#statsModalCloseBtn");
-      if (closeBtn) {
-        closeBtn.addEventListener("click", () => {
-          modal?.classList.remove("active");
-          modal?.remove();
-          document.getElementById("customModalOverlay")?.remove();
-        });
-      }
-    }
-  }, 50);
-}
-
-
-async function showManageMembersModal(projectId: string | number) {
-  const project = currentProjects.find(
-    (p) => String(p.id) === String(projectId),
-  );
-  if (!project) return;
-
-  // Prevent opening multiple modals
-  if (isMemberModalOpen) {
-    return;
-  }
-
-  isMemberModalOpen = true;
-
-  try {
-    const refreshModalContent = async () => {
-      // Refresh data
-      const freshUsers = await safeIpcInvoke("get-all-users", [], {
-        fallback: [],
-      });
-      const freshMembers = await safeIpcInvoke(
-        "get-project-members",
-        [projectId],
-        { fallback: [] },
-      );
-
-      const membersList = freshMembers
-        .map((member: any) => {
-          // Map database roles to display roles
-          const displayRole =
-            member.role === "employee" ? "member" : member.role;
-          const roleIcon = displayRole === "manager" ? "👑" : "👤";
-
-          return `
-            <div class="member-item" data-user-id="${member.user_id}">
-              <span class="member-info">
-                ${roleIcon} ${escapeHtml(member.username)} 
-                <small>(${displayRole})</small>
-              </span>
-              <div class="member-actions">
-                ${
-                  member.user_id !== project.manager_id
-                    ? `
-                  <div class="role-select-container" data-user-id="${member.user_id}" data-current-role="${displayRole}"></div>
-                  <button class="btn-remove-member" data-user-id="${member.user_id}">Remove</button>
-                `
-                    : '<span class="manager-label">Project Manager</span>'
-                }
-              </div>
-            </div>
-          `;
-        })
-        .join("");
-
-      const availableUsers = freshUsers.filter(
-        (user: any) =>
-          !freshMembers.some((member: any) => member.user_id === user.id),
-      );
-
-      const userOptions = availableUsers
-        .map(
-          (user: any) =>
-            `<option value="${user.id}">${escapeHtml(user.username)}</option>`,
+    const result = editing
+      ? await safeIpcInvoke(
+          "update-project",
+          [project!.id, name, description, color, hourlyRate],
+          { fallback: null },
         )
-        .join("");
-
-      return {
-        membersList,
-        availableUsers,
-        userOptions,
-        allUsers: freshUsers,
-        projectMembers: freshMembers,
-      };
-    };
-
-    const setupModalInteractions = (data: any) => {
-      const modal = document.getElementById("customModal");
-      if (!modal) return;
-
-      // Create custom dropdowns
-      const { createCustomDropdown } = require("./components/CustomDropdown");
-
-      // Create role select dropdowns for existing members
-      const roleContainers = modal.querySelectorAll(".role-select-container");
-      const roleDropdowns = new Map();
-
-      roleContainers.forEach((container: any) => {
-        const userId = container.dataset.userId;
-        const currentRole = container.dataset.currentRole;
-        const user = data.allUsers.find(
-          (u: any) => String(u.id) === String(userId),
+      : await safeIpcInvoke(
+          "create-project",
+          [
+            name,
+            description,
+            color,
+            hourlyRate,
+            String(data.get("scope") ?? "personal"),
+          ],
+          { fallback: null },
         );
-        const canBeManager =
-          user && (user.role === "admin" || user.role === "manager");
+    if (!result) {
+      showInAppNotification(
+        editing ? "Could not save the project." : "Could not create the project.",
+        4000,
+        "error",
+      );
+      return;
+    }
+    close();
+    showInAppNotification(editing ? "Project saved." : "Project created.", 2000);
+    projectsChanged();
+  };
+}
 
-        const options = [{ value: "member", label: "Member" }];
-
-        if (canBeManager) {
-          options.push({ value: "manager", label: "Manager" });
-        }
-
-        const roleDropdown = createCustomDropdown({
-          id: `role-${userId}`,
-          name: `role-${userId}`,
-          value: currentRole,
-          options: options,
-          onChange: async (newRole: string) => {
-            const oldValue = currentRole;
-            const dbRole = newRole === "member" ? "employee" : "manager";
-
-            try {
-              if (newRole === "manager") {
-                await ipcRenderer.invoke(
-                  "transfer-project-management",
-                  projectId,
-                  userId,
-                );
-              } else {
-                await ipcRenderer.invoke(
-                  "update-project-member-role",
-                  projectId,
-                  userId,
-                  dbRole,
-                );
-              }
-              showInAppNotification("Role updated successfully!", 2000);
-
-              setTimeout(async () => {
-                await loadProjects();
-                renderProjects();
-                modal?.classList.remove("active");
-                modal?.remove();
-                document.getElementById("customModalOverlay")?.remove();
-                isMemberModalOpen = false;
-              }, 500);
-            } catch (error) {
-              showInAppNotification(`Failed to update role: ${error}`, 5000);
-              roleDropdown.setValue(oldValue);
-            }
-          },
-        });
-
-        container.appendChild(roleDropdown.getElement());
-        roleDropdowns.set(userId, roleDropdown);
-      });
-
-      // Create dropdowns for adding new members
-      let userSelectDropdown: any = null;
-      let roleSelectDropdown: any = null;
-
-      if (data.availableUsers.length > 0) {
-        // User selection dropdown
-        const userContainer = modal.querySelector("#userSelect-container");
-        if (userContainer) {
-          userSelectDropdown = createCustomDropdown({
-            id: "userSelect",
-            name: "userSelect",
-            placeholder: "Select a user...",
-            options: [
-              { value: "", label: "Select a user..." },
-              ...data.availableUsers.map((user: any) => ({
-                value: user.id.toString(),
-                label: user.username,
-              })),
-            ],
-            onChange: (userId: string) => {
-              if (roleSelectDropdown && userId) {
-                const selectedUser = data.allUsers.find(
-                  (u: any) => String(u.id) === String(userId),
-                );
-                const canBeManager =
-                  selectedUser &&
-                  (selectedUser.role === "admin" ||
-                    selectedUser.role === "manager");
-
-                const options = [{ value: "member", label: "Member" }];
-                if (canBeManager) {
-                  options.push({ value: "manager", label: "Manager" });
-                }
-
-                roleSelectDropdown.setOptions(options);
-                roleSelectDropdown.setValue("member");
-              }
-            },
-          });
-          userContainer.appendChild(userSelectDropdown.getElement());
-        }
-
-        // Role selection dropdown for new member
-        const roleContainer = modal.querySelector("#roleSelect-container");
-        if (roleContainer) {
-          roleSelectDropdown = createCustomDropdown({
-            id: "roleSelect",
-            name: "roleSelect",
-            value: "member",
-            options: [{ value: "member", label: "Member" }],
-          });
-          roleContainer.appendChild(roleSelectDropdown.getElement());
-        }
+function confirmArchive(project: Project, archive: boolean) {
+  showConfirmationModal({
+    title: archive ? "Archive Project" : "Restore Project",
+    message: archive
+      ? `Archive "${project.name}"? It disappears from project pickers; its sessions and history are kept.`
+      : `Restore "${project.name}" to active projects?`,
+    confirmText: archive ? "Archive" : "Restore",
+    onConfirm: async () => {
+      const ok = await safeIpcInvoke(
+        archive ? "delete-project" : "restore-project",
+        [project.id],
+        { fallback: false },
+      );
+      if (!ok) {
+        showInAppNotification(
+          `Could not ${archive ? "archive" : "restore"} the project.`,
+          4000,
+          "error",
+        );
+        return;
       }
+      showInAppNotification(
+        archive ? "Project archived." : "Project restored.",
+        2000,
+      );
+      projectsChanged();
+    },
+  });
+}
 
-      // Add member functionality
-      const addMemberBtn = modal.querySelector(
-        "#addMemberBtn",
-      ) as HTMLButtonElement;
-      if (addMemberBtn) {
-        addMemberBtn.onclick = async () => {
-          const userValue = userSelectDropdown?.getValue();
-
-          if (userValue) {
-            try {
-              // Map frontend role to database role
-              const frontendRole = roleSelectDropdown?.getValue() || "member";
-              const dbRole = frontendRole === "member" ? "employee" : "manager";
-
-              await ipcRenderer.invoke(
-                "add-project-member",
-                projectId,
-                userValue,
-                dbRole,
-              );
-              showInAppNotification("Member added successfully!", 2000);
-
-              // Wait a bit before refreshing to ensure database is updated
-              setTimeout(async () => {
-                await loadProjects();
-                renderProjects();
-                // Close modal after successful update
-                modal?.classList.remove("active");
-                modal?.remove();
-                document.getElementById("customModalOverlay")?.remove();
-                isMemberModalOpen = false;
-              }, 500);
-            } catch (error) {
-              showInAppNotification("Failed to add member", 5000);
-            }
-          }
-        };
-      }
-    };
-
-    // Use showModal but override content after creation
-    showModal({
-      title: `Manage Members - ${project.name}`,
-      fields: [], // No form fields, we'll replace with custom content
-      cancelText: "Close",
-      onCancel: () => {
-        isMemberModalOpen = false;
-        // Refresh the projects list when closing
-        loadProjects().then(() => renderProjects());
+async function showStatsModal(project: Project) {
+  const stats = await safeIpcInvoke(
+    "get-project-stats",
+    [project.id],
+    {
+      fallback: {
+        total_sessions: 0,
+        total_time: 0,
+        member_count: 0,
+        last_activity: null,
       },
+    },
+  );
+  const hours = Math.floor(stats.total_time / 3600);
+  const minutes = Math.floor((stats.total_time % 3600) / 60);
+  const { body, close } = openModal(
+    `${project.name} — Statistics`,
+    `
+    <div class="project-stats-modal">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-value">${Number(stats.total_sessions)}</div>
+          <div class="stat-label">Sessions</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${hours}h ${minutes}m</div>
+          <div class="stat-label">Total time</div>
+        </div>
+        ${
+          project.scope === "organization"
+            ? `<div class="stat-item">
+                 <div class="stat-value">${Number(stats.member_count)}</div>
+                 <div class="stat-label">Members</div>
+               </div>`
+            : ""
+        }
+      </div>
+      ${
+        stats.last_activity
+          ? `<div class="stats-timeline"><div class="timeline-item"><strong>Last activity:</strong> ${new Date(stats.last_activity).toLocaleDateString()}</div></div>`
+          : `<div class="empty-stats"><p>No sessions recorded for this project yet.</p></div>`
+      }
+      <div class="session-modal-actions">
+        <button type="button" id="statsCloseBtn" class="btn-cancel">Close</button>
+      </div>
+    </div>
+    `,
+  );
+  body.querySelector("#statsCloseBtn")?.addEventListener("click", close);
+}
+
+async function showMembersModal(project: Project) {
+  let changed = false;
+  const { body, close } = openModal(
+    `Members — ${project.name}`,
+    `<div class="members-modal-content"></div>`,
+    () => {
+      if (changed) projectsChanged();
+    },
+  );
+  const content = body.querySelector(".members-modal-content") as HTMLElement;
+
+  const draw = async () => {
+    const [members, orgUsers] = await Promise.all([
+      safeIpcInvoke<ProjectMemberWithUser[]>(
+        "get-project-members",
+        [project.id],
+        { fallback: [] },
+      ),
+      safeIpcInvoke<UserProfile[]>("get-all-users", [], { fallback: [] }),
+    ]);
+    const memberIds = new Set(members.map((m) => m.user_id));
+    const available = orgUsers.filter((u) => !memberIds.has(u.id));
+    // Only org admins/managers can be project managers
+    const mayManage = (userRole?: string) =>
+      userRole === "admin" || userRole === "manager";
+
+    content.innerHTML = `
+      <div class="members-section">
+        <h3>Current members</h3>
+        <div class="members-list">
+          ${
+            members.length === 0
+              ? "<p><em>No members yet.</em></p>"
+              : members
+                  .map((m) => {
+                    const uid = escapeHtml(m.user_id);
+                    const name = escapeHtml(m.user?.username || "Unknown");
+                    if (m.user_id === project.manager_id) {
+                      return `<div class="member-item"><span class="member-info">👑 ${name}</span><span class="manager-label">Project manager</span></div>`;
+                    }
+                    return `
+                      <div class="member-item">
+                        <span class="member-info">${m.role === "manager" ? "👑" : "👤"} ${name}</span>
+                        <div class="member-actions">
+                          <select class="member-role-select" data-user-id="${uid}" aria-label="Role for ${name}">
+                            <option value="member" ${m.role === "member" ? "selected" : ""}>Member</option>
+                            ${mayManage(m.user?.role) ? `<option value="manager" ${m.role === "manager" ? "selected" : ""}>Manager</option>` : ""}
+                          </select>
+                          <button type="button" class="btn-remove-member" data-user-id="${uid}" data-name="${name}">Remove</button>
+                        </div>
+                      </div>`;
+                  })
+                  .join("")
+          }
+        </div>
+      </div>
+      ${
+        available.length > 0
+          ? `<div class="add-member-section">
+               <h3>Add a member</h3>
+               <div class="add-member-form">
+                 <select id="addMemberUser" aria-label="Organization member">
+                   ${available.map((u) => `<option value="${escapeHtml(u.id)}" data-role="${escapeHtml(u.role)}">${escapeHtml(u.username)}</option>`).join("")}
+                 </select>
+                 <select id="addMemberRole" aria-label="Project role">
+                   <option value="member">Member</option>
+                   <option value="manager">Manager</option>
+                 </select>
+                 <button type="button" id="addMemberBtn" class="btn-confirm">Add</button>
+               </div>
+               <p class="info-note" style="margin-top: 10px; font-size: 12px;">
+                 Only organization admins and managers can be project managers.
+               </p>
+             </div>`
+          : "<p><em>Everyone in your organization is already on this project.</em></p>"
+      }
+      <div class="session-modal-actions">
+        <button type="button" id="membersCloseBtn" class="btn-cancel">Close</button>
+      </div>
+    `;
+
+    content.querySelector("#membersCloseBtn")?.addEventListener("click", close);
+
+    const userSelect = content.querySelector<HTMLSelectElement>("#addMemberUser");
+    const roleSelect = content.querySelector<HTMLSelectElement>("#addMemberRole");
+    const syncRoleChoice = () => {
+      const userRole = userSelect?.selectedOptions[0]?.dataset.role;
+      const managerOpt = roleSelect?.querySelector<HTMLOptionElement>(
+        'option[value="manager"]',
+      );
+      if (managerOpt) managerOpt.disabled = !mayManage(userRole);
+      if (roleSelect && managerOpt?.disabled) roleSelect.value = "member";
+    };
+    userSelect?.addEventListener("change", syncRoleChoice);
+    syncRoleChoice();
+
+    content.querySelector("#addMemberBtn")?.addEventListener("click", async () => {
+      if (!userSelect?.value) return;
+      const added = await safeIpcInvoke(
+        "add-project-member",
+        [project.id, userSelect.value, roleSelect?.value || "member"],
+        { fallback: null },
+      );
+      if (!added) {
+        showInAppNotification("Could not add the member.", 4000, "error");
+        return;
+      }
+      changed = true;
+      showInAppNotification("Member added.", 2000);
+      await draw();
     });
 
-    // Replace the form content with our custom members management UI
-    setTimeout(async () => {
-      const modal = document.getElementById("customModal");
-      const form = modal?.querySelector("form");
-      if (form) {
-        const data = await refreshModalContent();
+    content
+      .querySelectorAll<HTMLSelectElement>(".member-role-select")
+      .forEach((select) => {
+        const previous = select.value;
+        select.addEventListener("change", async () => {
+          const updated = await safeIpcInvoke(
+            "update-project-member-role",
+            [project.id, select.dataset.userId, select.value],
+            { fallback: null },
+          );
+          if (!updated) {
+            select.value = previous;
+            showInAppNotification("Could not change the role.", 4000, "error");
+            return;
+          }
+          changed = true;
+          showInAppNotification("Role updated.", 2000);
+          await draw();
+        });
+      });
 
-        form.innerHTML = `
-          <div class="members-modal-content">
-            <div class="members-section">
-              <h3>Current Members</h3>
-              <div class="members-list">
-                ${data.membersList}
-              </div>
-            </div>
+    content
+      .querySelectorAll<HTMLButtonElement>(".btn-remove-member")
+      .forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const removed = await safeIpcInvoke(
+            "remove-project-member",
+            [project.id, btn.dataset.userId],
+            { fallback: false },
+          );
+          if (!removed) {
+            showInAppNotification("Could not remove the member.", 4000, "error");
+            return;
+          }
+          changed = true;
+          showInAppNotification(`${btn.dataset.name ?? "Member"} removed.`, 2000);
+          await draw();
+        });
+      });
+  };
 
-            ${
-              data.availableUsers.length > 0
-                ? `
-              <div class="add-member-section">
-                <h3>Add New Member</h3>
-                <div class="add-member-form">
-                  <div id="userSelect-container"></div>
-                  <div id="roleSelect-container"></div>
-                  <button type="button" id="addMemberBtn" class="btn-confirm">Add Member</button>
-                </div>
-                <p class="info-note" style="margin-top: 10px; font-size: 12px; color: var(--fg-muted);">
-                  Note: Only system admins and managers can be assigned as project managers.
-                </p>
-              </div>
-            `
-                : "<p><em>All users are already members of this project.</em></p>"
-            }
-            
-            <div class="session-modal-actions">
-              <button type="button" id="membersCloseBtn" class="btn-cancel">Close</button>
-            </div>
-          </div>
-        `;
-
-        // Setup interactions after a small delay to ensure DOM is fully ready
-        setTimeout(() => {
-          setupModalInteractions(data);
-
-          // Add direct click listeners for remove buttons
-          const removeButtons = modal?.querySelectorAll(".btn-remove-member");
-          removeButtons?.forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              const userId = (btn as HTMLButtonElement).dataset.userId!;
-              const memberName =
-                btn
-                  .closest(".member-item")
-                  ?.querySelector(".member-info")
-                  ?.textContent?.split("(")[0]
-                  ?.trim() || "this member";
-
-              showConfirmationModal({
-                title: "Remove Member",
-                message: `Are you sure you want to remove ${memberName} from the project?`,
-                confirmText: "Remove",
-                onConfirm: async () => {
-                  try {
-                    await ipcRenderer.invoke(
-                      "remove-project-member",
-                      projectId,
-                      userId,
-                    );
-                    showInAppNotification("Member removed successfully!", 2000);
-                    // Close modal and refresh projects
-                    modal?.classList.remove("active");
-                    modal?.remove();
-                    document.getElementById("customModalOverlay")?.remove();
-                    isMemberModalOpen = false;
-                    await loadProjects();
-                    renderProjects();
-                  } catch (error) {
-                    showInAppNotification(
-                      `Failed to remove member: ${error}`,
-                      5000,
-                    );
-                  }
-                },
-              });
-            });
-          });
-
-          // Add direct listeners for role changes - don't close modal immediately
-          const roleSelects = modal?.querySelectorAll(".role-select");
-          roleSelects?.forEach((select) => {
-            select.addEventListener("change", async (e) => {
-              const target = e.target as HTMLSelectElement;
-              const userId = target.dataset.userId!;
-              const newRole = target.value as "manager" | "member";
-              const oldValue =
-                target.value === "manager" ? "member" : "manager";
-
-              // Map frontend role to database role
-              const dbRole = newRole === "member" ? "employee" : "manager";
-
-              try {
-                if (newRole === "manager") {
-                  await ipcRenderer.invoke(
-                    "transfer-project-management",
-                    projectId,
-                    userId,
-                  );
-                } else {
-                  await ipcRenderer.invoke(
-                    "update-project-member-role",
-                    projectId,
-                    userId,
-                    dbRole,
-                  );
-                }
-                showInAppNotification("Role updated successfully!", 2000);
-
-                // Wait a bit before refreshing to ensure database is updated
-                setTimeout(async () => {
-                  await loadProjects();
-                  renderProjects();
-                  // Close modal after successful update
-                  modal?.classList.remove("active");
-                  modal?.remove();
-                  document.getElementById("customModalOverlay")?.remove();
-                  isMemberModalOpen = false;
-                }, 500);
-              } catch (error) {
-                showInAppNotification(`Failed to update role: ${error}`, 5000);
-                // Revert the select value
-                target.value = oldValue;
-              }
-            });
-          });
-        }, 100);
-
-        // Add close button handler
-        const closeBtn = form.querySelector("#membersCloseBtn");
-        if (closeBtn) {
-          closeBtn.addEventListener("click", () => {
-            modal?.classList.remove("active");
-            modal?.remove();
-            document.getElementById("customModalOverlay")?.remove();
-            isMemberModalOpen = false;
-            loadProjects().then(() => renderProjects());
-          });
-        }
-      }
-    }, 50);
-  } catch (error) {
-    isMemberModalOpen = false; // Reset flag on error
-    showInAppNotification("Failed to load project members", 5000);
-  }
+  await withLoading(content, "Loading members…", draw);
 }

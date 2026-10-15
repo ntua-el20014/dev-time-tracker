@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import * as cloudProjects from "../supabase/cloudProjects";
 import { getCurrentUser } from "../supabase/api";
+import { getCurrentOrganization } from "../supabase/organizations";
 import type {
   CreateCloudProjectData,
   UpdateCloudProjectData,
@@ -8,7 +9,8 @@ import type {
 } from "../types/organization.types";
 
 /**
- * Create a new project (organization or personal)
+ * Create a project. Personal by default; "organization" puts it in the
+ * caller's current org (RLS only allows that for admins and managers).
  */
 ipcMain.handle(
   "create-project",
@@ -18,6 +20,7 @@ ipcMain.handle(
     description: string,
     color: string,
     hourlyRate?: number | null,
+    scope: "personal" | "organization" = "personal",
   ) => {
     try {
       const user = await getCurrentUser();
@@ -30,8 +33,13 @@ ipcMain.handle(
         description,
         color,
         hourly_rate: hourlyRate ?? null,
-        scope: "personal", // Default to personal for now
+        scope: scope === "organization" ? "organization" : "personal",
       };
+      if (projectData.scope === "organization") {
+        const org = await getCurrentOrganization(user.id);
+        if (!org) throw new Error("Not in an organization");
+        projectData.org_id = org.id;
+      }
 
       return await cloudProjects.createCloudProject(projectData, user.id);
     } catch (err) {
@@ -63,7 +71,9 @@ ipcMain.handle("get-all-projects", async (_event) => {
 });
 
 /**
- * Get all projects with members
+ * Every project the user can see — personal and organization, active and
+ * archived — for the Projects page. Only organization projects have
+ * members (a personal project is visible to its owner alone).
  */
 ipcMain.handle("get-all-projects-with-members", async (_event) => {
   try {
@@ -72,20 +82,23 @@ ipcMain.handle("get-all-projects-with-members", async (_event) => {
       throw new Error("User not authenticated");
     }
 
-    // Get both organization and personal projects
-    const [orgProjects, personalProjects] = await Promise.all([
+    const [orgProjects, personalProjects, archived] = await Promise.all([
       cloudProjects.getOrganizationProjects(user.id),
       cloudProjects.getPersonalProjects(user.id),
+      cloudProjects.getArchivedProjects(user.id),
     ]);
 
-    const allProjects = [...orgProjects, ...personalProjects];
+    const byId = new Map<string, (typeof orgProjects)[number]>();
+    for (const p of [...orgProjects, ...personalProjects, ...archived]) {
+      byId.set(p.id, p);
+    }
 
-    // Get members for each project
     const projectsWithMembers = await Promise.all(
-      allProjects.map(async (project) => {
-        const members = await cloudProjects.getProjectMembers(
-          (project as any).id,
-        );
+      [...byId.values()].map(async (project) => {
+        const members =
+          project.scope === "organization"
+            ? await cloudProjects.getProjectMembers(project.id)
+            : [];
         return { ...project, members };
       }),
     );

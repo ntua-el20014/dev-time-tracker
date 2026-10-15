@@ -50,9 +50,9 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 - **Connection Status:**  
   Live indicator (Online / Offline / Limited) with graceful degradation.
 - **Hotkeys & Tray:**  
-  Start/stop and pause tracking with in-app shortcuts (Ctrl+R, Ctrl+P) or from the tray icon, and jump between sidebar sections with Ctrl+1–5. Toggle incognito from any app with Ctrl+Alt+Shift+I.
+  Start/stop and pause tracking with in-app shortcuts (Ctrl+R, Ctrl+P) or from the tray icon, and jump between sidebar sections with Ctrl+1–6. Toggle incognito from any app with Ctrl+Alt+Shift+I.
 - **Sidebar layout:**  
-  Home (timer, today, goal, earnings), Sessions (List / Calendar / Insights), Projects, Settings, and Team, which appears once your organization has other members (or someone is waiting to join).
+  Home (timer, today, goal, earnings), Sessions (List / Calendar / Insights), Projects, Billing (billable hours, earnings, invoices), Settings, and Team, which appears once your organization has other members (or someone is waiting to join).
 - **Customizable Themes:**  
   Switch between dark and light mode, pick custom accent colors for each theme. Settings sync across devices.
 - **Data Export:**  
@@ -93,7 +93,7 @@ Dev Time Tracker is a **100% cloud-backed** Electron app. All data is stored in 
 │  │    (List/Cal/    │                 │   ├─ goal          │ │
 │  │     Insights)    │                 │   ├─ project       │ │
 │  │   Projects       │                 │   ├─ scheduled     │ │
-│  │   Team           │                 │   ├─ preferences   │ │
+│  │   Billing, Team  │                 │   ├─ preferences   │ │
 │  │   Settings       │                 │   ├─ user          │ │
 │  │                  │                 │   ├─ organization  │ │
 │  │  Components:     │                 │   └─ export        │ │
@@ -413,7 +413,8 @@ renderer/                     # Renderer process (frontend UI)
   summaryTab.ts                 # Sessions → List: charts, sessions, custom analytics
   calendarTab.ts                # Sessions → Calendar: scheduled sessions
   insightsTab.ts                # Sessions → Insights: editor/language breakdown, goal history
-  projectsTab.ts                # Projects: personal and org project management
+  projectsTab.ts                # Projects: personal and org projects (create, rates, archive, members)
+  billingTab.ts                 # Billing: billable hours and earnings by month, invoices
   organizationTab.ts            # Team → Organization: members, roles, invites, join requests
   teamAnalyticsTab.ts           # Team → Analytics (admins/managers)
   settingsTab.ts                # Settings: preferences, integrations, shortcuts, account & team

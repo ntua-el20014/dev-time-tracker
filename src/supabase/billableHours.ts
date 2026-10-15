@@ -16,11 +16,21 @@ export interface BillableHoursSummary {
   earnings: number; // hourly_rate * billable_hours
 }
 
+/** Billable sessions with no project: no rate, so no earnings. */
+export interface UnassignedBillable {
+  billableHours: number;
+  billableSeconds: number;
+  billableSessions: number;
+}
+
 export interface EarningsSummary {
   totalEarnings: number;
+  /** Includes unassigned billable time */
   totalBillableHours: number;
+  /** Includes unassigned billable sessions */
   totalBillableSessions: number;
   byProject: BillableHoursSummary[];
+  unassigned: UnassignedBillable;
   startDate: string;
   endDate: string;
 }
@@ -122,17 +132,25 @@ export async function getUserEarningsSummary(
     projectMap[(p as any).id] = p;
   }
 
-  // Group sessions by project
+  // Group sessions by project; sessions without a (visible) project are
+  // collected as unassigned so the time isn't silently dropped
   const byProject: Record<string, BillableHoursSummary> = {};
+  const unassigned: UnassignedBillable = {
+    billableHours: 0,
+    billableSeconds: 0,
+    billableSessions: 0,
+  };
 
   for (const session of sessions || []) {
     const projectId = (session as any).project_id;
-    if (!projectId) continue;
+    const project = projectId ? projectMap[projectId] : undefined;
+    if (!project) {
+      unassigned.billableSeconds += (session as any).duration || 0;
+      unassigned.billableSessions += 1;
+      continue;
+    }
 
     if (!byProject[projectId]) {
-      const project = projectMap[projectId];
-      if (!project) continue;
-
       byProject[projectId] = {
         projectId,
         projectName: (project as any).name,
@@ -160,11 +178,13 @@ export async function getUserEarningsSummary(
     return summary;
   });
 
+  unassigned.billableHours =
+    Math.round((unassigned.billableSeconds / 3600) * 100) / 100;
+
   // Calculate totals
-  const totalBillableSeconds = summaries.reduce(
-    (sum, s) => sum + s.billableSeconds,
-    0,
-  );
+  const totalBillableSeconds =
+    summaries.reduce((sum, s) => sum + s.billableSeconds, 0) +
+    unassigned.billableSeconds;
   const totalBillableHours =
     Math.round((totalBillableSeconds / 3600) * 100) / 100;
   const totalEarnings =
@@ -173,11 +193,11 @@ export async function getUserEarningsSummary(
   return {
     totalEarnings,
     totalBillableHours,
-    totalBillableSessions: summaries.reduce(
-      (sum, s) => sum + s.billableSessions,
-      0,
-    ),
+    totalBillableSessions:
+      summaries.reduce((sum, s) => sum + s.billableSessions, 0) +
+      unassigned.billableSessions,
     byProject: summaries,
+    unassigned,
     startDate: defaultStart,
     endDate: defaultEnd,
   };

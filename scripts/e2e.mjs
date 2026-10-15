@@ -54,7 +54,14 @@ async function launch(name, port) {
   const dir = path.join(work, name);
   mkdirSync(path.join(dir, "profile"), { recursive: true });
   mkdirSync(path.join(dir, "home"), { recursive: true });
-  const child = spawn(exe, [`--remote-debugging-port=${port}`], {
+  // Keep painting while the window is covered by other windows; otherwise
+  // Chromium stops producing frames and screenshots wait forever.
+  const child = spawn(exe, [
+    `--remote-debugging-port=${port}`,
+    "--disable-features=CalculateNativeWinOcclusion",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+  ], {
     env: {
       ...process.env,
       DTT_USER_DATA_DIR: path.join(dir, "profile"),
@@ -118,8 +125,12 @@ async function launch(name, port) {
     return false;
   };
   const shot = async (file) => {
-    const s = await send("Page.captureScreenshot", { format: "png" });
-    writeFileSync(path.join(work, file), Buffer.from(s.result.data, "base64"));
+    const s = await Promise.race([
+      send("Page.captureScreenshot", { format: "png" }),
+      sleep(10000).then(() => null),
+    ]);
+    if (s?.result?.data) writeFileSync(path.join(work, file), Buffer.from(s.result.data, "base64"));
+    else console.log(`(screenshot ${file} skipped: no frame within 10s)`);
   };
   const kill = () => {
     try { ws.close(); } catch {}
@@ -210,9 +221,34 @@ try {
       await u1.shot(`u1-view-${name.replace("/", "-")}.png`);
     }
   }
+  await u1.ev(`document.querySelector('.nav-item[data-view="billing"]').click()`);
+  check("Billing shows the monthly summary", await u1.waitFor(`/Billable Hours/.test(document.getElementById("billingContent")?.innerText || "")`, 8000));
   await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
   const timerIdle = await u1.ev(`document.getElementById("navTimerStatus").textContent`);
   check("rail timer says not recording", timerIdle === "Not recording", timerIdle);
+
+  // ── Projects: create through the form, archive, restore ─────────
+  const projName = `E2E Project ${new Date().toISOString().slice(11, 19)}`;
+  await u1.ev(`document.querySelector('.nav-item[data-view="projects"]').click()`);
+  await u1.waitFor(`!!document.getElementById("newProjectBtn")`, 8000);
+  await u1.ev(`document.getElementById("newProjectBtn").click()`);
+  check("New Project form opens", await u1.waitFor(`!!document.getElementById("projectForm")`, 5000));
+  check("solo user is not offered an organization project", !(await u1.ev(`!!document.querySelector('#projectForm input[name="scope"]')`)));
+  await u1.ev(`(() => {
+    document.getElementById("project-name").value = ${JSON.stringify(projName)};
+    document.getElementById("project-hourly-rate").value = "80";
+    document.getElementById("projectForm").requestSubmit();
+  })()`);
+  check("created project appears on the Projects page", await u1.waitFor(`[...document.querySelectorAll("#projectsContent .project-name")].some(e => e.textContent === ${JSON.stringify(projName)})`, 10000));
+  const findProj = async () => ((await u1.invoke("get-all-projects-with-members")).v || []).find((p) => p.name === projName);
+  const proj = await findProj();
+  check("project saved as personal with the rate", proj?.scope === "personal" && Number(proj?.hourly_rate) === 80, JSON.stringify(proj && { scope: proj.scope, rate: proj.hourly_rate }));
+  await u1.invoke("delete-project", proj?.id);
+  const archivedProj = await findProj();
+  check("archived project is still listed (was lost before)", !!archivedProj && archivedProj.archived === true && archivedProj.is_active === false);
+  await u1.invoke("restore-project", proj?.id);
+  check("restored project is active again", (await findProj())?.is_active === true);
+  await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
 
   const title = `E2E session ${new Date().toISOString().slice(11, 19)}`;
   await u1.ev(`document.getElementById("recordBtn").click()`);
@@ -233,6 +269,12 @@ try {
   check("saved with end_time (needs new schema trigger)", !!saved?.end_time);
   check("saved as billable", saved?.is_billable === true);
   check("session date is the local day", saved?.date === new Date().toLocaleDateString("en-CA"), saved?.date);
+
+  // The session is billable with no project: Billing must still show it
+  await u1.ev(`document.querySelector('.nav-item[data-view="billing"]').click()`);
+  check("Billing flags the billable session that has no project", await u1.waitFor(`/billable sessions? \(.*\) ha(s|ve) no project/.test(document.querySelector(".billable-unassigned")?.innerText || "")`, 10000));
+  await u1.shot("u1-billing-unassigned.png");
+  await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
 
   // Server-side org attribution of the session
   const raw = await rawApi(u1, "GET", `time_tracking_sessions?id=eq.${saved?.id}&select=org_id`);
@@ -307,7 +349,8 @@ try {
   // Team → Analytics as admin
   await u1.ev(`document.querySelector('.nav-item[data-view="team"]').click()`);
   await u1.ev(`document.querySelector('#view-team .subnav-btn[data-sub="analytics"]').click()`);
-  await sleep(3000);
+  // The analytics queries can take a few seconds; wait for the KPIs
+  await u1.waitFor(`/TOTAL SESSIONS\s*\d+/i.test(document.getElementById("teamAnalyticsContent")?.innerText || "")`, 20000);
   const taText = await u1.ev(`document.getElementById("teamAnalyticsContent")?.innerText || ""`);
   check("team analytics renders for admin", taText.trim().length > 0);
   const range = { start: new Date(Date.now() - 86400000).toLocaleDateString("en-CA"), end: new Date(Date.now() + 86400000).toLocaleDateString("en-CA") };
@@ -316,6 +359,19 @@ try {
   const shownSessions = Number((taText.match(/TOTAL SESSIONS\s*(\d+)/i) || [])[1] ?? -1);
   check("Team Analytics refreshed after the session was saved (was stale)", shownSessions >= 1, `shows ${shownSessions}`);
   await u1.shot("u1-team-analytics.png");
+
+  // Organization project with user 2 as a member (role "member" — the old
+  // Projects tab sent "employee", which the CHECK constraint rejected)
+  const orgProjName = `E2E Org Project ${new Date().toISOString().slice(11, 19)}`;
+  const orgProj = (await u1.invoke("create-project", orgProjName, "", "#22aa88", 100, "organization")).v;
+  check("admin creates an organization project", orgProj?.scope === "organization" && orgProj?.org_id === org1.id, JSON.stringify(orgProj && { scope: orgProj.scope, org: orgProj.org_id }));
+  const added = await u1.invoke("add-project-member", orgProj?.id, p2.id, "member");
+  check("project manager adds user 2 as a member", !!added.v, JSON.stringify(added));
+  const listed = ((await u1.invoke("get-all-projects-with-members")).v || []).find((p) => p.id === orgProj?.id);
+  check("org project lists its member", (listed?.members || []).some((m) => m.user_id === p2.id));
+  const seenByU2 = ((await u2.invoke("get-projects-for-user")).v || []).some((p) => p.id === orgProj?.id);
+  check("org member can pick the org project (Stop dialog list)", seenByU2);
+  if (orgProj?.id) await rawApi(u1, "DELETE", `cloud_projects?id=eq.${orgProj.id}`);
 
   const remove = await u1.invoke("org:remove-user", p2.id);
   check("admin removes user 2 (remove_org_member)", remove.v === true || remove.ok, JSON.stringify(remove));
@@ -327,6 +383,11 @@ try {
   // Restore user 2 to a personal org so the accounts are reusable
   const restore = await u2.invoke("org:create-personal", "E2E Test Org");
   check("user 2 creates a personal org again", restore.ok && !!restore.v);
+
+  if (proj?.id) {
+    const delProj = await rawApi(u1, "DELETE", `cloud_projects?id=eq.${proj.id}`);
+    check("delete the e2e project", delProj.status === 200, `HTTP ${delProj.status}`);
+  }
 
   // Cleanup the session created by this run
   const del = await u1.invoke("delete-session", saved?.id);

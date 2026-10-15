@@ -13,6 +13,7 @@ import {
 import { getLangIconUrl } from "../src/utils/langIconUrl";
 import { showInAppNotification } from "./components/Notifications";
 import { showModal } from "./components/Modals";
+import { navigateTo } from "./navigation";
 import { renderEarningsWidget } from "./components/BillableHoursSummary";
 import type { DailySummaryRow, SessionRow } from "../shared/types";
 
@@ -139,6 +140,12 @@ export async function renderDashboard() {
   if (earningsDiv) {
     const earningsWidget = await renderEarningsWidget();
     earningsDiv.appendChild(earningsWidget);
+    const toBilling = document.createElement("button");
+    toBilling.type = "button";
+    toBilling.className = "link-btn dashboard-billing-link";
+    toBilling.textContent = "Open Billing →";
+    toBilling.addEventListener("click", () => navigateTo("billing"));
+    earningsDiv.appendChild(toBilling);
   }
 
   // --- Daily Goal ---

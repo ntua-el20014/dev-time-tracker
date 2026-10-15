@@ -46,7 +46,7 @@ export async function renderBySessionView(
   const allTags: Tag[] = await safeIpcInvoke("get-all-tags", [], {
     fallback: [],
   });
-  const allProjects: Project[] = await safeIpcInvoke("get-user-projects", [], {
+  const allProjects: Project[] = await safeIpcInvoke("get-projects-for-user", [], {
     fallback: [],
   });
   let sessions: SessionRow[];

@@ -3,8 +3,6 @@
  * Provides typed wrappers around IPC calls to organization handlers
  */
 
-import { supabase } from "../../src/supabase/client";
-import { getCurrentUserIdSafe } from "./userUtils";
 import { safeIpcInvoke } from "./ipcHelpers";
 import type {
   Organization,
@@ -15,13 +13,7 @@ import type {
   OrgInviteCode,
   CreateInviteCodeData,
   JoinWithCodeResult,
-  CloudProject,
-  CloudProjectWithManager,
-  ProjectMember,
   CreateOrganizationData,
-  CreateCloudProjectData,
-  UpdateCloudProjectData,
-  AssignProjectMemberData,
 } from "../../src/types/organization.types";
 
 // =====================================================
@@ -176,113 +168,4 @@ export async function joinWithInviteCode(
   code: string,
 ): Promise<JoinWithCodeResult> {
   return await safeIpcInvoke<JoinWithCodeResult>("org:join-with-code", [code]);
-}
-
-// =====================================================
-// CLOUD PROJECTS (Organization-level)
-// =====================================================
-
-export async function getOrganizationProjects(): Promise<
-  CloudProjectWithManager[]
-> {
-  const userId = getCurrentUserIdSafe();
-  if (!userId) return [];
-
-  // Call Supabase directly from renderer (has auth context)
-  // Get user's org_id
-  const { data: profiles } = await supabase
-    .from("user_profiles")
-    .select("org_id")
-    .eq("id", userId)
-    .limit(1);
-
-  if (!profiles || profiles.length === 0 || !(profiles[0] as any)?.org_id) {
-    return [];
-  }
-
-  const userOrgId = (profiles[0] as any).org_id;
-
-  // Get projects with manager info
-  const { data, error } = await supabase
-    .from("cloud_projects")
-    .select(
-      `
-      *,
-      manager:user_profiles!manager_id (
-        username,
-        email
-      )
-    `,
-    )
-    .eq("org_id", userOrgId)
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  return (data || []) as CloudProjectWithManager[];
-}
-
-export async function getCloudProjectById(
-  projectId: string,
-): Promise<CloudProjectWithManager | null> {
-  return await safeIpcInvoke<CloudProjectWithManager | null>(
-    "org:get-project-by-id",
-    [projectId],
-    { fallback: null },
-  );
-}
-
-export async function createCloudProject(
-  data: CreateCloudProjectData,
-): Promise<CloudProject> {
-  return await safeIpcInvoke<CloudProject>("org:create-project", [data]);
-}
-
-export async function updateCloudProject(
-  projectId: string,
-  updates: UpdateCloudProjectData,
-): Promise<CloudProject> {
-  return await safeIpcInvoke<CloudProject>("org:update-project", [
-    projectId,
-    updates,
-  ]);
-}
-
-export async function getProjectMembers(
-  projectId: string,
-): Promise<ProjectMember[]> {
-  return await safeIpcInvoke<ProjectMember[]>(
-    "org:get-project-members",
-    [projectId],
-    { fallback: [] },
-  );
-}
-
-export async function assignMemberToProject(
-  data: AssignProjectMemberData,
-): Promise<ProjectMember> {
-  return await safeIpcInvoke<ProjectMember>("org:assign-project-member", [
-    data,
-  ]);
-}
-
-export async function removeMemberFromProject(
-  projectId: string,
-  userId: string,
-): Promise<void> {
-  return await safeIpcInvoke<void>("org:remove-project-member", [
-    projectId,
-    userId,
-  ]);
-}
-
-export async function updateProjectMemberRole(
-  projectId: string,
-  userId: string,
-  role: "manager" | "member",
-): Promise<ProjectMember> {
-  return await safeIpcInvoke<ProjectMember>("org:update-project-member-role", [
-    projectId,
-    userId,
-    role,
-  ]);
 }

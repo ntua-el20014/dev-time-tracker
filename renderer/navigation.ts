@@ -9,13 +9,20 @@
  * "summary", "organization", …), so existing markTabsDirty calls keep working.
  */
 
-export type ViewId = "home" | "sessions" | "projects" | "team" | "settings";
+export type ViewId =
+  | "home"
+  | "sessions"
+  | "projects"
+  | "billing"
+  | "team"
+  | "settings";
 
 /** Page shown by each view, keyed by sub-view ("" for views without any). */
 const VIEW_PAGES: Record<ViewId, Record<string, string>> = {
   home: { "": "dashboard" },
   sessions: { list: "summary", calendar: "calendar", insights: "insights" },
   projects: { "": "projects" },
+  billing: { "": "billing" },
   team: { organization: "organization", analytics: "teamAnalytics" },
   settings: { "": "settings" },
 };

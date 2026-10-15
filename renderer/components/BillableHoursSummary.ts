@@ -1,6 +1,9 @@
 import { safeIpcInvoke } from "../utils";
 import { getLocalDateString } from "../../src/utils/timeFormat";
 import { showInAppNotification } from "./Notifications";
+import { showInvoiceGenerationModal } from "./InvoiceModal";
+import { escapeHtml } from "../utils/domUtils";
+import { navigateTo } from "../navigation";
 
 interface BillableHoursSummary {
   projectId: string;
@@ -18,6 +21,12 @@ interface EarningsSummary {
   totalBillableHours: number;
   totalBillableSessions: number;
   byProject: BillableHoursSummary[];
+  /** Billable sessions with no project (absent in older fallbacks) */
+  unassigned?: {
+    billableHours: number;
+    billableSeconds: number;
+    billableSessions: number;
+  };
   startDate: string;
   endDate: string;
 }
@@ -98,6 +107,8 @@ function renderBillableHoursMarkup(
         </div>
       </div>
       
+      ${renderUnassignedNotice(summary)}
+
       ${
         summary.byProject.length > 0
           ? `
@@ -110,6 +121,7 @@ function renderBillableHoursMarkup(
                 <th>Hours</th>
                 <th>Sessions</th>
                 <th>Earnings</th>
+                <th><span class="visually-hidden">Actions</span></th>
               </tr>
             </thead>
             <tbody>
@@ -119,8 +131,8 @@ function renderBillableHoursMarkup(
                 <tr>
                   <td>
                     <div class="project-name-cell">
-                      <div class="project-color-dot" style="background-color: ${project.projectColor}"></div>
-                      <span>${project.projectName}</span>
+                      <div class="project-color-dot" style="background-color: ${escapeHtml(project.projectColor)}"></div>
+                      <span>${escapeHtml(project.projectName)}</span>
                     </div>
                   </td>
                   <td>
@@ -129,6 +141,9 @@ function renderBillableHoursMarkup(
                   <td>${project.billableHours.toFixed(1)}h</td>
                   <td>${project.billableSessions}</td>
                   <td class="earnings-value">$${project.earnings.toFixed(2)}</td>
+                  <td>
+                    <button type="button" class="billable-invoice-btn" data-project-id="${escapeHtml(project.projectId)}" title="Create an invoice for ${escapeHtml(project.projectName)}">📄 Invoice</button>
+                  </td>
                 </tr>
               `,
                 )
@@ -137,12 +152,30 @@ function renderBillableHoursMarkup(
           </table>
         </div>
       `
-          : `
+          : summary.unassigned?.billableSessions
+            ? ""
+            : `
         <div class="billable-empty-state">
           <p>No billable hours tracked for this month</p>
         </div>
       `
       }
+    </div>
+  `;
+}
+
+function renderUnassignedNotice(summary: EarningsSummary): string {
+  const sessions = summary.unassigned?.billableSessions ?? 0;
+  if (!sessions) return "";
+  const hours = summary.unassigned?.billableHours ?? 0;
+  return `
+    <div class="billable-unassigned" role="status">
+      <span>
+        ⚠️ <b>${sessions} billable ${sessions === 1 ? "session" : "sessions"} (${hours.toFixed(1)}h)</b>
+        ${sessions === 1 ? "has" : "have"} no project, so ${sessions === 1 ? "it isn't" : "they aren't"}
+        priced or included in invoices.
+      </span>
+      <button type="button" class="billable-invoice-btn" data-assign-unassigned>Assign in Sessions</button>
     </div>
   `;
 }
@@ -182,6 +215,18 @@ async function renderBillableHoursSummaryInternal(container: HTMLElement) {
       await renderBillableHoursSummaryInternal(container);
     });
   });
+
+  container
+    .querySelector("[data-assign-unassigned]")
+    ?.addEventListener("click", () => navigateTo("sessions", "list"));
+
+  container
+    .querySelectorAll<HTMLButtonElement>(".billable-invoice-btn[data-project-id]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        void showInvoiceGenerationModal(button.dataset.projectId);
+      });
+    });
 }
 
 export async function renderBillableHoursSummary(

@@ -55,6 +55,8 @@ export interface CloudProject {
   hourly_rate?: number | null;
   scope: "personal" | "organization";
   is_active: boolean;
+  /** Set by archive_project(); archived projects also have is_active false */
+  archived?: boolean;
   manager_id: string;
   org_id: string | null;
   created_at: string;
