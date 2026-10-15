@@ -7,6 +7,9 @@
  * - archive/restore: the project's manager, or an org admin/manager
  * - members: org projects only (a personal project is visible to its owner
  *   alone), and only the project's manager may change them
+ *
+ * Each card also lists the git repos the user linked to it (from Home or
+ * the Stop dialog); links are per user, so anyone may unlink their own.
  */
 import { escapeHtml } from "./utils/domUtils";
 import {
@@ -24,9 +27,11 @@ import type {
 } from "../src/types/organization.types";
 
 type Project = CloudProjectWithManager & { members?: ProjectMemberWithUser[] };
+type RepoLink = { repo_key: string; repo_name: string; project_id: string };
 type Role = "admin" | "manager" | "employee";
 
 let projects: Project[] = [];
+let repoLinks: RepoLink[] = [];
 let role: Role = "employee";
 let me = "";
 let showArchived = false;
@@ -71,11 +76,13 @@ export async function renderProjects() {
   await withLoading(container, "Loading projects…", async () => {
     me = getCurrentUserIdSafe() ?? "";
     role = (await getCurrentUserRole()) as Role;
-    projects = await safeIpcInvoke<Project[]>(
-      "get-all-projects-with-members",
-      [],
-      { fallback: [] },
-    );
+    [projects, repoLinks] = await Promise.all([
+      safeIpcInvoke<Project[]>("get-all-projects-with-members", [], { fallback: [] }),
+      safeIpcInvoke<RepoLink[]>("get-repo-links", [], {
+        fallback: [],
+        showNotification: false,
+      }),
+    ]);
   });
 
   const active = projects.filter((p) => !isArchived(p));
@@ -184,6 +191,10 @@ function renderCard(p: Project): string {
               : ""
           }
           <div class="project-meta-item">
+            <span class="meta-label">Repos:</span>
+            <span class="meta-value">${renderRepoLinks(p)}</span>
+          </div>
+          <div class="project-meta-item">
             <span class="meta-label">Created:</span>
             <span class="meta-value">${new Date(p.created_at).toLocaleDateString()}</span>
           </div>
@@ -194,6 +205,28 @@ function renderCard(p: Project): string {
       </div>
     </div>
   `;
+}
+
+function renderRepoLinks(p: Project): string {
+  const links = repoLinks.filter((l) => l.project_id === p.id);
+  if (links.length === 0) {
+    return `<span class="project-repos-empty" title="Work in a repo, then link it from Home or when you stop a session">Not linked</span>`;
+  }
+  return links
+    .map((l) => {
+      const name = escapeHtml(l.repo_name);
+      return `<span class="project-repo-chip" title="${escapeHtml(l.repo_key)}">${name}<button class="project-repo-unlink" data-action="unlink-repo" data-project-id="${escapeHtml(p.id)}" data-repo-key="${escapeHtml(l.repo_key)}" title="Unlink ${name}" aria-label="Unlink ${name}">×</button></span>`;
+    })
+    .join(" ");
+}
+
+async function unlinkRepo(repoKey: string) {
+  const ok = await safeIpcInvoke<boolean>("unlink-repo", [repoKey], { fallback: false });
+  if (!ok) {
+    showInAppNotification("Could not unlink the repo.", 3500, "error");
+    return;
+  }
+  void renderProjects();
 }
 
 function onProjectsClick(e: Event) {
@@ -229,6 +262,9 @@ function onProjectsClick(e: Event) {
       break;
     case "stats":
       void showStatsModal(project);
+      break;
+    case "unlink-repo":
+      if (actionBtn.dataset.repoKey) void unlinkRepo(actionBtn.dataset.repoKey);
       break;
   }
 }

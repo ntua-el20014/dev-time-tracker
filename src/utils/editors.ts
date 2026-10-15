@@ -1,6 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import { app } from "electron";
+// Bundled by webpack: assets/ is not shipped inside the packaged app
+import knownAppsJson from "../../assets/known_editors.json";
 
 export type AppEntry = {
   name: string;
@@ -95,16 +97,13 @@ export function getCustomAppsFilePath(userId: string): string {
 
 function loadKnownAppsData(): KnownAppsData {
   if (cachedData) return cachedData;
-
-  const jsonPath = path.join(app.getAppPath(), "assets", "known_editors.json");
-  try {
-    const raw = fs.readFileSync(jsonPath, "utf-8");
-    cachedData = JSON.parse(raw);
-    return cachedData!;
-  } catch {
-    cachedData = { editors: [], devTools: [], browsers: [] };
-    return cachedData;
-  }
+  const data = knownAppsJson as Partial<KnownAppsData>;
+  cachedData = {
+    editors: data.editors ?? [],
+    devTools: data.devTools ?? [],
+    browsers: data.browsers ?? [],
+  };
+  return cachedData;
 }
 
 function buildExecLookup(userId?: string): Map<string, AppMatch> {

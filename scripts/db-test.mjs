@@ -263,6 +263,36 @@ async function runScenario(label) {
   const stats = await one(`SELECT * FROM get_project_stats($1)`, [proj.id]);
   check("project stats run", stats !== undefined);
 
+  // ── Repository links ──
+  err = await fails(
+    `INSERT INTO project_repositories (user_id, project_id, repo_key, repo_name) VALUES ($1, $2, 'github.com/a/site', 'site')`,
+    [A, proj.id],
+  );
+  check("user links a repo to a project they can see", !err, err ?? "");
+  err = await fails(
+    `INSERT INTO project_repositories (user_id, project_id, repo_key, repo_name)
+     VALUES ($1, $2, 'github.com/a/site', 'site')
+     ON CONFLICT (user_id, repo_key) DO UPDATE SET project_id = EXCLUDED.project_id`,
+    [A, proj.id],
+  );
+  check("relinking the same repo upserts", !err, err ?? "");
+  await as(C);
+  err = await fails(
+    `INSERT INTO project_repositories (user_id, project_id, repo_key, repo_name) VALUES ($1, $2, 'path:c:/x', 'x')`,
+    [C, proj.id],
+  );
+  check("cannot link a repo to a project you can't see", !!err, err ?? "");
+  err = await fails(
+    `INSERT INTO project_repositories (user_id, project_id, repo_key, repo_name) VALUES ($1, $2, 'path:c:/x', 'x')`,
+    [A, proj.id],
+  );
+  check("cannot create links for someone else", !!err, err ?? "");
+  check(
+    "other users' repo links are invisible",
+    (await rows(`SELECT * FROM project_repositories`)).length === 0,
+  );
+  await as(A);
+
   // ── Leaving an org ──
   await as(C);
   err = await fails(`UPDATE user_profiles SET org_id = NULL, role = 'employee' WHERE id = $1`, [C]);

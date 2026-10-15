@@ -8,6 +8,17 @@ import type {
   AssignProjectMemberData,
 } from "../types/organization.types";
 
+const projectsChangedListeners = new Set<() => void>();
+
+/** Run `listener` after a project is archived or restored (main-side caches). */
+export function onProjectsChanged(listener: () => void) {
+  projectsChangedListeners.add(listener);
+}
+
+function projectsChanged() {
+  for (const listener of projectsChangedListeners) listener();
+}
+
 /**
  * Create a project. Personal by default; "organization" puts it in the
  * caller's current org (RLS only allows that for admins and managers).
@@ -221,6 +232,7 @@ ipcMain.handle(
 ipcMain.handle("delete-project", async (_event, id: number | string) => {
   try {
     await cloudProjects.archiveProject(String(id));
+    projectsChanged();
     return true;
   } catch (err) {
     return false;
@@ -233,6 +245,7 @@ ipcMain.handle("delete-project", async (_event, id: number | string) => {
 ipcMain.handle("restore-project", async (_event, id: number | string) => {
   try {
     await cloudProjects.restoreProject(String(id));
+    projectsChanged();
     return true;
   } catch (err) {
     return false;

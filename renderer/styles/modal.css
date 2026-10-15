@@ -199,6 +199,20 @@
   padding: 4px 8px;
 }
 
+#sessionInfoForm .session-remember-repo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.9em;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+#sessionInfoForm .session-remember-repo[hidden] {
+  display: none;
+}
+
 #customModalForm textarea,
 #customModalForm select {
   width: 100%;

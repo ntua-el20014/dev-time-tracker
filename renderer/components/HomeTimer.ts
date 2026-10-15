@@ -3,6 +3,10 @@
  * main (TrackingState.projectId), so the rail button, Ctrl+R and the tray
  * start into the same project, and changing it mid-session moves the
  * running session.
+ *
+ * Below the picker, the repo main detected in the focused editor/terminal:
+ * a linked repo's project is selected automatically before Start (unless
+ * the user picked one); an unlinked repo can be linked in one click.
  */
 import { escapeHtml } from "../utils/domUtils";
 import { safeIpcInvoke } from "../utils/ipcHelpers";
@@ -15,7 +19,8 @@ import {
   type TrackingState,
 } from "../trackingControls";
 import { currentSeconds, formatClock, onClockTick } from "../liveClock";
-import { chooseProject } from "../sessionProject";
+import { chooseProject, clearStaleProject } from "../sessionProject";
+import { markTabsDirty } from "../navigation";
 
 interface PickerProject {
   id: string;
@@ -36,6 +41,28 @@ function statusText(state: TrackingState): string {
 function projectLabel(id: string | null): string {
   const p = projects.find((x) => x.id === id);
   return p ? p.name : "No project";
+}
+
+/** The detected-repo line: what's linked, and a one-click fix if needed. */
+function repoHintHtml(state: TrackingState): string {
+  const repo = state.detectedRepo;
+  if (!repo) return "";
+  const name = `<strong>${escapeHtml(repo.name)}</strong>`;
+  const linked = repo.projectId ? projects.find((p) => p.id === repo.projectId) : null;
+  const selected = projects.find((p) => p.id === state.projectId);
+  const button = (action: string, projectId: string, label: string) =>
+    `<button type="button" class="home-repo-action" data-action="${action}" data-project="${escapeHtml(projectId)}">${escapeHtml(label)}</button>`;
+
+  if (linked) {
+    if (linked.id === state.projectId) {
+      return `<span>Repo ${name} · linked to this project</span>`;
+    }
+    return `<span>Repo ${name} is linked to <strong>${escapeHtml(linked.name)}</strong></span>${button("use", linked.id, `Use ${linked.name}`)}`;
+  }
+  if (selected) {
+    return `<span>Repo ${name} isn't linked to a project</span>${button("link", selected.id, `Always use ${selected.name}`)}`;
+  }
+  return `<span>Repo ${name} isn't linked — pick its project to link it</span>`;
 }
 
 /** Reflect main's state into the card, if it's on screen. */
@@ -61,6 +88,12 @@ function sync(state: TrackingState) {
   const select = card.querySelector<HTMLSelectElement>("#homeProjectSelect");
   if (select && select.value !== (state.projectId ?? "")) {
     select.value = state.projectId ?? "";
+  }
+  const hint = card.querySelector<HTMLElement>("#homeRepoHint");
+  if (hint) {
+    const html = repoHintHtml(state);
+    if (hint.innerHTML !== html) hint.innerHTML = html;
+    hint.hidden = html === "";
   }
   const status = card.querySelector("#homeTimerStatus");
   if (status) {
@@ -88,7 +121,7 @@ export async function renderHomeTimer(container: HTMLElement) {
   // The remembered project was archived or deleted: forget it. Only when
   // the list actually loaded, so a network error doesn't clear the choice.
   if (loaded && state.projectId && !projects.some((p) => p.id === state.projectId)) {
-    void chooseProject(null);
+    void clearStaleProject();
   }
 
   container.innerHTML = `
@@ -117,6 +150,7 @@ export async function renderHomeTimer(container: HTMLElement) {
           <button type="button" id="homePauseBtn" class="home-pause-btn" hidden>❚❚ Pause</button>
         </div>
       </div>
+      <div id="homeRepoHint" class="home-repo-hint" aria-live="polite" hidden></div>
       ${
         projects.length === 0
           ? `<p class="home-timer-hint">Create a project on the Projects page to bill your time per project.</p>`
@@ -135,6 +169,27 @@ export async function renderHomeTimer(container: HTMLElement) {
         showInAppNotification("Could not change the project.", 3500, "error");
       }
     });
+
+  container.querySelector("#homeRepoHint")?.addEventListener("click", async (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".home-repo-action");
+    const projectId = btn?.dataset.project;
+    if (!btn || !projectId) return;
+    btn.disabled = true;
+    if (btn.dataset.action === "use") {
+      try {
+        await chooseProject(projectId);
+      } catch {
+        showInAppNotification("Could not change the project.", 3500, "error");
+      }
+    } else {
+      const ok = await safeIpcInvoke<boolean>("link-detected-repo", [projectId], {
+        fallback: false,
+      });
+      if (ok) markTabsDirty("projects");
+      else showInAppNotification("Could not link the repo.", 3500, "error");
+    }
+    btn.disabled = false;
+  });
 
   container.querySelector("#homeStartBtn")?.addEventListener("click", async () => {
     try {

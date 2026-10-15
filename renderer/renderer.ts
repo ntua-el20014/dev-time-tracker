@@ -308,8 +308,16 @@ function setupHotkeys() {
 
 ipcRenderer.on(
   "get-session-info",
-  async (_event: any, request?: { projectId?: string | null }) => {
+  async (
+    _event: any,
+    request?: {
+      projectId?: string | null;
+      /** Repo worked in longest this session (detected by main) */
+      repo?: { name: string; projectId: string | null } | null;
+    },
+  ) => {
   const preselectedProjectId = request?.projectId ?? "";
+  const sessionRepo = request?.repo ?? null;
   // Add a small delay to ensure any previous modals are fully closed
   setTimeout(async () => {
     // Load available projects for selection
@@ -367,7 +375,15 @@ ipcRenderer.on(
             activeProjects.length > 0
               ? `
           <label for="session-project">Project (optional):</label><br>
-          <div id="session-project-container"></div><br>
+          <div id="session-project-container"></div>
+          ${
+            sessionRepo
+              ? `<label class="session-remember-repo" id="session-remember-repo-row" hidden>
+            <input type="checkbox" id="session-remember-repo">
+            <span id="session-remember-repo-text"></span>
+          </label>`
+              : ""
+          }<br>
           `
               : ""
           }
@@ -391,6 +407,7 @@ ipcRenderer.on(
 
     // Create custom dropdown for project selection
     let projectDropdown: any = null;
+    let onProjectChange = (_value: string) => {};
     if (activeProjects.length > 0) {
       const projectContainer = document.getElementById(
         "session-project-container",
@@ -403,6 +420,7 @@ ipcRenderer.on(
           name: "project",
           placeholder: "No project",
           value: preselected ? String(preselected.id) : "",
+          onChange: (value: string) => onProjectChange(value),
           options: [
             { value: "", label: "No project" },
             ...activeProjects.map((p: any) => ({
@@ -413,6 +431,29 @@ ipcRenderer.on(
         });
         projectContainer.appendChild(projectDropdown.getElement());
       }
+    }
+
+    // Offer to link the session's repo to the chosen project, when that
+    // would change something
+    const rememberRow = document.getElementById("session-remember-repo-row");
+    const rememberBox = document.getElementById(
+      "session-remember-repo",
+    ) as HTMLInputElement | null;
+    const rememberText = document.getElementById("session-remember-repo-text");
+    const updateRememberRepo = (projectId: string) => {
+      if (!sessionRepo || !rememberRow || !rememberBox || !rememberText) return;
+      const show = !!projectId && projectId !== sessionRepo.projectId;
+      rememberRow.hidden = !show;
+      if (!show) return;
+      rememberText.textContent = sessionRepo.projectId
+        ? `Link repo ${sessionRepo.name} to this project instead`
+        : `Always use this project for repo ${sessionRepo.name}`;
+      // Replacing an existing link is opt-in; a first link is the default
+      rememberBox.checked = !sessionRepo.projectId;
+    };
+    if (projectDropdown) {
+      updateRememberRepo(projectDropdown.getValue());
+      onProjectChange = updateRememberRepo;
     }
 
     const form = document.getElementById("sessionInfoForm") as HTMLFormElement;
@@ -447,6 +488,8 @@ ipcRenderer.on(
         description: formData.get("description") as string,
         projectId: projectId || undefined,
         isBillable: isBillable,
+        rememberRepo:
+          !!rememberBox && !rememberRow?.hidden && rememberBox.checked,
       });
 
       modal.remove();

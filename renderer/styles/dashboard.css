@@ -468,6 +468,38 @@
   opacity: 0.75;
 }
 
+.home-repo-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.home-repo-hint[hidden] {
+  display: none;
+}
+
+.home-repo-hint > span {
+  opacity: 0.8;
+}
+
+.home-repo-action {
+  padding: 3px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.home-repo-action:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
 /* ── Home: today's timeline ───────────────────────────────────────── */
 .today-timeline {
   margin-bottom: 24px;

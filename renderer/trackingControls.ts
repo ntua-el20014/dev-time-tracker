@@ -17,6 +17,17 @@ export interface TrackingState {
   startedAt: string | null;
   /** Project of the current (or next) session, chosen before Start */
   projectId: string | null;
+  /** "manual": the user picked it; "auto": restored or detected from the repo */
+  projectSource: "manual" | "auto";
+  /** Repo of the focused editor/terminal (last seen), detected by main */
+  detectedRepo: DetectedRepo | null;
+}
+
+export interface DetectedRepo {
+  key: string;
+  name: string;
+  /** Linked project, or null if the repo isn't linked yet */
+  projectId: string | null;
 }
 
 let state: TrackingState = {
@@ -27,6 +38,8 @@ let state: TrackingState = {
   activeSeconds: 0,
   startedAt: null,
   projectId: null,
+  projectSource: "auto",
+  detectedRepo: null,
 };
 const listeners = new Set<(state: TrackingState) => void>();
 
@@ -73,9 +86,15 @@ export async function resumeTracking() {
   apply(await ipcRenderer.invoke("resume-tracking"));
 }
 
-/** Choose the project for the current session, or the next one. */
-export async function setSessionProject(projectId: string | null) {
-  apply(await ipcRenderer.invoke("set-session-project", projectId));
+/**
+ * Choose the project for the current session, or the next one. "auto"
+ * (restoring a remembered choice) lets the detected repo's project replace it.
+ */
+export async function setSessionProject(
+  projectId: string | null,
+  source: "manual" | "auto" = "manual",
+) {
+  apply(await ipcRenderer.invoke("set-session-project", projectId, source));
 }
 
 export async function toggleRecording() {

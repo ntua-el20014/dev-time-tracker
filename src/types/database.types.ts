@@ -210,6 +210,44 @@ export interface Database {
           },
         ];
       };
+      project_repositories: {
+        Row: {
+          id: string;
+          user_id: string;
+          project_id: string;
+          repo_key: string;
+          repo_name: string;
+          created_at: TimestampString;
+          updated_at: TimestampString;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          project_id: string;
+          repo_key: string;
+          repo_name: string;
+          created_at?: TimestampString;
+          updated_at?: TimestampString;
+        };
+        Update: {
+          project_id?: string;
+          repo_name?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "project_repositories_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "cloud_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "project_repositories_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "user_profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       time_tracking_sessions: {
         Row: {
           id: string;

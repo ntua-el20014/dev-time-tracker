@@ -47,6 +47,7 @@ import "./ipc/goalHandlers";
 import "./ipc/scheduledSessionHandlers";
 import "./ipc/preferencesHandlers";
 import "./ipc/projectHandlers";
+import "./ipc/repoHandlers";
 import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";
 import "./ipc/analyticsHandlers";

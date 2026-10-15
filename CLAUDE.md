@@ -42,7 +42,7 @@ Supabase (RLS enforces per-user / per-org access)
 - The handler files register themselves as an import side effect (`import "./ipc/xHandlers"` in `src/index.ts`). `src/utils/langMap.ts` also registers handlers this way.
 
 ### The tracking engine (`src/tracking/`)
-**The main process owns the recording state.** The renderer and tray only request changes, and render the `tracking-state` broadcast (`{isRecording, isPaused, autoPaused, isIncognito, activeSeconds, startedAt, projectId}`). `projectId` is the project of the current *or next* session: chosen before Start (`set-session-project`, Home's picker), used by every start path (Home, rail, Ctrl+R, tray), kept for the following sessions, preselected in the Stop dialog and used by the timeout/quit auto-saves. It resets on user change; the renderer restores the user's last choice from localStorage (`renderer/sessionProject.ts`). C1 should *suggest* into this, not overwrite a choice the user made. On the renderer side, `renderer/trackingControls.ts` mirrors that state and exposes `startTracking`/`stopTracking`/`togglePause`/… Never flip recording state locally.
+**The main process owns the recording state.** The renderer and tray only request changes, and render the `tracking-state` broadcast (`{isRecording, isPaused, autoPaused, isIncognito, activeSeconds, startedAt, projectId, projectSource, detectedRepo}`). `projectId` is the project of the current *or next* session: chosen before Start (`set-session-project`, Home's picker), used by every start path (Home, rail, Ctrl+R, tray), kept for the following sessions, preselected in the Stop dialog and used by the timeout/quit auto-saves. It resets on user change; the renderer restores the user's last choice from localStorage (`renderer/sessionProject.ts`). `projectSource` is `"manual"` when the user picked it (kept until that session stops) or `"auto"` (restored or detected); only an `"auto"` choice is replaced by detection (C1, below), and only before Start. On the renderer side, `renderer/trackingControls.ts` mirrors that state and exposes `startTracking`/`stopTracking`/`togglePause`/… Never flip recording state locally.
 
 | Module | Role |
 |---|---|
@@ -50,7 +50,15 @@ Supabase (RLS enforces per-user / per-org access)
 | `sessionClock.ts` | Pure timing: active seconds excluding pauses, manual vs automatic pause, stop → `{start, end, duration}` |
 | `idlePolicy.ts` | Pure rules: pause when idle ≥ timeout; resume an *automatic* pause when idle < 5s and not locked or suspended |
 | `usageSampler.ts` | Foreground window (x-win) → `{appName, windowTitle, language, languageExtension, icon}`. Matches `execName` against `assets/known_editors.json` plus per-user `custom-apps-<uid>.json`; **unknown apps are dropped**. Language comes from `getLanguageDataFromTitle()` (`src/utils/extractData.ts`). |
+| `workspaceHints.ts` / `repoResolver.ts` / `projectAttribution.ts` | C1, see "Project detection" below. |
 | `usageBatcher.ts` | Buffers ticks; every 60s (and on pause/stop/sign-out/quit) does **one INSERT** into `usage_logs` plus one `update_daily_usage_summary` RPC per (local day, app, language). Network failure → offline queue. Icons are sent once per summary row. The Today tab refreshes on each flush (`window-tracked`). |
+
+**Project detection (C1)** runs every 5 s in main, also outside sessions (not in incognito), and nothing leaves the machine except the links the user creates:
+- `workspaceHints.ts` (pure): foreground title → hint. VS Code/Cursor/Windsurf/VSCodium: folder or `(Workspace)` name, last title segment first, then the one before it (profiles). JetBrains: project name before the en dash. Anything else that isn't a browser: an absolute path in the title (PowerShell, Git Bash, `~/…`).
+- `repoResolver.ts` (fs injected): name → folder through the editor's own state (`<appData>/<Code|Cursor|…>/User/globalStorage/storage.json`: open windows first, then `profileAssociations` history if the name is unambiguous; workspace files are JSONC; JetBrains `recentProjects.xml`), then walks up to `.git` (worktrees/submodules followed via `gitdir`/`commondir`). Repo key = normalized origin remote (`github.com/owner/repo`), else `path:<root>`. Never runs git. Cached (60 s hits, 15 s misses).
+- `projectAttribution.ts` (pure): current repo (sticky while non-dev windows are focused), repo → project links (active projects only), seconds per repo in the session. `projectToSelect` (before Start, `"auto"` only) and `projectForStoppedSession` (user's pick, else the link of the repo used longest, else the selection) are the whole policy.
+- Links live in `project_repositories` (per user, `UNIQUE(user_id, repo_key)`; RLS: own rows, only to projects the caller can see). IPC in `src/ipc/repoHandlers.ts`: `get-repo-links`, `link-detected-repo` (the renderer only names the project; the repo is main's detection), `unlink-repo`. Links reload on sign-in and when a project is archived/restored (`onProjectsChanged` in `projectHandlers.ts`).
+- UI: Home's timer card shows the detected repo with "Always use <project>" (link) or "Use <project>" (switch); the Stop dialog offers "Always use this project for repo X" when the chosen project differs from the repo's link (checked by default for a first link); Projects cards list linked repos with unlink.
 
 Flows:
 - **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` with `{projectId}` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" with the chosen project + `session-info-timeout`), then saves with `end_time`. The dialog preselects the project and, if it has an hourly rate, Billable.
@@ -69,7 +77,7 @@ Flows:
 ### Data model (`database/schema.sql` — the whole database in one file; `database/README.md` explains setup, reset and the security model)
 Tables:
 - `organizations`, `user_profiles` (role: admin/manager/employee), `org_join_requests`, `org_invite_codes`
-- `cloud_projects` (scope personal|organization, `hourly_rate`), `project_members`
+- `cloud_projects` (scope personal|organization, `hourly_rate`), `project_members`, `project_repositories` (per-user repo → project links, C1)
 - `time_tracking_sessions` (`is_billable` NOT NULL; the trigger derives `duration` from `end_time` only when `duration` is NULL)
 - `usage_logs`, `daily_usage_summary`
 - `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_work_sessions`, `scheduled_session_tags`
@@ -268,7 +276,11 @@ In priority order (cheapest and highest value first):
 - Removed unused functions (`create_project`, `same_org`, `get_user_total_time`, `get_org_total_time`, `get_upcoming_session_notifications`), the dead `createUserProfile`, and `usage_logs.icon_url`.
 
 **Phase C — AI-era tracking (Part 3)**
-- [ ] C1 Project attribution from workspace/cwd → git root → project mapping
+- [x] C1 Project attribution from workspace/cwd → git root → project mapping — done on `phase-c1-attribution` (2026-10-15); see "Project detection" in Part 1.
+  - **DB change:** `project_repositories` (table, policy, trigger, index) is in `schema.sql`. Existing databases need just that part applied (it is additive, no reset needed); until then links fail quietly and nothing is suggested.
+  - **Fixed on the way — shipped builds recorded no usage at all:** `editors.ts` read `assets/known_editors.json` from `app.getAppPath()`, which isn't in the package, so every app was "unknown" in installed builds (it only worked under `npm start`). The list is now bundled by webpack. Also: `app.getPath("appData")` can throw (seen with an isolated `USERPROFILE`); detection falls back to `%APPDATA%`/`~/Library/Application Support`/`~/.config`.
+  - Verified: unit tests (hints, resolver on a fake tree, attribution policy, IPC), PGlite checks for the table's RLS, e2e unchanged and green, and a live probe of the packaged app signed in (VS Code untitled multi-root workspace → `github.com/ntua-el20014/dev-time-tracker`; Home hint; Stop dialog offers the link; session saved under the picked project). The link round trip against live Supabase waits for the table.
+  - Not done: terminal agents whose title has no path (e.g. `claude` in Windows Terminal) — C3's transcripts/process cwd will cover them. Remote (WSL/SSH/container) windows are skipped. Scheduled sessions still don't set `project_id`.
 - [ ] C2 Git stats per session (`session_code_stats`)
 - [ ] C3 Agent source: Claude Code hooks installer plus local receiver; transcript fallback; process detection
 - [ ] C4 Active / Supervising / Away idle model
@@ -288,7 +300,7 @@ In priority order (cheapest and highest value first):
 - [x] U3 Home (timer + project picker before Start + timeline) — done on `ui-u3-home` (2026-10-15). Sessions' List / Calendar / Insights already landed in U1.
   - Home top: timer card (`components/HomeTimer.ts`: project picker, Start/Stop, Pause, live clock) and today's timeline (`components/TodayTimeline.ts`, layout in `utils/timelineLayout.ts` with tests; bars colored by project, running session striped and growing, totals tracked/billable). Then goal, Daily Summary, earnings, calendar widget, stats, App activity.
   - One ticking clock for rail and Home (`renderer/liveClock.ts`).
-  - Remaining for C1/C4: prefill the picker from the detected repo (C1); show the supervising slice on the timeline (C4). Scheduled sessions have a `project_id` column the calendar UI never sets — starting a scheduled session could select its project.
+  - Remaining for C4: show the supervising slice on the timeline. (The C1 prefill is done.) Scheduled sessions have a `project_id` column the calendar UI never sets — starting a scheduled session could select its project.
 
 **Phase D — later / optional**
 - [ ] Always-on auto-segmentation with the review inbox

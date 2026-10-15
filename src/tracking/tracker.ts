@@ -7,11 +7,15 @@
  * render the state broadcast on "tracking-state".
  */
 import {
+  app,
   ipcMain,
   powerMonitor,
   type BrowserWindow,
   type IpcMainEvent,
 } from "electron";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import { activeWindow } from "@miniben90/x-win";
 import { matchApp } from "../utils/editors";
 import {
@@ -37,6 +41,21 @@ import { SessionClock, type SessionSnapshot } from "./sessionClock";
 import { decideIdleAction } from "./idlePolicy";
 import { createUsageSampler } from "./usageSampler";
 import { UsageBatcher } from "./usageBatcher";
+import { getWorkspaceHint } from "./workspaceHints";
+import { createRepoResolver, type RepoInfo } from "./repoResolver";
+import {
+  ProjectAttribution,
+  type DetectedRepo,
+  type ProjectSource,
+} from "./projectAttribution";
+import {
+  getRepoLinks,
+  linkRepoToProject,
+} from "../supabase/projectRepositories";
+import {
+  getOrganizationProjects,
+  getPersonalProjects,
+} from "../supabase/cloudProjects";
 
 export interface TrackingState {
   isRecording: boolean;
@@ -53,7 +72,17 @@ export interface TrackingState {
    * and kept for the following sessions; the Stop dialog preselects it.
    */
   projectId: string | null;
+  /**
+   * "manual": the user picked projectId for this session, so detection
+   * leaves it alone until the session ends. "auto": restored or detected,
+   * and the detected repo's project may replace it before Start.
+   */
+  projectSource: ProjectSource;
+  /** Repo of the focused editor/terminal (last seen), detected locally */
+  detectedRepo: DetectedRepo | null;
 }
+
+export type { ProjectSource };
 
 /** Sessions shorter than this (active seconds) are not saved. */
 const MIN_SESSION_SECONDS = 10;
@@ -62,6 +91,8 @@ const SESSION_INFO_TIMEOUT_MS = 10 * 60 * 1000;
 /** How often buffered usage ticks are written to Supabase. */
 const FLUSH_INTERVAL_MS = 60 * 1000;
 const IDLE_POLL_MS = 2000;
+/** How often the focused window's repo is detected (also outside sessions). */
+const DETECT_MS = 5000;
 
 // ── State ────────────────────────────────────────────────────────────
 
@@ -73,6 +104,8 @@ let intervalSeconds = DEFAULT_TRACKING_INTERVAL_SECONDS;
 let idleTimeoutSeconds = DEFAULT_IDLE_TIMEOUT_SECONDS;
 let isIncognito = false;
 let selectedProjectId: string | null = null;
+let projectSource: ProjectSource = "auto";
+const attribution = new ProjectAttribution();
 /** System away states: never auto-resume while either is set. */
 let screenLocked = false;
 let systemSuspended = false;
@@ -99,6 +132,8 @@ export function getTrackingState(): TrackingState {
     activeSeconds: clock.activeSeconds(new Date()),
     startedAt: clock.startedAt?.toISOString() ?? null,
     projectId: selectedProjectId,
+    projectSource,
+    detectedRepo: attribution.describe(),
   };
 }
 
@@ -126,9 +161,37 @@ export function setTrackingUser(userId: string | null) {
   currentUserId = userId;
   // Projects belong to a user; the renderer restores the user's last one
   selectedProjectId = null;
+  projectSource = "auto";
+  attribution.reset();
   if (userId) {
     loadUserLangMapFromDisk(userId);
     void loadTrackingPreferences(userId);
+    void reloadRepoLinks();
+  }
+}
+
+/**
+ * Load the user's repo → project links. Links to archived or deleted
+ * projects are ignored, so they are never suggested. Call after linking,
+ * unlinking, or archiving/restoring a project.
+ */
+export async function reloadRepoLinks() {
+  const userId = currentUserId;
+  if (!userId) return;
+  try {
+    const [links, orgProjects, personalProjects] = await Promise.all([
+      getRepoLinks(userId),
+      getOrganizationProjects(userId),
+      getPersonalProjects(userId),
+    ]);
+    if (currentUserId !== userId) return;
+    const active = new Set(
+      [...orgProjects, ...personalProjects].map((p) => p.id),
+    );
+    attribution.setLinks(links.filter((l) => active.has(l.project_id)));
+    if (!applyDetectedProject()) emitState();
+  } catch (err) {
+    if (classifyError(err) !== "network") logError("reloadRepoLinks", err);
   }
 }
 
@@ -244,6 +307,119 @@ function stopTimers() {
   flushTimer = null;
 }
 
+// ── Project detection ────────────────────────────────────────────────
+
+let resolveRepo: ReturnType<typeof createRepoResolver> | null = null;
+
+/** Where editors keep their state (%APPDATA%, ~/Library/Application Support, ~/.config). */
+function appDataDir(): string {
+  try {
+    return app.getPath("appData");
+  } catch {
+    // getPath can fail, e.g. with an unusual USERPROFILE
+    if (process.platform === "win32" && process.env.APPDATA) {
+      return process.env.APPDATA;
+    }
+    if (process.platform === "darwin") {
+      return path.join(os.homedir(), "Library", "Application Support");
+    }
+    return process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  }
+}
+
+/** Created on first use: app paths aren't needed until detection runs. */
+const repoResolver = () =>
+  (resolveRepo ??= createRepoResolver({
+    fs: {
+      readText(p) {
+        try {
+          return fs.readFileSync(p, "utf-8");
+        } catch {
+          return null;
+        }
+      },
+      isDir(p) {
+        try {
+          return fs.statSync(p).isDirectory();
+        } catch {
+          return false;
+        }
+      },
+      exists: (p) => fs.existsSync(p),
+      listDir(p) {
+        try {
+          return fs.readdirSync(p);
+        } catch {
+          return [];
+        }
+      },
+    },
+    appDataDir: appDataDir(),
+    homeDir: os.homedir(),
+    platform: process.platform,
+  }));
+
+/** The repo of the focused window, or null if it isn't a dev window in one. */
+function detectFocusedRepo(userId: string): RepoInfo | null {
+  const win = activeWindow();
+  const execName = win?.info?.execName?.toLowerCase() || "";
+  if (!win || !execName) return null;
+  const known = matchApp(execName, userId);
+  if (!known) return null;
+  return repoResolver()(
+    getWorkspaceHint(execName, win.title ?? "", known.category),
+  );
+}
+
+/**
+ * Before Start, switch to the detected repo's project, unless the user
+ * picked one. Never while recording: that would move the running session.
+ * Returns true if it changed (and broadcast) the project.
+ */
+function applyDetectedProject(): boolean {
+  const projectId = attribution.projectToSelect({
+    isRecording: clock.isRecording,
+    source: projectSource,
+    selected: selectedProjectId,
+  });
+  if (!projectId) return false;
+  selectedProjectId = projectId;
+  emitState();
+  return true;
+}
+
+function detectTick() {
+  if (isIncognito || !currentUserId) return;
+  let repo: RepoInfo | null = null;
+  try {
+    repo = detectFocusedRepo(currentUserId);
+  } catch (err) {
+    logError("detectFocusedRepo", err);
+  }
+  const changed = attribution.observe(repo);
+  if (clock.isRecording && !clock.state.isPaused) {
+    attribution.addSessionTime(DETECT_MS / 1000);
+  }
+  if (changed && !applyDetectedProject()) emitState();
+}
+
+export function getDetectedRepo(): RepoInfo | null {
+  return attribution.currentRepo();
+}
+
+/** Link a repo to a project (or replace its link) for the signed-in user. */
+export async function linkRepo(repo: RepoInfo, projectId: string) {
+  const uid = currentUserId;
+  if (!uid) throw new Error("Not signed in");
+  await linkRepoToProject(uid, {
+    repo_key: repo.key,
+    repo_name: repo.name,
+    project_id: projectId,
+  });
+  attribution.setLink(repo.key, projectId);
+  if (!applyDetectedProject()) emitState();
+}
+
 // ── Session control ──────────────────────────────────────────────────
 
 /** Accepts a project id from the renderer; anything else means "none". */
@@ -253,17 +429,27 @@ function normalizeProjectId(value: unknown): string | null {
     : null;
 }
 
-/** Choose the project for the current session, or the next one. */
-export function setSessionProject(projectId: unknown) {
+/**
+ * Choose the project for the current session, or the next one. A "manual"
+ * choice is kept until the session ends; "auto" (e.g. restoring the last
+ * project) may be replaced by the detected repo's project.
+ */
+export function setSessionProject(
+  projectId: unknown,
+  source: unknown = "manual",
+) {
   const next = normalizeProjectId(projectId);
-  if (next === selectedProjectId) return;
+  const nextSource: ProjectSource = source === "auto" ? "auto" : "manual";
+  if (next === selectedProjectId && nextSource === projectSource) return;
   selectedProjectId = next;
-  emitState();
+  projectSource = nextSource;
+  if (!applyDetectedProject()) emitState();
 }
 
 export function startTracking() {
   if (clock.isRecording) return;
   clock.startAt(new Date());
+  attribution.resetSession();
   startTimers();
   emitState();
 }
@@ -286,6 +472,8 @@ type SessionInfo = {
   description: string;
   projectId?: number | string;
   isBillable?: boolean;
+  /** Link the session's repo to the chosen project from now on */
+  rememberRepo?: boolean;
 };
 
 const TIMED_OUT_SESSION_INFO: SessionInfo = {
@@ -306,10 +494,13 @@ let pendingStopSave: Promise<void> | null = null;
 
 /**
  * Ask the renderer for title/project/billing of a stopped session. The
- * project chosen before Start is preselected, and kept if the prompt times
- * out.
+ * session's project is preselected, and kept if the prompt times out. `repo`
+ * (the repo worked in longest) lets the dialog offer to remember the link.
  */
-function askSessionInfo(projectId: string | null): Promise<SessionInfo> {
+function askSessionInfo(
+  projectId: string | null,
+  repo: DetectedRepo | null,
+): Promise<SessionInfo> {
   return new Promise((resolve) => {
     const finish = (info: SessionInfo) => {
       clearTimeout(timeout);
@@ -332,7 +523,7 @@ function askSessionInfo(projectId: string | null): Promise<SessionInfo> {
 
     settleSessionInfo = (info) => settleEarly(withProject(info));
     ipcMain.on("session-info-reply", onReply);
-    send("get-session-info", { projectId });
+    send("get-session-info", { projectId, repo });
   });
 }
 
@@ -386,10 +577,17 @@ async function saveSession(
  */
 export async function stopTracking() {
   const session = clock.stop(new Date());
-  const projectId = selectedProjectId;
+  const repo = attribution.dominantRepo();
+  const projectId = attribution.projectForStoppedSession(
+    selectedProjectId,
+    projectSource,
+  );
+  // The user's pick was for this session; the next one may be detected
+  projectSource = "auto";
+  attribution.resetSession();
   stopTimers();
   void flushTrackedUsage();
-  emitState();
+  if (!applyDetectedProject()) emitState();
   if (!session || session.duration < MIN_SESSION_SECONDS) return;
 
   const uid = currentUserId;
@@ -399,10 +597,14 @@ export async function stopTracking() {
   settleSessionInfo?.(TIMED_OUT_SESSION_INFO);
 
   const save = (async () => {
-    const info = await askSessionInfo(projectId);
+    const info = await askSessionInfo(projectId, attribution.describe(repo));
     // An empty title means the user chose "Discard"
     if (info.title && info.title.trim() !== "") {
       await saveSession(uid, session, info);
+    }
+    const chosen = normalizeProjectId(info.projectId);
+    if (info.rememberRepo === true && repo && chosen && currentUserId === uid) {
+      await linkRepo(repo, chosen).catch((err) => logError("linkRepo", err));
     }
   })();
   pendingStopSave = save;
@@ -446,11 +648,15 @@ export async function finalizeTrackingForQuit() {
   await flushTrackedUsage();
 
   if (session && session.duration >= MIN_SESSION_SECONDS && currentUserId) {
+    const projectId = attribution.projectForStoppedSession(
+      selectedProjectId,
+      projectSource,
+    );
     await saveSession(
       currentUserId,
       session,
-      selectedProjectId
-        ? { ...APP_CLOSED_SESSION_INFO, projectId: selectedProjectId }
+      projectId
+        ? { ...APP_CLOSED_SESSION_INFO, projectId }
         : APP_CLOSED_SESSION_INFO,
       { queueOnAnyError: true },
     );
@@ -503,6 +709,7 @@ export function initTracking(options: {
   });
 
   setInterval(pollIdle, IDLE_POLL_MS);
+  setInterval(detectTick, DETECT_MS);
 }
 
 // ── IPC ──────────────────────────────────────────────────────────────
@@ -512,10 +719,13 @@ ipcMain.handle("start-tracking", () => {
   startTracking();
   return getTrackingState();
 });
-ipcMain.handle("set-session-project", (_event, projectId: unknown) => {
-  setSessionProject(projectId);
-  return getTrackingState();
-});
+ipcMain.handle(
+  "set-session-project",
+  (_event, projectId: unknown, source?: unknown) => {
+    setSessionProject(projectId, source);
+    return getTrackingState();
+  },
+);
 ipcMain.handle("pause-tracking", () => {
   pauseTracking(false);
   return getTrackingState();

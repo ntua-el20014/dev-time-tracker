@@ -32,10 +32,20 @@ export async function chooseProject(projectId: string | null) {
   if (uid) write(uid, projectId);
 }
 
-/** After sign-in: hand main the user's last project, unless it has one. */
+/**
+ * After sign-in: hand main the user's last project, unless it has one. It
+ * counts as "auto", so the detected repo's project may still replace it.
+ */
 export async function restoreLastProject() {
   const uid = getCurrentUserIdSafe();
   if (!uid || getTrackingState().projectId) return;
   const saved = read(uid);
-  if (saved) await setSessionProject(saved);
+  if (saved) await setSessionProject(saved, "auto");
+}
+
+/** The selected project was archived or deleted: drop it (and forget it). */
+export async function clearStaleProject() {
+  await setSessionProject(null, "auto");
+  const uid = getCurrentUserIdSafe();
+  if (uid) write(uid, null);
 }

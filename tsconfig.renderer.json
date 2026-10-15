@@ -19,7 +19,8 @@
                     "renderer/**/*",
                     "shared/**/*",
                     "shared/types/**/*",
-                    "src/**/*"
+                    "src/**/*",
+                    "assets/known_editors.json"
                 ],
     "exclude":  [
                     "dist/**/*",

@@ -140,6 +140,20 @@ CREATE TABLE daily_usage_summary (
         UNIQUE NULLS NOT DISTINCT (user_id, date, app_name, language)
 );
 
+-- Which git repository belongs to which project, per user. repo_key is the
+-- normalized origin remote ("github.com/owner/repo"), or "path:<root>" for a
+-- repo without one. Detected locally from the focused editor/terminal.
+CREATE TABLE project_repositories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES cloud_projects(id) ON DELETE CASCADE,
+    repo_key TEXT NOT NULL CHECK (length(repo_key) BETWEEN 1 AND 512),
+    repo_name TEXT NOT NULL CHECK (length(repo_name) BETWEEN 1 AND 200),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, repo_key)
+);
+
 CREATE TABLE user_tags (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
@@ -1118,6 +1132,8 @@ CREATE TRIGGER set_timestamp_time_tracking_sessions BEFORE UPDATE ON time_tracki
 FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 CREATE TRIGGER set_timestamp_daily_usage_summary BEFORE UPDATE ON daily_usage_summary
 FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_project_repositories BEFORE UPDATE ON project_repositories
+FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 CREATE TRIGGER set_timestamp_user_tags BEFORE UPDATE ON user_tags
 FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 CREATE TRIGGER set_timestamp_daily_work_goals BEFORE UPDATE ON daily_work_goals
@@ -1141,6 +1157,7 @@ ALTER TABLE project_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE time_tracking_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_usage_summary ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_repositories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session_tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_work_goals ENABLE ROW LEVEL SECURITY;
@@ -1273,6 +1290,17 @@ CREATE POLICY "Project managers can manage members"
 ON project_members FOR ALL
 USING (project_id IN (SELECT id FROM cloud_projects WHERE manager_id = auth.uid()));
 
+-- ── Repository links ── (own rows; only to projects the caller can see —
+--    the subquery runs under cloud_projects' own policies)
+
+CREATE POLICY "Users can manage their own repository links"
+ON project_repositories FOR ALL
+USING (user_id = auth.uid())
+WITH CHECK (
+    user_id = auth.uid()
+    AND project_id IN (SELECT id FROM cloud_projects)
+);
+
 -- ── Sessions ──
 
 CREATE POLICY "Users can view their own sessions"
@@ -1390,6 +1418,7 @@ CREATE INDEX idx_org_invite_codes_org_id ON org_invite_codes(org_id);
 CREATE INDEX idx_cloud_projects_org_id ON cloud_projects(org_id);
 CREATE INDEX idx_cloud_projects_manager_id ON cloud_projects(manager_id);
 CREATE INDEX idx_project_members_user_id ON project_members(user_id);
+CREATE INDEX idx_project_repositories_project_id ON project_repositories(project_id);
 
 CREATE INDEX idx_sessions_user_start ON time_tracking_sessions(user_id, start_time DESC);
 CREATE INDEX idx_sessions_org_start ON time_tracking_sessions(org_id, start_time);
