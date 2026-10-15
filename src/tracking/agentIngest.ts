@@ -256,6 +256,17 @@ export function createAgentIngest(deps: IngestDeps) {
       const s = await load();
       s.dirty = Object.keys(s.files);
     },
+    /** Working directories of agent sessions active between `start` and `end` (ms). */
+    async dirsActiveBetween(start: number, end: number): Promise<string[]> {
+      const s = await load();
+      const dirs = new Set<string>();
+      for (const f of Object.values(s.files)) {
+        const { cwd, startedAt, endedAt } = f.agg;
+        if (!cwd || !startedAt || !endedAt) continue;
+        if (Date.parse(endedAt) >= start && Date.parse(startedAt) <= end) dirs.add(cwd);
+      }
+      return [...dirs];
+    },
     /** Forget all local state (e.g. after the user deleted uploaded data). */
     async reset() {
       state = emptyState();

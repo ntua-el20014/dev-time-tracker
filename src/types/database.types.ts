@@ -1,3 +1,5 @@
+import type { RepoCodeStats } from "../../shared/codeStats";
+
 export type Json =
   | string
   | number
@@ -358,6 +360,7 @@ export interface Database {
           is_billable: boolean;
           supervising_seconds: number;
           supervising_spans: [string, string][];
+          code_stats: RepoCodeStats[];
           created_at: TimestampString;
           updated_at: TimestampString;
         };
@@ -374,6 +377,7 @@ export interface Database {
           is_billable?: boolean;
           supervising_seconds?: number;
           supervising_spans?: [string, string][];
+          code_stats?: RepoCodeStats[];
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
@@ -421,6 +425,7 @@ export interface Database {
           window_title: string | null;
           language: string | null;
           language_extension: string | null;
+          category: string | null;
           timestamp: TimestampString;
           created_at: TimestampString;
         };
@@ -433,6 +438,7 @@ export interface Database {
           window_title?: string | null;
           language?: string | null;
           language_extension?: string | null;
+          category?: string | null;
           timestamp: TimestampString;
           created_at?: TimestampString;
         };
@@ -443,6 +449,7 @@ export interface Database {
           window_title?: string | null;
           language?: string | null;
           language_extension?: string | null;
+          category?: string | null;
           timestamp?: TimestampString;
         };
         Relationships: [
@@ -475,6 +482,7 @@ export interface Database {
           app_name: string;
           language: string | null;
           language_extension: string | null;
+          category: string | null;
           icon_url: string | null;
           time_spent_seconds: number;
           created_at: TimestampString;
@@ -488,6 +496,7 @@ export interface Database {
           app_name: string;
           language?: string | null;
           language_extension?: string | null;
+          category?: string | null;
           icon_url?: string | null;
           time_spent_seconds?: number;
           created_at?: TimestampString;
@@ -498,6 +507,7 @@ export interface Database {
           app_name?: string;
           language?: string | null;
           language_extension?: string | null;
+          category?: string | null;
           icon_url?: string | null;
           time_spent_seconds?: number;
           updated_at?: TimestampString;

@@ -375,7 +375,9 @@ describe("usageLogs", () => {
 
       const result = await getUsageDetailsForSession("user-1", "session-1");
 
-      expect(result).toHaveLength(1);
+      expect(result.session).toMatchObject({ duration: 3600 });
+      expect(result.usage).toHaveLength(1);
+      expect(result.usage[0]).toMatchObject({ app: "VS Code", title: "test.ts" });
       const fromCalls = getCallsFor("from");
       expect(fromCalls[0].args[0]).toBe("time_tracking_sessions");
       expect(fromCalls[1].args[0]).toBe("usage_logs");

@@ -1,3 +1,4 @@
+import { escapeHtml } from "../utils/domUtils";
 import { Chart } from "chart.js/auto";
 import type { DailySummaryRow, SessionRow } from "../../shared/types";
 
@@ -11,11 +12,11 @@ export function renderPercentBar(
       ${items
         .map(
           (item) => `
-        <div title="${item.label}: ${item.percent.toFixed(1)}%" 
+        <div title="${escapeHtml(item.label)}: ${item.percent.toFixed(1)}%" 
              style="width:${item.percent}%;background:${
                item.color
              };display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;">
-          ${item.percent > 10 ? item.label : ""}
+          ${item.percent > 10 ? escapeHtml(item.label) : ""}
         </div>
       `,
         )

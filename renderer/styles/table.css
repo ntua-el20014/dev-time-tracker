@@ -412,3 +412,11 @@ th {
 .clickable-row:active {
   transform: translateY(0);
 }
+
+/* Sessions list: what the session produced, from git (C2) */
+.session-code {
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}

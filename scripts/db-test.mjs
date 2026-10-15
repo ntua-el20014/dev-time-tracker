@@ -156,6 +156,26 @@ async function runScenario(label) {
   const sum = await rows(`SELECT time_spent_seconds, icon_url, org_id FROM daily_usage_summary WHERE app_name = 'Chrome'`);
   check("NULL-language ticks merge into one summary row", sum.length === 1 && sum[0].time_spent_seconds === 30);
   check("summary keeps the icon and gets the org", sum[0]?.icon_url === "icon" && sum[0]?.org_id === orgA);
+  // Browser categories (C5) are their own rows, NULL category merging as before
+  for (let i = 0; i < 2; i++) {
+    await db.query(
+      `SELECT update_daily_usage_summary($1, '2026-10-14', 'Chrome', NULL, NULL, NULL, 10, 'code-review')`,
+      [A],
+    );
+  }
+  const cats = await rows(
+    `SELECT category, time_spent_seconds FROM daily_usage_summary WHERE app_name = 'Chrome' ORDER BY category NULLS FIRST`,
+  );
+  check(
+    "browser categories get their own summary rows",
+    cats.length === 2 && cats[0].time_spent_seconds === 30 && cats[1].category === "code-review" && cats[1].time_spent_seconds === 20,
+    JSON.stringify(cats),
+  );
+  const catLog = await one(
+    `INSERT INTO usage_logs (user_id, app_name, category, timestamp) VALUES ($1, 'Chrome', 'docs', NOW()) RETURNING category`,
+    [A],
+  );
+  check("usage logs store a category", catLog.category === "docs");
   err = await fails(
     `SELECT update_daily_usage_summary($1, '2026-10-14', 'Chrome', NULL, NULL, NULL, 10)`,
     [B],
@@ -308,6 +328,26 @@ async function runScenario(label) {
     [A],
   );
   check("supervising_seconds can't be negative", !!err, err ?? "");
+
+  // ── Code stats (C2) ──
+  const code = await one(
+    `INSERT INTO time_tracking_sessions (user_id, start_time, duration, code_stats)
+     VALUES ($1, NOW(), 60, '[{"repo_key":"github.com/me/app","repo_name":"app","commits":1,"files_changed":2,"lines_added":10,"lines_removed":2,"languages":{"TypeScript":{"added":10,"removed":2}}}]')
+     RETURNING code_stats`,
+    [A],
+  );
+  check("session stores code stats", code.code_stats[0].lines_added === 10 && code.code_stats[0].languages.TypeScript.removed === 2);
+  check("code stats default to none", (await one(`SELECT code_stats FROM time_tracking_sessions WHERE id = (SELECT id FROM time_tracking_sessions WHERE user_id = $1 ORDER BY created_at LIMIT 1)`, [A])).code_stats.length === 0);
+  err = await fails(
+    `INSERT INTO time_tracking_sessions (user_id, start_time, duration, code_stats) VALUES ($1, NOW(), 60, '{}')`,
+    [A],
+  );
+  check("code_stats must be an array", !!err, err ?? "");
+  err = await fails(
+    `INSERT INTO time_tracking_sessions (user_id, start_time, duration, code_stats) VALUES ($1, NOW(), 60, $2::jsonb)`,
+    [A, JSON.stringify([{ repo_key: "x".repeat(70_000) }])],
+  );
+  check("code_stats is size-limited", !!err, err ?? "");
 
   // ── Repository links ──
   err = await fails(

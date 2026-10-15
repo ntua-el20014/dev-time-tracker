@@ -21,6 +21,7 @@ import { BrowserWindow } from "electron";
 import { CONFIG_DIR } from "../../shared/constants";
 import { logUsage } from "../supabase/usageLogs";
 import { addSession, type SupervisingTime } from "../supabase/timeTracking";
+import type { RepoCodeStats } from "../../shared/codeStats";
 import { supabase } from "../supabase/config";
 import { logError, classifyError } from "./errorHandler";
 
@@ -62,6 +63,8 @@ export interface QueuedSession {
     /** Wall-clock end (absent on items queued by older versions) */
     endTime?: string;
     supervising?: SupervisingTime;
+    /** What the session produced, from git (C2) */
+    codeStats?: RepoCodeStats[];
   };
 }
 
@@ -222,6 +225,7 @@ export function enqueueSession(
   isBillable: boolean = false,
   endTime?: string,
   supervising?: SupervisingTime,
+  codeStats?: RepoCodeStats[],
 ): void {
   const key = `session:${userId}:${startTime}`;
   if (keySet.has(key)) return; // duplicate
@@ -241,6 +245,7 @@ export function enqueueSession(
       isBillable,
       endTime,
       supervising,
+      codeStats,
     },
   };
 
@@ -314,6 +319,7 @@ export async function flush(): Promise<number> {
           d.isBillable,
           d.endTime,
           d.supervising,
+          d.codeStats,
         );
       }
 

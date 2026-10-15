@@ -13,6 +13,7 @@ import {
   type BrowserWindow,
   type IpcMainEvent,
 } from "electron";
+import { execFile } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -41,6 +42,8 @@ import { SessionClock, type SessionSnapshot } from "./sessionClock";
 import { decideIdleAction, type Activity } from "./idlePolicy";
 import { createAgentHeartbeat } from "./agentHeartbeat";
 import { LiveAgents, type HookEvent, type LiveStatus } from "./agentLive";
+import { createCodeStats } from "./codeStats";
+import type { RepoCodeStats } from "../../shared/codeStats";
 import { createUsageSampler } from "./usageSampler";
 import { UsageBatcher } from "./usageBatcher";
 import { getWorkspaceHint } from "./workspaceHints";
@@ -440,6 +443,7 @@ function detectTick() {
   const changed = attribution.observe(repo);
   if (clock.isRecording && !clock.state.isPaused) {
     attribution.addSessionTime(DETECT_MS / 1000);
+    if (repo) codeStats.noteRepo(repo);
   }
   if (changed && !applyDetectedProject()) emitState();
 }
@@ -515,6 +519,9 @@ export function startTracking() {
   if (clock.isRecording) return;
   clock.startAt(new Date());
   attribution.resetSession();
+  codeStats.startSession();
+  const repo = attribution.currentRepo();
+  if (repo && !isIncognito) codeStats.noteRepo(repo);
   startTimers();
   emitState();
 }
@@ -598,6 +605,7 @@ async function saveSession(
   session: SessionSnapshot,
   info: SessionInfo,
   { queueOnAnyError = false } = {},
+  codeStatsOfSession: RepoCodeStats[] = [],
 ) {
   const startTime = session.start.toISOString();
   const endTime = session.end.toISOString();
@@ -619,6 +627,7 @@ async function saveSession(
       isBillable,
       endTime,
       supervising,
+      codeStatsOfSession,
     );
     // Lets the renderer refresh session-based views
     send("session-saved");
@@ -636,6 +645,7 @@ async function saveSession(
         isBillable,
         endTime,
         supervising,
+        codeStatsOfSession,
       );
     } else {
       logError("saveSession", err);
@@ -649,6 +659,8 @@ async function saveSession(
  */
 export async function stopTracking() {
   const session = clock.stop(new Date());
+  // git runs while the user fills in the prompt
+  const code = session ? collectCodeStats(session) : Promise.resolve([]);
   const repo = attribution.dominantRepo();
   const projectId = attribution.projectForStoppedSession(
     selectedProjectId,
@@ -672,7 +684,7 @@ export async function stopTracking() {
     const info = await askSessionInfo(projectId, attribution.describe(repo));
     // An empty title means the user chose "Discard"
     if (info.title && info.title.trim() !== "") {
-      await saveSession(uid, session, info);
+      await saveSession(uid, session, info, {}, await code);
     }
     const chosen = normalizeProjectId(info.projectId);
     if (info.rememberRepo === true && repo && chosen && currentUserId === uid) {
@@ -717,6 +729,9 @@ export async function finalizeTrackingForQuit() {
 
   const session = clock.stop(new Date());
   stopTimers();
+  const code = session
+    ? collectCodeStats(session, QUIT_CODE_STATS_MS)
+    : Promise.resolve([]);
   await flushTrackedUsage();
 
   if (session && session.duration >= MIN_SESSION_SECONDS && currentUserId) {
@@ -731,7 +746,99 @@ export async function finalizeTrackingForQuit() {
         ? { ...APP_CLOSED_SESSION_INFO, projectId }
         : APP_CLOSED_SESSION_INFO,
       { queueOnAnyError: true },
+      await code,
     );
+  }
+}
+
+// ── Code stats (C2) ──────────────────────────────────────────────────
+
+/** git gets this long per command; a huge or broken repo is skipped. */
+const GIT_TIMEOUT_MS = 15_000;
+/** Collecting stats on Stop gives up after this long (on quit, sooner). */
+const CODE_STATS_MS = 60_000;
+const QUIT_CODE_STATS_MS = 5_000;
+/** New files larger than this aren't counted line by line. */
+const MAX_COUNT_BYTES = 1024 * 1024;
+
+const codeStats = createCodeStats({
+  git: (cwd, args) =>
+    new Promise((resolve) => {
+      execFile(
+        "git",
+        args,
+        { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024, windowsHide: true },
+        (err, stdout) => resolve(err ? null : stdout),
+      );
+    }),
+  async mtimeMs(root, file) {
+    try {
+      return (await fs.promises.stat(path.join(root, file))).mtimeMs;
+    } catch {
+      return null;
+    }
+  },
+  async countLines(root, file) {
+    try {
+      const full = path.join(root, file);
+      if ((await fs.promises.stat(full)).size > MAX_COUNT_BYTES) return null;
+      const buf = await fs.promises.readFile(full);
+      if (buf.subarray(0, 8000).includes(0)) return null; // binary
+      if (buf.length === 0) return 0;
+      let lines = 0;
+      for (const byte of buf) if (byte === 0x0a) lines++;
+      return buf[buf.length - 1] === 0x0a ? lines : lines + 1;
+    } catch {
+      return null;
+    }
+  },
+  languageOf: (file) =>
+    getLanguageDataFromTitle(path.basename(file))?.language ?? null,
+});
+
+/** Where agents worked during a session, from their transcripts (agents.ts). */
+let agentDirsBetween: (start: number, end: number) => Promise<string[]> =
+  async () => [];
+export function setAgentDirsProvider(
+  provider: (start: number, end: number) => Promise<string[]>,
+) {
+  agentDirsBetween = provider;
+}
+
+/**
+ * What the session produced: repos focused during it, plus repos AI agents
+ * worked in meanwhile (transcripts and live hooks). Never fails; gives up
+ * after `limitMs` with no stats.
+ */
+async function collectCodeStats(
+  session: SessionSnapshot,
+  limitMs = CODE_STATS_MS,
+): Promise<RepoCodeStats[]> {
+  const start = session.start.getTime();
+  const end = session.end.getTime();
+  const work = (async () => {
+    const dirs = new Set(await agentDirsBetween(start, end).catch(() => []));
+    for (const a of liveAgents.view(end)) {
+      if (a.cwd && Date.parse(a.lastActivityAt) >= start) dirs.add(a.cwd);
+    }
+    const extra: RepoInfo[] = [];
+    for (const dir of dirs) {
+      const repo = resolveRepoForDir(dir);
+      if (repo) extra.push(repo);
+    }
+    return codeStats.finish(start, end, extra);
+  })();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<RepoCodeStats[]>((resolve) => {
+    timer = setTimeout(() => resolve([]), limitMs);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } catch (err) {
+    logError("collectCodeStats", err);
+    return [];
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -814,6 +921,10 @@ function refreshLiveAgents() {
 /** A Claude Code hook event arrived (already reduced to metadata). */
 export function applyAgentHookEvent(event: HookEvent) {
   liveAgents.apply(event);
+  if (event.cwd && clock.isRecording && !isIncognito) {
+    const repo = resolveRepoForDir(event.cwd);
+    if (repo) codeStats.noteRepo(repo);
+  }
   refreshLiveAgents();
   pollIdle();
 }

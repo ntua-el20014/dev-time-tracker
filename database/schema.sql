@@ -96,6 +96,9 @@ CREATE TABLE project_members (
 -- the app; end_time = wall-clock end. supervising_seconds is the part of
 -- duration spent without input while an AI agent was working, and
 -- supervising_spans its [start, end] ISO pairs (for the timeline).
+-- code_stats: what the session produced, from git, one entry per repo:
+-- {repo_key, repo_name, commits, files_changed, lines_added, lines_removed,
+-- languages: {<language>: {added, removed}}}. Counts only, never paths.
 CREATE TABLE time_tracking_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
@@ -110,6 +113,8 @@ CREATE TABLE time_tracking_sessions (
     supervising_seconds INTEGER NOT NULL DEFAULT 0 CHECK (supervising_seconds >= 0),
     supervising_spans JSONB NOT NULL DEFAULT '[]'
         CHECK (jsonb_typeof(supervising_spans) = 'array'),
+    code_stats JSONB NOT NULL DEFAULT '[]'
+        CHECK (jsonb_typeof(code_stats) = 'array' AND pg_column_size(code_stats) <= 65536),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -124,12 +129,16 @@ CREATE TABLE usage_logs (
     window_title TEXT,
     language TEXT,
     language_extension TEXT,
+    -- What a browser tab was for (C5: "code-review", "docs", "ai-chat", …),
+    -- classified on the device from its URL; the URL itself is never stored
+    category TEXT CHECK (category IS NULL OR length(category) <= 40),
     timestamp TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Usage time per user, local calendar day, app and language. Upserted by
--- update_daily_usage_summary(); icon_url holds the app icon once per row.
+-- Usage time per user, local calendar day, app, language and category
+-- (browsers, C5). Upserted by update_daily_usage_summary(); icon_url holds
+-- the app icon once per row.
 CREATE TABLE daily_usage_summary (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
@@ -138,13 +147,14 @@ CREATE TABLE daily_usage_summary (
     app_name TEXT NOT NULL,
     language TEXT,
     language_extension TEXT,
+    category TEXT CHECK (category IS NULL OR length(category) <= 40),
     icon_url TEXT,
     time_spent_seconds INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    -- language is NULL for browsers/dev tools; the upsert must still match
+    -- language/category are NULL for most apps; the upsert must still match
     CONSTRAINT daily_usage_summary_unique_day_app_lang
-        UNIQUE NULLS NOT DISTINCT (user_id, date, app_name, language)
+        UNIQUE NULLS NOT DISTINCT (user_id, date, app_name, language, category)
 );
 
 -- Which git repository belongs to which project, per user. repo_key is the
@@ -906,19 +916,20 @@ CREATE OR REPLACE FUNCTION update_daily_usage_summary(
     p_language TEXT,
     p_language_extension TEXT,
     p_icon_url TEXT,
-    p_time_spent_seconds INTEGER
+    p_time_spent_seconds INTEGER,
+    p_category TEXT DEFAULT NULL
 )
 RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 BEGIN
     INSERT INTO daily_usage_summary (
-        user_id, date, app_name, language, language_extension, icon_url, time_spent_seconds
+        user_id, date, app_name, language, language_extension, category, icon_url, time_spent_seconds
     )
     VALUES (
-        p_user_id, p_date, p_app_name, p_language, p_language_extension, p_icon_url, p_time_spent_seconds
+        p_user_id, p_date, p_app_name, p_language, p_language_extension, p_category, p_icon_url, p_time_spent_seconds
     )
-    ON CONFLICT (user_id, date, app_name, language)
+    ON CONFLICT (user_id, date, app_name, language, category)
     DO UPDATE SET
         time_spent_seconds = daily_usage_summary.time_spent_seconds + EXCLUDED.time_spent_seconds,
         language_extension = COALESCE(EXCLUDED.language_extension, daily_usage_summary.language_extension),

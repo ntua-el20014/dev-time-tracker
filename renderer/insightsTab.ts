@@ -1,8 +1,17 @@
 /**
- * Sessions → Insights: where attention went, from the foreground-window
- * samples (editor and language breakdowns) plus the daily goal history.
+ * Sessions → Insights: what got built (C2: lines changed per language and
+ * repo, from git, over the sessions of the last 30 days), where attention
+ * went (foreground-window samples: editor and language breakdowns), and
+ * the daily goal history.
  */
 import { escapeHtml } from "./utils/domUtils";
+import { getLocalDateString } from "../src/utils/timeFormat";
+import {
+  addCodeStats,
+  emptyTotals,
+  formatCodeTotals,
+} from "../shared/codeStats";
+import type { SessionRow } from "../shared/types";
 import { renderPercentBar, renderPieChartJS } from "./components";
 import { prettyDate, safeIpcInvoke, withLoading } from "./utils";
 
@@ -14,6 +23,7 @@ export async function renderInsights() {
 
   container.innerHTML = `
     <h1>Insights</h1>
+    <section id="insights-code" class="insights-section"></section>
     <p class="info-note">
       Where your attention went, based on the app and file in the foreground
       while you were recording.
@@ -24,6 +34,7 @@ export async function renderInsights() {
   `;
 
   const sections: [string, (el: HTMLElement) => Promise<void>][] = [
+    ["insights-code", renderCodeChanged],
     ["insights-editors", renderEditorUsage],
     ["insights-languages", renderLanguageUsage],
     ["insights-goals", renderDailyGoalHistory],
@@ -34,6 +45,81 @@ export async function renderInsights() {
       if (el) await withLoading(el, "Loading…", () => render(el));
     }),
   );
+}
+
+const CODE_DAYS = 30;
+const CODE_COLORS = ["#4f8cff", "#ffb347", "#7ed957", "#ff6961", "#b19cd9", "#f67280", "#355c7d"];
+
+/** What the sessions produced, from git: lines per language and per repo. */
+async function renderCodeChanged(container: HTMLElement) {
+  const end = new Date();
+  const start = new Date(end.getTime() - (CODE_DAYS - 1) * 86_400_000);
+  const sessions = await safeIpcInvoke<SessionRow[]>(
+    "get-sessions",
+    [{ startDate: getLocalDateString(start), endDate: getLocalDateString(end) }],
+    { fallback: [] },
+  );
+  const totals = emptyTotals();
+  const byRepo = new Map<string, { name: string; added: number; removed: number }>();
+  for (const s of sessions ?? []) {
+    addCodeStats(totals, s.code_stats);
+    for (const r of s.code_stats ?? []) {
+      const e = byRepo.get(r.repo_key) ?? { name: r.repo_name, added: 0, removed: 0 };
+      e.added += r.lines_added || 0;
+      e.removed += r.lines_removed || 0;
+      byRepo.set(r.repo_key, e);
+    }
+  }
+  const summary = formatCodeTotals(totals);
+  if (!summary) {
+    container.innerHTML = `<h2>Code changed</h2><p>No changes from git in the last ${CODE_DAYS} days yet. When you stop a session, the app counts the commits you made and the lines you changed in the repos you (or an AI agent) worked in.</p>`;
+    return;
+  }
+
+  const languages = Object.entries(totals.languages)
+    .map(([lang, n]) => ({ lang, ...n, lines: n.added + n.removed }))
+    .filter((l) => l.lines > 0)
+    .sort((a, b) => b.lines - a.lines);
+  const allLines = languages.reduce((sum, l) => sum + l.lines, 0);
+  const shown = languages.slice(0, 6);
+  const rest = allLines - shown.reduce((sum, l) => sum + l.lines, 0);
+  const items = shown.map((l, i) => ({
+    label: l.lang,
+    percent: (l.lines / allLines) * 100,
+    color: CODE_COLORS[i % CODE_COLORS.length],
+  }));
+  if (rest > 0) items.push({ label: "Other", percent: (rest / allLines) * 100, color: "#8a8f98" });
+  const repos = [...byRepo.values()].sort((a, b) => b.added + b.removed - (a.added + a.removed));
+
+  container.innerHTML = `
+    <h2>Code changed <span class="insights-sub">from git, last ${CODE_DAYS} days</span></h2>
+    <p class="insights-code-total">${escapeHtml(summary)}</p>
+    ${allLines > 0 ? renderPercentBar(items) : ""}
+    <div class="insights-code-columns">
+      <ul class="editor-usage-list">
+        ${shown
+          .map(
+            (l, i) => `<li class="editor-usage-item">
+              <span class="editor-usage-app" style="color:${CODE_COLORS[i % CODE_COLORS.length]};">${escapeHtml(l.lang)}</span>
+              <span class="editor-usage-time">+${l.added.toLocaleString()} −${l.removed.toLocaleString()}</span>
+            </li>`,
+          )
+          .join("")}
+      </ul>
+      <ul class="editor-usage-list">
+        ${repos
+          .slice(0, 6)
+          .map(
+            (r) => `<li class="editor-usage-item">
+              <span class="editor-usage-app">${escapeHtml(r.name)}</span>
+              <span class="editor-usage-time">+${r.added.toLocaleString()} −${r.removed.toLocaleString()}</span>
+            </li>`,
+          )
+          .join("")}
+      </ul>
+    </div>
+    <p class="info-note">Commits you made during sessions, plus changes still uncommitted when you stopped, in the repos you or an AI agent worked in. Lock files aren't counted.</p>
+  `;
 }
 
 async function renderEditorUsage(container: HTMLElement) {

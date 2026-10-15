@@ -57,6 +57,7 @@ Supabase (RLS enforces per-user / per-org access)
 | `claudeHooks.ts` / `claudeHooksConfig.ts` / `hookReceiver.ts` / `agentLive.ts` | C3 hooks, see "Connect Claude Code" below. `src/utils/jsonTextEdit.ts` edits JSON text in place. |
 | `usageSampler.ts` | Foreground window (x-win) → `{appName, windowTitle, language, languageExtension, icon}`. Matches `execName` against `assets/known_editors.json` plus per-user `custom-apps-<uid>.json`; **unknown apps are dropped**. Language comes from `getLanguageDataFromTitle()` (`src/utils/extractData.ts`). |
 | `workspaceHints.ts` / `repoResolver.ts` / `projectAttribution.ts` | C1, see "Project detection" below. |
+| `codeStats.ts` | C2, see "Code stats" below. |
 | `usageBatcher.ts` | Buffers ticks; every 60s (and on pause/stop/sign-out/quit) does **one INSERT** into `usage_logs` plus one `update_daily_usage_summary` RPC per (local day, app, language). Network failure → offline queue. Icons are sent once per summary row. The Today tab refreshes on each flush (`window-tracked`). |
 
 **Project detection (C1)** runs every 5 s in main, also outside sessions (not in incognito), and nothing leaves the machine except the links the user creates:
@@ -85,8 +86,14 @@ Supabase (RLS enforces per-user / per-org access)
 - **Receiver** (`hookReceiver.ts`): main process, 127.0.0.1 only, port 47651 if free (else a random one, written into the hook), checks the token (timing-safe), answers an empty 200. Bodies over 1 MB are discarded except the leading `session_id`/`cwd`/`hook_event_name`. Port and token: `userData/claude-hooks.json`; listening again on start (`initClaudeHooks`).
 - **Live state** (`agentLive.ts`, owned by the tracker): only event name, session id, cwd and notification type are read from a payload (never the prompt, tool input/output or reply). Per session: working (prompt, tool) / waiting (permission or question) / idle (Stop, idle prompt) / gone (SessionEnd). "Working" with no event for 15 min counts as idle (no Stop is sent after an interrupt). While a session works the heartbeat is "now" (a long tool run sends nothing), otherwise its last event; the tracker takes the later of that and the transcript mtimes for C4. `liveAgents` in the state (status, since, repo name) drives the chips under Home's timer. A focused terminal without a path in its title gets the repo of the session that worked in the last 10 min (closes C1's terminal-agent gap). Stop/SessionEnd trigger a transcript ingest 10 s later.
 
+**Code stats (C2)** — `codeStats.ts` (git through an injected runner; `tracker.ts` uses `execFile("git")`, 15 s per command, the whole collection gives up after 60 s, 5 s on quit):
+- Repos of a session: the ones focused while recording (C1 detection), plus where AI agents worked meanwhile (transcripts overlapping the session via `agentIngest.dirsActiveBetween`, and live hook sessions). Not in incognito.
+- When a repo is first seen in a session, a snapshot of its working tree is taken (`git diff HEAD --numstat` + untracked files). At Stop: commits authored during the session by the repo's `user.email` (all authors if unset; deduped across worktrees of one repo), plus uncommitted work: if HEAD hasn't moved, the growth since the snapshot; otherwise files modified during the session. New untracked files count as added lines (text files ≤ 1 MB, at most 200). Lock files don't count lines; binary files count as changed files.
+- Stored on the session as `code_stats` (one entry per repo: `repo_key`, `repo_name`, commits, files_changed, lines added/removed, lines per language; `shared/codeStats.ts`), also through the offline queue. Never paths or messages.
+- UI: a "+120 −30 · 4 files · 2 commits" line under each session in Sessions → List, a per-repo table in the session details, and "Code changed" (per language and repo, 30 days) at the top of Insights.
+
 Flows:
-- **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` with `{projectId}` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" with the chosen project + `session-info-timeout`), then saves with `end_time`. The dialog preselects the project and, if it has an hourly rate, Billable.
+- **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` with `{projectId}` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" with the chosen project + `session-info-timeout`), then saves with `end_time` and `code_stats` (collected while the prompt is open). The dialog preselects the project and, if it has an hourly rate, Billable.
 - **Quit:** `hasUnsavedTrackingWork()` / `finalizeTrackingForQuit()` settle an open prompt, save a running or paused session, and flush usage.
 - **Tray:** calls the tracker directly.
 - **Batching tradeoff:** a crash loses at most ~60s of usage samples, never the session.
@@ -96,15 +103,15 @@ Flows:
 **Session time and usage time are two separate measurements and nothing reconciles them.**
 - Session `duration` is active time: wall-clock time between Start and Stop, minus pauses. `end_time` is the wall-clock end (set since Phase A; older rows have NULL).
 - Usage time is (number of samples where a *known* app was focused) × interval.
-- `usage_logs.session_id` exists in the schema but is never written. Session details are found by time range instead (`getUsageDetailsForSession`).
+- `usage_logs.session_id` exists in the schema but is never written. Session details are found by time range instead (`getUsageDetailsForSession`, which returns `{ session, usage }`).
 - Daily goals, dashboard "time today" and the language/editor charts read `daily_usage_summary` (usage time). Billing, invoices, standups and project stats read sessions.
 
 ### Data model (`database/schema.sql` — the whole database in one file; `database/README.md` explains setup, reset and the security model)
 Tables:
 - `organizations`, `user_profiles` (role: admin/manager/employee), `org_join_requests`, `org_invite_codes`
 - `cloud_projects` (scope personal|organization, `hourly_rate`), `project_members`, `project_repositories` (per-user repo → project links, C1), `agent_sessions` (C3)
-- `time_tracking_sessions` (`is_billable` NOT NULL; the trigger derives `duration` from `end_time` only when `duration` is NULL; `supervising_seconds`/`supervising_spans`, C4)
-- `usage_logs`, `daily_usage_summary`
+- `time_tracking_sessions` (`is_billable` NOT NULL; the trigger derives `duration` from `end_time` only when `duration` is NULL; `supervising_seconds`/`supervising_spans`, C4; `code_stats`, C2)
+- `usage_logs`, `daily_usage_summary` (both have `category` for C5, not written yet; it is part of the summary's unique key and an optional last `p_category` of `update_daily_usage_summary`)
 - `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_work_sessions`, `scheduled_session_tags`
 - `user_preferences` (theme, accent JSON, editor_colors, notification_settings, idle_timeout_seconds, tracking interval)
 
@@ -310,7 +317,10 @@ In priority order (cheapest and highest value first):
   - **Fixed on the way — shipped builds recorded no usage at all:** `editors.ts` read `assets/known_editors.json` from `app.getAppPath()`, which isn't in the package, so every app was "unknown" in installed builds (it only worked under `npm start`). The list is now bundled by webpack. Also: `app.getPath("appData")` can throw (seen with an isolated `USERPROFILE`); detection falls back to `%APPDATA%`/`~/Library/Application Support`/`~/.config`.
   - Verified: unit tests (hints, resolver on a fake tree, attribution policy, IPC), PGlite checks for the table's RLS, e2e unchanged and green, and a live probe of the packaged app signed in (VS Code untitled multi-root workspace → `github.com/ntua-el20014/dev-time-tracker`; Home hint; Stop dialog offers the link; session saved under the picked project). The link round trip against live Supabase waits for the table.
   - Not done: terminal agents whose title has no path (e.g. `claude` in Windows Terminal) — covered when Claude Code is connected (C3 hooks: the busy session's cwd); still open for other agents. Remote (WSL/SSH/container) windows are skipped.
-- [ ] C2 Git stats per session (`session_code_stats`)
+- [x] C2 Git stats per session — done on `phase-c2-git-stats` (2026-10-15); see "Code stats" in Part 1. Stored as a `code_stats` column on `time_tracking_sessions` instead of a separate table: it travels with the session insert (and the offline queue) and inherits its RLS.
+  - **DB change:** `time_tracking_sessions.code_stats` (array, ≤ 64 KB). The same rebuild also adds C5's `category` to `usage_logs`/`daily_usage_summary` (key and RPC), so C5 needs no second rebuild.
+  - Fixed on the way: the session details modal always said "No session details found" (the handler returned the usage array, the modal expected `{ session, usage }`); it now also uses `end_time`. Percent-bar labels and the details' app list are escaped.
+  - Verified: unit tests (parsers, snapshot/growth/mtime rules, worktree dedupe, lock files, email filter), a test against a real git repo, PGlite checks. Live check after the database rebuild.
 - [ ] C3 Agent source: Claude Code hooks installer plus local receiver; transcript fallback; process detection
   - [x] Passive part (transcripts) — done on `phase-c3-agents` (2026-10-15); see "Agent sessions" in Part 1. **DB change:** `agent_sessions` (table, triggers, RLS, indexes). Process detection skipped (see Part 1).
   - [x] Opt-in "Connect Claude Code" hooks — done on `phase-c3-hooks` (2026-10-15); see "Connect Claude Code" in Part 1. No DB change.

@@ -22,6 +22,7 @@ import {
   onRepoLinksChanged,
   resolveRepoForDir,
   send,
+  setAgentDirsProvider,
 } from "./tracker";
 import {
   assignAgentSessionsProject,
@@ -166,7 +167,20 @@ export async function deleteAgentData(uid: string) {
   lastResult = null;
 }
 
+/**
+ * Where agents worked between `start` and `end` (for a session's git
+ * stats). Reads the latest transcript lines first; nothing if recording
+ * agent sessions is off.
+ */
+async function agentDirsBetween(start: number, end: number): Promise<string[]> {
+  const uid = getTrackingUserId();
+  if (!uid || !(await isAgentIngestEnabled(uid))) return [];
+  await runAgentIngest();
+  return ingestFor(uid).dirsActiveBetween(start, end);
+}
+
 export function initAgentIngest() {
+  setAgentDirsProvider(agentDirsBetween);
   // Linking a repo attributes its agent sessions, here and on other devices
   onRepoLinksChanged((link) => {
     const uid = getTrackingUserId();

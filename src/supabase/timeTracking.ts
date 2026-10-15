@@ -2,6 +2,7 @@ import { supabase } from "./config";
 import type { Database } from "../types/database.types";
 import { setSessionTagsByNames } from "./tags";
 import { localDayStartISO, localDayEndISO } from "../utils/timeFormat";
+import type { RepoCodeStats } from "../../shared/codeStats";
 
 type SessionInsert =
   Database["public"]["Tables"]["time_tracking_sessions"]["Insert"];
@@ -14,7 +15,7 @@ export interface SupervisingTime {
 }
 
 const SESSION_COLUMNS =
-  "id, title, description, start_time, end_time, duration, project_id, is_billable, supervising_seconds, supervising_spans, created_at";
+  "id, title, description, start_time, end_time, duration, project_id, is_billable, supervising_seconds, supervising_spans, code_stats, created_at";
 
 /**
  * Get sessions with duration less than or equal to specified threshold
@@ -226,6 +227,7 @@ export async function addSession(
   isBillable: boolean = false,
   endTime?: string,
   supervising?: SupervisingTime,
+  codeStats?: RepoCodeStats[],
 ) {
   const sessionData: SessionInsert = {
     user_id: userId,
@@ -238,6 +240,7 @@ export async function addSession(
     is_billable: isBillable,
     supervising_seconds: supervising?.seconds ?? 0,
     supervising_spans: supervising?.spans ?? [],
+    code_stats: codeStats ?? [],
   };
 
   const { data, error } = await supabase

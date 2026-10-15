@@ -28,6 +28,8 @@ export interface SessionRow {
   project_bill_supervising?: boolean;
   /** Seconds the invoice bills (duration, minus unbilled supervising) */
   billed_seconds?: number;
+  /** What the session produced, from git (C2) */
+  code_stats?: import("../codeStats").RepoCodeStats[];
 }
 
 export interface LogEntry {

@@ -16,6 +16,7 @@ import {
 } from "./utils/tableUtils";
 import { addCustomChart } from "./utils/chartUtils";
 import type { SessionRow, Tag, Project } from "../../shared/types";
+import { addCodeStats, emptyTotals, formatCodeTotals } from "../../shared/codeStats";
 
 // State for by-session view
 export interface BySessionViewState {
@@ -328,6 +329,14 @@ export function renderSessionRows(
   state.pagination.setData(sortedSessions);
 }
 
+/** "+120 −30 · 4 files · 2 commits" under the title, if git saw changes. */
+function codeLine(session: SessionRow): string {
+  const text = formatCodeTotals(addCodeStats(emptyTotals(), session.code_stats));
+  if (!text) return "";
+  const repos = (session.code_stats ?? []).map((s) => s.repo_name).join(", ");
+  return `<div class="session-code" title="${escapeHtml(`From git: ${repos}`)}">${escapeHtml(text)}</div>`;
+}
+
 export function renderSessionPage(
   container: HTMLElement,
   sessionsToRender: SessionRow[],
@@ -347,9 +356,10 @@ export function renderSessionPage(
       if (m > 0) durationStr += `${m}m `;
       if (s > 0 || (!h && !m)) durationStr += `${s}s`;
       return `
-      <tr class="clickable-row" data-session-id="${session.id}">
+      <tr class="clickable-row" data-session-id="${escapeHtml(String(session.id))}">
         <td>
           ${escapeHtml(session.title)}
+          ${codeLine(session)}
           ${
             session.tags && session.tags.length
               ? `<div class="session-tags">

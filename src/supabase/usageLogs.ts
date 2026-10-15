@@ -405,8 +405,8 @@ export async function getUsageDetailsForAppDate(
 }
 
 /**
- * Get detailed usage for a specific session
- * Returns usage logs within session time range
+ * A session and the usage logged during it: { session, usage }. Usage is
+ * found by the session's time range (usage_logs.session_id isn't written).
  */
 export async function getUsageDetailsForSession(
   userId: string,
@@ -415,8 +415,11 @@ export async function getUsageDetailsForSession(
   // First get the session time range
   const { data: session, error: sessionError } = await supabase
     .from("time_tracking_sessions")
-    .select("start_time, end_time, duration")
+    .select(
+      "id, title, description, start_time, end_time, duration, supervising_seconds, code_stats",
+    )
     .eq("id", sessionId)
+    .eq("user_id", userId)
     .single();
 
   if (sessionError) {
@@ -447,7 +450,7 @@ export async function getUsageDetailsForSession(
   if (error) {
     throw error;
   }
-  return (data || []).map(mapUsageLogRow);
+  return { session, usage: (data || []).map(mapUsageLogRow) };
 }
 
 /**

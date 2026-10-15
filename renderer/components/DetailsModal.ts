@@ -1,5 +1,11 @@
 import { formatTimeSpent } from "../../src/utils/timeFormat";
 import { escapeHtml, prettyDate, prettyTime, safeIpcInvoke } from "../utils";
+import {
+  addCodeStats,
+  emptyTotals,
+  formatCodeTotals,
+  type RepoCodeStats,
+} from "../../shared/codeStats";
 
 export interface DetailsModalConfig {
   type: "app-date" | "session";
@@ -211,6 +217,35 @@ function renderAppDateDetails(
   container.appendChild(content);
 }
 
+/** "Code" (C2): what the session produced per repo, from git. */
+function codeSection(stats: RepoCodeStats[] | undefined): HTMLElement | null {
+  if (!Array.isArray(stats) || stats.length === 0) return null;
+  const section = document.createElement("div");
+  section.className = "details-code";
+  const rows = stats
+    .map((s) => {
+      const langs = Object.entries(s.languages ?? {})
+        .sort((a, b) => b[1].added + b[1].removed - (a[1].added + a[1].removed))
+        .slice(0, 4)
+        .map(([lang, n]) => `${lang} +${n.added} −${n.removed}`)
+        .join(", ");
+      return `<tr>
+        <td>${escapeHtml(s.repo_name)}</td>
+        <td>${escapeHtml(formatCodeTotals(addCodeStats(emptyTotals(), [s])))}</td>
+        <td>${escapeHtml(langs || "—")}</td>
+      </tr>`;
+    })
+    .join("");
+  section.innerHTML = `
+    <h3>Code (from git)</h3>
+    <table class="details-table">
+      <thead><tr><th>Repo</th><th>Changed</th><th>Languages</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="details-code-note">Commits made during the session, plus uncommitted changes at Stop. Lock files aren't counted.</p>`;
+  return section;
+}
+
 function renderSessionDetails(container: HTMLElement, data: any) {
   if (!data || !data.session) {
     container.innerHTML = "<p>No session details found.</p>";
@@ -226,7 +261,10 @@ function renderSessionDetails(container: HTMLElement, data: any) {
   sessionInfo.className = "details-session-info";
 
   const startTime = new Date(session.start_time);
-  const endTime = new Date(startTime.getTime() + session.duration * 1000);
+  // Older sessions have no end_time; their end is start + active time
+  const endTime = session.end_time
+    ? new Date(session.end_time)
+    : new Date(startTime.getTime() + session.duration * 1000);
 
   sessionInfo.innerHTML = `
     <h3>Session Information</h3>
@@ -239,6 +277,9 @@ function renderSessionDetails(container: HTMLElement, data: any) {
     <p><strong>End Time:</strong> ${prettyTime(endTime.toISOString())}</p>
   `;
   content.appendChild(sessionInfo);
+
+  const code = codeSection(session.code_stats);
+  if (code) content.appendChild(code);
 
   // Usage during session
   if (usage && usage.length > 0) {
@@ -260,8 +301,8 @@ function renderSessionDetails(container: HTMLElement, data: any) {
     summary.className = "details-summary";
     summary.innerHTML = `
       <p><strong>Total activities:</strong> ${usage.length}</p>
-      <p><strong>Applications used:</strong> ${Object.keys(grouped).join(
-        ", ",
+      <p><strong>Applications used:</strong> ${escapeHtml(
+        Object.keys(grouped).join(", "),
       )}</p>
     `;
     usageSection.appendChild(summary);
