@@ -7,7 +7,7 @@ Everything the app needs in Supabase is in one file:
 | [`schema.sql`](./schema.sql) | Complete setup: tables → functions → triggers → row level security → indexes. Run once on an empty project. |
 | [`reset.sql`](./reset.sql) | **Destructive.** Drops every table, function and type in `public`, the signup trigger, and **all auth users**. Use it to start over on the same project, then run `schema.sql`. |
 
-There are no migrations or patches. Change `schema.sql` directly, and reset and rebuild your development database to apply it. If the app ever has real users, switch to numbered migrations (for example with the Supabase CLI) at that point.
+There are no migrations, patches or upgrade scripts — **at least until Phases C and D of the roadmap are finished.** Change `schema.sql` directly, and reset and rebuild the database to apply it (`reset.sql`, then `schema.sql`). After C and D we'll decide whether to switch to numbered migrations (for example with the Supabase CLI).
 
 Requires Postgres 15+ (all Supabase projects created since 2023).
 
@@ -19,15 +19,7 @@ Requires Postgres 15+ (all Supabase projects created since 2023).
 4. **Authentication → Sign In / Providers**: enable **Email**. **GitHub** is optional; its callback URL is `https://<project>.supabase.co/auth/v1/callback`.
 5. **Authentication → URL Configuration → Redirect URLs**: add `dev-time-tracker://oauth-callback`. GitHub sign-in, email confirmation and password reset all return to the app through it.
 
-The project URL and anon key are unchanged by a reset, so `.env` stays as it is.
-
-## Upgrading an existing database
-
-`schema.sql` always describes the whole current database. When a change can't be applied by simply adding things (for example, a function whose parameters changed), `upgrade/` has a dated script for databases built from an older `schema.sql`. Run the ones newer than your database in date order, in the SQL editor. A fresh database needs none of them.
-
-| File | What it does |
-|---|---|
-| [`upgrade/2026-10-15-team-analytics.sql`](./upgrade/2026-10-15-team-analytics.sql) | Team analytics by the viewer's local day (`p_time_zone`) and billed time (`session_billed_seconds`); replaces three `get_org_*` functions |
+The project URL and anon key are unchanged by a reset, so `.env` stays as it is. A reset deletes every auth user, so after starting over sign up again in the app, including the two e2e test accounts from `.env.local` (`DTT_TEST_EMAIL_1/2`, `DTT_TEST_PASSWORD_1/2`), and confirm their emails before running `npm run test:e2e`. Sessions saved by the app for deleted users just end in a sign-in screen.
 
 ## Security model
 
