@@ -38,7 +38,8 @@ import {
   DEFAULT_TRACKING_INTERVAL_SECONDS,
 } from "../../shared/constants";
 import { SessionClock, type SessionSnapshot } from "./sessionClock";
-import { decideIdleAction } from "./idlePolicy";
+import { decideIdleAction, type Activity } from "./idlePolicy";
+import { createAgentHeartbeat } from "./agentHeartbeat";
 import { createUsageSampler } from "./usageSampler";
 import { UsageBatcher } from "./usageBatcher";
 import { getWorkspaceHint } from "./workspaceHints";
@@ -80,6 +81,14 @@ export interface TrackingState {
   projectSource: ProjectSource;
   /** Repo of the focused editor/terminal (last seen), detected locally */
   detectedRepo: DetectedRepo | null;
+  /** Active / Supervising (no input, agent working) / Away; also outside sessions */
+  activity: Activity;
+  /** Supervising seconds of the current session (part of activeSeconds) */
+  supervisingSeconds: number;
+  /** Its [start, end] ISO pairs; an open span ends when the state was taken */
+  supervisingSpans: [string, string][];
+  /** Last time an AI agent wrote to its transcript (ISO), or null */
+  agentActiveAt: string | null;
 }
 
 export type { ProjectSource };
@@ -93,6 +102,8 @@ const FLUSH_INTERVAL_MS = 60 * 1000;
 const IDLE_POLL_MS = 2000;
 /** How often the focused window's repo is detected (also outside sessions). */
 const DETECT_MS = 5000;
+/** How often agent transcripts are checked for activity. */
+const HEARTBEAT_MS = 15_000;
 
 // ── State ────────────────────────────────────────────────────────────
 
@@ -105,6 +116,7 @@ let idleTimeoutSeconds = DEFAULT_IDLE_TIMEOUT_SECONDS;
 let isIncognito = false;
 let selectedProjectId: string | null = null;
 let projectSource: ProjectSource = "auto";
+let activity: Activity = "active";
 const attribution = new ProjectAttribution();
 /** System away states: never auto-resume while either is set. */
 let screenLocked = false;
@@ -134,6 +146,10 @@ export function getTrackingState(): TrackingState {
     projectId: selectedProjectId,
     projectSource,
     detectedRepo: attribution.describe(),
+    activity,
+    supervisingSeconds: clock.supervisingSeconds(new Date()),
+    supervisingSpans: clock.supervisingSpans(new Date()),
+    agentActiveAt: agentActiveAt(),
   };
 }
 
@@ -454,8 +470,9 @@ export function startTracking() {
   emitState();
 }
 
-export function pauseTracking(automatic = false) {
-  if (!clock.pause(new Date(), automatic)) return;
+/** `at` may be in the past: an idle pause trims the idle stretch before it. */
+export function pauseTracking(automatic = false, at: Date = new Date()) {
+  if (!clock.pause(at, automatic)) return;
   stopTimers();
   void flushTrackedUsage();
   emitState();
@@ -535,6 +552,10 @@ async function saveSession(
 ) {
   const startTime = session.start.toISOString();
   const endTime = session.end.toISOString();
+  const supervising = {
+    seconds: session.supervisingSeconds,
+    spans: session.supervisingSpans,
+  };
   const projectId = info.projectId ? String(info.projectId) : undefined;
   const isBillable = info.isBillable || false;
   try {
@@ -548,6 +569,7 @@ async function saveSession(
       projectId,
       isBillable,
       endTime,
+      supervising,
     );
     // Lets the renderer refresh session-based views
     send("session-saved");
@@ -564,6 +586,7 @@ async function saveSession(
         projectId,
         isBillable,
         endTime,
+        supervising,
       );
     } else {
       logError("saveSession", err);
@@ -663,26 +686,84 @@ export async function finalizeTrackingForQuit() {
   }
 }
 
+// ── Agent heartbeat ──────────────────────────────────────────────────
+
+const heartbeat = createAgentHeartbeat({
+  fs: {
+    async readDir(p) {
+      try {
+        const entries = await fs.promises.readdir(p, { withFileTypes: true });
+        return entries.map((e) => ({ name: e.name, isDir: e.isDirectory() }));
+      } catch {
+        return [];
+      }
+    },
+    async mtimeMs(p) {
+      try {
+        return (await fs.promises.stat(p)).mtimeMs;
+      } catch {
+        return null;
+      }
+    },
+  },
+  claudeDir:
+    process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"),
+  codexDir: process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
+  platform: process.platform,
+});
+
+function agentActiveAt(): string | null {
+  const last = heartbeat.lastActivity();
+  return last === null ? null : new Date(last).toISOString();
+}
+
+async function pollHeartbeat() {
+  const before = heartbeat.lastActivity();
+  try {
+    await heartbeat.poll();
+  } catch (err) {
+    logError("agentHeartbeat", err);
+  }
+  if (heartbeat.lastActivity() !== before) pollIdle();
+}
+
 // ── Idle / power ─────────────────────────────────────────────────────
 
+const clockTime = (d: Date) =>
+  d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
 function pollIdle() {
-  const action = decideIdleAction({
+  const now = new Date();
+  const lastAgent = heartbeat.lastActivity();
+  const decision = decideIdleAction({
     idleSeconds: powerMonitor.getSystemIdleTime(),
     idleTimeoutSeconds,
+    secondsSinceAgent:
+      lastAgent === null
+        ? null
+        : Math.max(0, (now.getTime() - lastAgent) / 1000),
     ...clock.state,
     screenLocked,
     systemSuspended,
   });
+  const { action } = decision;
+  const wasSupervising = clock.isSupervising;
+  clock.setSupervising(now, decision.activity === "supervising");
+  const changed =
+    decision.activity !== activity || clock.isSupervising !== wasSupervising;
+  activity = decision.activity;
+
   if (action === "pause") {
-    pauseTracking(true);
+    const at = new Date(now.getTime() - (decision.pauseSecondsAgo ?? 0) * 1000);
+    pauseTracking(true, at);
     notify(
-      `Tracking paused due to inactivity (${(idleTimeoutSeconds / 60).toFixed(
-        1,
-      )} minutes idle).`,
+      `Tracking paused — no activity since ${clockTime(at)}, so the time after that wasn't counted.`,
     );
   } else if (action === "resume") {
     resumeTracking();
     notify("Welcome back — tracking resumed.");
+  } else if (changed) {
+    emitState();
   }
 }
 
@@ -710,6 +791,8 @@ export function initTracking(options: {
 
   setInterval(pollIdle, IDLE_POLL_MS);
   setInterval(detectTick, DETECT_MS);
+  void pollHeartbeat();
+  setInterval(() => void pollHeartbeat(), HEARTBEAT_MS);
 }
 
 // ── IPC ──────────────────────────────────────────────────────────────

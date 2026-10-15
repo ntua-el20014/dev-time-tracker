@@ -2,6 +2,9 @@ import jsPDF from "jspdf";
 import { savePdf } from "./saveFile";
 import type { SessionRow as Session } from "../../shared/types";
 
+/** Main sets billed_seconds (supervising time may be unbilled). */
+const billedSeconds = (s: Session) => s.billed_seconds ?? s.duration;
+
 export interface InvoiceCustomization {
   companyName: string;
   notes?: string;
@@ -187,7 +190,7 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
       checkNewPage(5);
 
       const startDate = new Date(session.start_time).toLocaleDateString();
-      const duration = (session.duration / 3600).toFixed(2);
+      const duration = (billedSeconds(session) / 3600).toFixed(2);
       const amount = (parseFloat(duration) * project.hourlyRate).toFixed(2);
 
       doc.text(startDate, colStartX.date, yPosition);
@@ -288,7 +291,7 @@ export function calculateInvoiceData(
 ): InvoiceData {
   const projectsData = projects.map((p) => {
     const totalSeconds = p.billableSessions.reduce(
-      (sum, s) => sum + s.duration,
+      (sum, s) => sum + billedSeconds(s),
       0,
     );
     const totalHours = totalSeconds / 3600;

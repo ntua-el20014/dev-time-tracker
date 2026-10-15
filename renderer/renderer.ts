@@ -193,7 +193,13 @@ onClockTick((seconds, state) => {
       ? state.autoPaused
         ? "Paused (idle)"
         : "Paused"
-      : "Recording";
+      : state.activity === "supervising"
+        ? "Supervising agent"
+        : "Recording";
+  status.title =
+    state.isRecording && !state.isPaused && state.activity === "supervising"
+      ? "No input, but an AI agent is working — this counts as work"
+      : "";
   clockEl.textContent = formatClock(seconds);
 });
 

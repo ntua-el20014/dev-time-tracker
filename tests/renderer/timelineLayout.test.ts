@@ -77,4 +77,35 @@ describe("layoutTimeline", () => {
     expect(l.totalSeconds).toBe(6600);
     expect(l.billableSeconds).toBe(3000);
   });
+
+  it("places supervising slices on the axis, clipped to the session", () => {
+    const l = layoutTimeline(
+      [
+        session("a", at(9), at(11), {
+          supervisingSeconds: 3600,
+          supervisingSpans: [
+            { start: at(10), end: at(11) },
+            // Outside the session's visible span: dropped
+            { start: at(13), end: at(14) },
+          ],
+        }),
+      ],
+      at(12),
+    );
+    expect(l.supervising).toHaveLength(1);
+    expect(l.supervising[0].left).toBeCloseTo(20);
+    expect(l.supervising[0].width).toBeCloseTo(10);
+    expect(l.supervisingSeconds).toBe(3600);
+  });
+
+  it("bills supervising time only where the project bills it", () => {
+    const l = layoutTimeline(
+      [
+        session("a", at(9), at(10), { billable: true, billedSeconds: 1800 }),
+        session("b", at(10), at(11), { billable: true }),
+      ],
+      at(12),
+    );
+    expect(l.billableSeconds).toBe(1800 + 3600);
+  });
 });

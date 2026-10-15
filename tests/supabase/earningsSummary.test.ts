@@ -63,4 +63,29 @@ describe("getUserEarningsSummary", () => {
     expect(s.byProject[0].earnings).toBe(0);
     expect(s.totalBillableHours).toBe(1);
   });
+
+  it("leaves supervising time out where the project doesn't bill it", async () => {
+    mockResults([
+      {
+        data: [
+          { id: "s1", project_id: "billed", duration: 3600, supervising_seconds: 1800 },
+          { id: "s2", project_id: "unbilled", duration: 3600, supervising_seconds: 1800 },
+        ],
+        error: null,
+      },
+      {
+        data: [
+          { id: "billed", name: "A", color: "#000", hourly_rate: 100 },
+          { id: "unbilled", name: "B", color: "#000", hourly_rate: 100, bill_supervising: false },
+        ],
+        error: null,
+      },
+    ]);
+
+    const s = await getUserEarningsSummary("u1", "2026-10-01", "2026-10-31");
+    const by = Object.fromEntries(s.byProject.map((p) => [p.projectId, p]));
+    expect(by.billed).toMatchObject({ billableSeconds: 3600, earnings: 100, supervisingSeconds: 1800, billSupervising: true });
+    expect(by.unbilled).toMatchObject({ billableSeconds: 1800, earnings: 50, supervisingSeconds: 1800, billSupervising: false });
+    expect(s.totalEarnings).toBe(150);
+  });
 });

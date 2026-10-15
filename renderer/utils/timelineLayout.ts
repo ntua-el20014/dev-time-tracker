@@ -4,6 +4,9 @@
  *
  * The axis covers at least 08:00–18:00 and widens to whole hours around the
  * earliest and latest session (and "now" while recording).
+ *
+ * Supervising time (no input while an AI agent worked) is drawn as slices
+ * over the session bars.
  */
 
 export interface TimelineSession {
@@ -17,6 +20,11 @@ export interface TimelineSession {
   projectName?: string | null;
   color?: string | null;
   billable?: boolean;
+  /** Seconds billed if billable (duration minus unbilled supervising) */
+  billedSeconds?: number;
+  /** Part of duration spent supervising an AI agent */
+  supervisingSeconds?: number;
+  supervisingSpans?: { start: Date; end: Date }[];
   running?: boolean;
 }
 
@@ -36,8 +44,11 @@ export interface TimelineLayout {
   bars: TimelineBar[];
   /** Hour marks for labels, every two hours */
   ticks: { at: Date; left: number }[];
+  /** Supervising slices, in percent of the axis */
+  supervising: { left: number; width: number }[];
   totalSeconds: number;
   billableSeconds: number;
+  supervisingSeconds: number;
 }
 
 export const MIN_BAR_PERCENT = 0.6;
@@ -92,14 +103,31 @@ export function layoutTimeline(
     ticks.push({ at, left: pct(at) });
   }
 
+  // Supervising slices, clipped to their session's visible span
+  const supervising: TimelineLayout["supervising"] = [];
+  for (const { session, start, end } of spans) {
+    for (const slice of session.supervisingSpans ?? []) {
+      const from = Math.max(slice.start.getTime(), start.getTime());
+      const to = Math.min(slice.end.getTime(), end.getTime());
+      if (to <= from) continue;
+      const left = pct(new Date(from));
+      supervising.push({ left, width: Math.min(pct(new Date(to)) - left, 100 - left) });
+    }
+  }
+
   return {
     axisStart,
     axisEnd,
     bars,
     ticks,
+    supervising,
     totalSeconds: sessions.reduce((sum, s) => sum + (s.duration || 0), 0),
     billableSeconds: sessions.reduce(
-      (sum, s) => sum + (s.billable ? s.duration || 0 : 0),
+      (sum, s) => sum + (s.billable ? (s.billedSeconds ?? s.duration) || 0 : 0),
+      0,
+    ),
+    supervisingSeconds: sessions.reduce(
+      (sum, s) => sum + (s.supervisingSeconds || 0),
       0,
     ),
   };

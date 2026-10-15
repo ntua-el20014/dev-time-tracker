@@ -191,6 +191,10 @@ function renderCard(p: Project): string {
               : ""
           }
           <div class="project-meta-item">
+            <span class="meta-label">Agent supervising:</span>
+            <span class="meta-value">${p.bill_supervising === false ? "Not billed" : "Billed"}</span>
+          </div>
+          <div class="project-meta-item">
             <span class="meta-label">Repos:</span>
             <span class="meta-value">${renderRepoLinks(p)}</span>
           </div>
@@ -337,6 +341,12 @@ function showProjectForm(project?: Project) {
         <label for="project-hourly-rate">Hourly rate (optional)</label><br>
         <input id="project-hourly-rate" name="hourlyRate" type="number" min="0" step="0.01" placeholder="e.g. 75.00" value="${project?.hourly_rate ?? ""}">
       </div>
+      <div style="margin-bottom: 15px;">
+        <label title="Time without keyboard/mouse input while an AI agent (Claude Code, Codex) is working on your behalf">
+          <input id="project-bill-supervising" name="billSupervising" type="checkbox" ${project?.bill_supervising === false ? "" : "checked"}>
+          Bill time spent supervising an AI agent
+        </label>
+      </div>
       ${
         offerScope
           ? `<fieldset style="margin-bottom: 15px; border: none; padding: 0;">
@@ -370,11 +380,12 @@ function showProjectForm(project?: Project) {
     const name = String(data.get("name") ?? "").trim();
     const description = String(data.get("description") ?? "");
     const color = String(data.get("color") ?? "#3b82f6");
+    const billSupervising = data.get("billSupervising") === "on";
 
     const result = editing
       ? await safeIpcInvoke(
           "update-project",
-          [project!.id, name, description, color, hourlyRate],
+          [project!.id, name, description, color, hourlyRate, billSupervising],
           { fallback: null },
         )
       : await safeIpcInvoke(
@@ -385,6 +396,7 @@ function showProjectForm(project?: Project) {
             color,
             hourlyRate,
             String(data.get("scope") ?? "personal"),
+            billSupervising,
           ],
           { fallback: null },
         );

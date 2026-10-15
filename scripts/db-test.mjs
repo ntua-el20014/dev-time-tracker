@@ -263,6 +263,33 @@ async function runScenario(label) {
   const stats = await one(`SELECT * FROM get_project_stats($1)`, [proj.id]);
   check("project stats run", stats !== undefined);
 
+  // ── Supervising time ──
+  check(
+    "projects bill supervising time by default",
+    (await one(`SELECT bill_supervising FROM cloud_projects WHERE id = $1`, [proj.id])).bill_supervising === true,
+  );
+  const sup = await one(
+    `INSERT INTO time_tracking_sessions (user_id, start_time, duration, supervising_seconds, supervising_spans)
+     VALUES ($1, NOW(), 600, 120, '[["2026-10-15T10:00:00Z","2026-10-15T10:02:00Z"]]') RETURNING supervising_seconds, supervising_spans`,
+    [A],
+  );
+  check("session stores supervising time and spans", sup.supervising_seconds === 120 && sup.supervising_spans.length === 1);
+  const plain = await one(
+    `INSERT INTO time_tracking_sessions (user_id, start_time, duration) VALUES ($1, NOW(), 60) RETURNING supervising_seconds, supervising_spans`,
+    [A],
+  );
+  check("supervising defaults to none", plain.supervising_seconds === 0 && plain.supervising_spans.length === 0);
+  err = await fails(
+    `INSERT INTO time_tracking_sessions (user_id, start_time, duration, supervising_spans) VALUES ($1, NOW(), 60, '{}')`,
+    [A],
+  );
+  check("supervising_spans must be an array", !!err, err ?? "");
+  err = await fails(
+    `INSERT INTO time_tracking_sessions (user_id, start_time, duration, supervising_seconds) VALUES ($1, NOW(), 60, -1)`,
+    [A],
+  );
+  check("supervising_seconds can't be negative", !!err, err ?? "");
+
   // ── Repository links ──
   err = await fails(
     `INSERT INTO project_repositories (user_id, project_id, repo_key, repo_name) VALUES ($1, $2, 'github.com/a/site', 'site')`,

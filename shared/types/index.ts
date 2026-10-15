@@ -20,6 +20,14 @@ export interface SessionRow {
   date: string;
   project_name?: string;
   project_color?: string;
+  /** Part of duration spent supervising an AI agent */
+  supervising_seconds?: number;
+  /** [start, end] ISO pairs of the supervising time */
+  supervising_spans?: [string, string][];
+  /** The project bills supervising time (default true) */
+  project_bill_supervising?: boolean;
+  /** Seconds the invoice bills (duration, minus unbilled supervising) */
+  billed_seconds?: number;
 }
 
 export interface LogEntry {

@@ -72,6 +72,8 @@ CREATE TABLE cloud_projects (
     description TEXT,
     color TEXT DEFAULT '#3b82f6',
     hourly_rate NUMERIC(10,2) CHECK (hourly_rate IS NULL OR hourly_rate >= 0),
+    -- Bill time spent supervising an AI agent (part of session duration)
+    bill_supervising BOOLEAN NOT NULL DEFAULT true,
     scope TEXT NOT NULL DEFAULT 'organization' CHECK (scope IN ('personal', 'organization')),
     is_active BOOLEAN DEFAULT true,
     archived BOOLEAN DEFAULT false,
@@ -91,7 +93,9 @@ CREATE TABLE project_members (
 );
 
 -- Recorded sessions. duration = active seconds (pauses excluded), written by
--- the app; end_time = wall-clock end.
+-- the app; end_time = wall-clock end. supervising_seconds is the part of
+-- duration spent without input while an AI agent was working, and
+-- supervising_spans its [start, end] ISO pairs (for the timeline).
 CREATE TABLE time_tracking_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
@@ -103,6 +107,9 @@ CREATE TABLE time_tracking_sessions (
     end_time TIMESTAMPTZ,
     duration INTEGER,
     is_billable BOOLEAN NOT NULL DEFAULT false,
+    supervising_seconds INTEGER NOT NULL DEFAULT 0 CHECK (supervising_seconds >= 0),
+    supervising_spans JSONB NOT NULL DEFAULT '[]'
+        CHECK (jsonb_typeof(supervising_spans) = 'array'),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

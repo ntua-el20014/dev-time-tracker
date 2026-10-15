@@ -131,6 +131,7 @@ export interface Database {
           description: string | null;
           color: string;
           hourly_rate: number | null;
+          bill_supervising: boolean;
           scope: "personal" | "organization";
           is_active: boolean;
           manager_id: string;
@@ -144,6 +145,7 @@ export interface Database {
           description?: string | null;
           color?: string;
           hourly_rate?: number | null;
+          bill_supervising?: boolean;
           scope?: "personal" | "organization";
           is_active?: boolean;
           manager_id: string;
@@ -156,6 +158,7 @@ export interface Database {
           description?: string | null;
           color?: string;
           hourly_rate?: number | null;
+          bill_supervising?: boolean;
           scope?: "personal" | "organization";
           is_active?: boolean;
           manager_id?: string;
@@ -260,6 +263,8 @@ export interface Database {
           end_time: TimestampString | null;
           duration: number | null;
           is_billable: boolean;
+          supervising_seconds: number;
+          supervising_spans: [string, string][];
           created_at: TimestampString;
           updated_at: TimestampString;
         };
@@ -274,6 +279,8 @@ export interface Database {
           end_time?: TimestampString | null;
           duration?: number | null;
           is_billable?: boolean;
+          supervising_seconds?: number;
+          supervising_spans?: [string, string][];
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
@@ -286,6 +293,8 @@ export interface Database {
           end_time?: TimestampString | null;
           duration?: number | null;
           is_billable?: boolean;
+          supervising_seconds?: number;
+          supervising_spans?: [string, string][];
           updated_at?: TimestampString;
         };
         Relationships: [

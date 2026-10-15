@@ -37,16 +37,20 @@ async function enrichSessions(rawSessions: any[]): Promise<any[]> {
   const projectIds = [
     ...new Set(rawSessions.map((s) => s.project_id).filter(Boolean)),
   ];
-  const projectMap: Record<string, { name: string; color: string }> = {};
+  const projectMap: Record<
+    string,
+    { name: string; color: string; billSupervising: boolean }
+  > = {};
   if (projectIds.length > 0) {
     const { data: projects } = await supabase
       .from("cloud_projects")
-      .select("id, name, color")
+      .select("id, name, color, bill_supervising")
       .in("id", projectIds);
     for (const p of projects || []) {
       projectMap[(p as any).id] = {
         name: (p as any).name,
         color: (p as any).color,
+        billSupervising: (p as any).bill_supervising !== false,
       };
     }
   }
@@ -57,6 +61,9 @@ async function enrichSessions(rawSessions: any[]): Promise<any[]> {
     tags: tagsBySession[s.id] || [],
     project_name: s.project_id ? projectMap[s.project_id]?.name : null,
     project_color: s.project_id ? projectMap[s.project_id]?.color : null,
+    project_bill_supervising: s.project_id
+      ? (projectMap[s.project_id]?.billSupervising ?? true)
+      : true,
   }));
 }
 

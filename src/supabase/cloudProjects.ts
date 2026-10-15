@@ -166,6 +166,7 @@ export async function createCloudProject(
       description: data.description || null,
       color: data.color || "#3b82f6",
       hourly_rate: data.hourly_rate ?? null,
+      bill_supervising: data.bill_supervising ?? true,
       scope: scope,
       manager_id: data.manager_id || currentUserId,
       org_id: orgId,

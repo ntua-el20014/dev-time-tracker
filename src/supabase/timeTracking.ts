@@ -6,8 +6,15 @@ import { localDayStartISO, localDayEndISO } from "../utils/timeFormat";
 type SessionInsert =
   Database["public"]["Tables"]["time_tracking_sessions"]["Insert"];
 
+/** Part of a session spent supervising an AI agent (no input, agent busy). */
+export interface SupervisingTime {
+  seconds: number;
+  /** [start, end] ISO timestamps */
+  spans: [string, string][];
+}
+
 const SESSION_COLUMNS =
-  "id, title, description, start_time, end_time, duration, project_id, is_billable, created_at";
+  "id, title, description, start_time, end_time, duration, project_id, is_billable, supervising_seconds, supervising_spans, created_at";
 
 /**
  * Get sessions with duration less than or equal to specified threshold
@@ -218,6 +225,7 @@ export async function addSession(
   projectId?: string,
   isBillable: boolean = false,
   endTime?: string,
+  supervising?: SupervisingTime,
 ) {
   const sessionData: SessionInsert = {
     user_id: userId,
@@ -228,6 +236,8 @@ export async function addSession(
     description: description || null,
     project_id: projectId || null,
     is_billable: isBillable,
+    supervising_seconds: supervising?.seconds ?? 0,
+    supervising_spans: supervising?.spans ?? [],
   };
 
   const { data, error } = await supabase

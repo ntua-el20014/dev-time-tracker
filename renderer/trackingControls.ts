@@ -21,6 +21,14 @@ export interface TrackingState {
   projectSource: "manual" | "auto";
   /** Repo of the focused editor/terminal (last seen), detected by main */
   detectedRepo: DetectedRepo | null;
+  /** "supervising": no input while an AI agent works (counts as work) */
+  activity: "active" | "supervising" | "away";
+  /** Supervising seconds of the current session when main sent this state */
+  supervisingSeconds: number;
+  /** Its [start, end] ISO pairs; an open span ends when main sent this */
+  supervisingSpans: [string, string][];
+  /** Last time an AI agent wrote to its transcript (ISO), or null */
+  agentActiveAt: string | null;
 }
 
 export interface DetectedRepo {
@@ -40,6 +48,10 @@ let state: TrackingState = {
   projectId: null,
   projectSource: "auto",
   detectedRepo: null,
+  activity: "active",
+  supervisingSeconds: 0,
+  supervisingSpans: [],
+  agentActiveAt: null,
 };
 const listeners = new Set<(state: TrackingState) => void>();
 

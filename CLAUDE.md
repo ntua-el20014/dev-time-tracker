@@ -42,13 +42,14 @@ Supabase (RLS enforces per-user / per-org access)
 - The handler files register themselves as an import side effect (`import "./ipc/xHandlers"` in `src/index.ts`). `src/utils/langMap.ts` also registers handlers this way.
 
 ### The tracking engine (`src/tracking/`)
-**The main process owns the recording state.** The renderer and tray only request changes, and render the `tracking-state` broadcast (`{isRecording, isPaused, autoPaused, isIncognito, activeSeconds, startedAt, projectId, projectSource, detectedRepo}`). `projectId` is the project of the current *or next* session: chosen before Start (`set-session-project`, Home's picker), used by every start path (Home, rail, Ctrl+R, tray), kept for the following sessions, preselected in the Stop dialog and used by the timeout/quit auto-saves. It resets on user change; the renderer restores the user's last choice from localStorage (`renderer/sessionProject.ts`). `projectSource` is `"manual"` when the user picked it (kept until that session stops) or `"auto"` (restored or detected); only an `"auto"` choice is replaced by detection (C1, below), and only before Start. On the renderer side, `renderer/trackingControls.ts` mirrors that state and exposes `startTracking`/`stopTracking`/`togglePause`/… Never flip recording state locally.
+**The main process owns the recording state.** The renderer and tray only request changes, and render the `tracking-state` broadcast (`{isRecording, isPaused, autoPaused, isIncognito, activeSeconds, startedAt, projectId, projectSource, detectedRepo, activity, supervisingSeconds, supervisingSpans, agentActiveAt}`). `projectId` is the project of the current *or next* session: chosen before Start (`set-session-project`, Home's picker), used by every start path (Home, rail, Ctrl+R, tray), kept for the following sessions, preselected in the Stop dialog and used by the timeout/quit auto-saves. It resets on user change; the renderer restores the user's last choice from localStorage (`renderer/sessionProject.ts`). `projectSource` is `"manual"` when the user picked it (kept until that session stops) or `"auto"` (restored or detected); only an `"auto"` choice is replaced by detection (C1, below), and only before Start. On the renderer side, `renderer/trackingControls.ts` mirrors that state and exposes `startTracking`/`stopTracking`/`togglePause`/… Never flip recording state locally.
 
 | Module | Role |
 |---|---|
 | `tracker.ts` | Orchestrator with Electron dependencies: tick and flush timers, idle poll, lock/sleep handling, session-info prompt, session save, quit finalization, tracking IPC (`get-tracking-state`, `start/pause/resume/stop-tracking`, `toggle-incognito`). The user ID comes from `setTrackingUser()`, called by `sync-auth-session`, so ticks make no auth network call. On sign-in it also loads the user's saved idle timeout and tracking interval. |
-| `sessionClock.ts` | Pure timing: active seconds excluding pauses, manual vs automatic pause, stop → `{start, end, duration}` |
-| `idlePolicy.ts` | Pure rules: pause when idle ≥ timeout; resume an *automatic* pause when idle < 5s and not locked or suspended |
+| `sessionClock.ts` | Pure timing: active seconds excluding pauses, manual vs automatic pause, supervising spans; a pause may be backdated (spans after it are clipped); stop → `{start, end, duration, supervisingSeconds, supervisingSpans}` |
+| `idlePolicy.ts` | Pure Active / Supervising / Away rules (C4, below): pause when away, backdated; resume an *automatic* pause when idle < 5s and not locked or suspended |
+| `agentHeartbeat.ts` | When an AI agent last wrote a transcript, from mtimes only (no contents): Claude Code `<CLAUDE_CONFIG_DIR or ~/.claude>/projects/*/*.jsonl` (+ `<session>/subagents/*.jsonl`), Codex `<CODEX_HOME or ~/.codex>/sessions/YYYY/MM/DD/*.jsonl` (today, yesterday). Async; between 5-min full scans only new and hot (<2 h) files are stat'ed. Polled every 15 s. |
 | `usageSampler.ts` | Foreground window (x-win) → `{appName, windowTitle, language, languageExtension, icon}`. Matches `execName` against `assets/known_editors.json` plus per-user `custom-apps-<uid>.json`; **unknown apps are dropped**. Language comes from `getLanguageDataFromTitle()` (`src/utils/extractData.ts`). |
 | `workspaceHints.ts` / `repoResolver.ts` / `projectAttribution.ts` | C1, see "Project detection" below. |
 | `usageBatcher.ts` | Buffers ticks; every 60s (and on pause/stop/sign-out/quit) does **one INSERT** into `usage_logs` plus one `update_daily_usage_summary` RPC per (local day, app, language). Network failure → offline queue. Icons are sent once per summary row. The Today tab refreshes on each flush (`window-tracked`). |
@@ -59,6 +60,13 @@ Supabase (RLS enforces per-user / per-org access)
 - `projectAttribution.ts` (pure): current repo (sticky while non-dev windows are focused), repo → project links (active projects only), seconds per repo in the session. `projectToSelect` (before Start, `"auto"` only) and `projectForStoppedSession` (user's pick, else the link of the repo used longest, else the selection) are the whole policy.
 - Links live in `project_repositories` (per user, `UNIQUE(user_id, repo_key)`; RLS: own rows, only to projects the caller can see). IPC in `src/ipc/repoHandlers.ts`: `get-repo-links`, `link-detected-repo` (the renderer only names the project; the repo is main's detection), `unlink-repo`. Links reload on sign-in and when a project is archived/restored (`onProjectsChanged` in `projectHandlers.ts`).
 - UI: Home's timer card shows the detected repo with "Always use <project>" (link) or "Use <project>" (switch); the Stop dialog offers "Always use this project for repo X" when the chosen project differs from the repo's link (checked by default for a first link); Projects cards list linked repos with unlink.
+
+**Activity model (C4)**, evaluated every 2 s, also outside sessions (`activity` in the state):
+- **Active:** input in the last 60 s, or a longer pause without an agent (still under the idle timeout).
+- **Supervising:** no input for ≥ 60 s, but an agent wrote within the last 10 min (`AGENT_RECENT_SECONDS`), for at most 1 h without input (`MAX_SUPERVISING_IDLE_SECONDS`, never below the timeout). The session keeps running; the time goes into supervising spans.
+- **Away:** idle ≥ timeout with no recent agent (lock/sleep pause through their own events, not backdated). The session auto-pauses **backdated** to the last sign of work: the last input, or the agent's last write if later, or the end of the 1-h allowance. So idle time before an auto-pause is no longer counted.
+- Supervising time is part of `duration` and stored as `supervising_seconds` + `supervising_spans`. It is billed unless the project's `bill_supervising` is false: `shared/billing.ts` `billableSecondsOf()` is used by `billableHours.ts`, the invoice handlers (`billed_seconds` per session, used by the PDF) and the Home timeline. Team-analytics SQL still counts full duration.
+- UI: rail "Supervising agent", Home "Supervising an agent", timeline hatches supervising slices and adds "· Xm supervising" to totals, Billing notes the supervising part per project, the project form has "Bill time spent supervising an AI agent".
 
 Flows:
 - **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` with `{projectId}` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" with the chosen project + `session-info-timeout`), then saves with `end_time`. The dialog preselects the project and, if it has an hourly rate, Billable.
@@ -78,7 +86,7 @@ Flows:
 Tables:
 - `organizations`, `user_profiles` (role: admin/manager/employee), `org_join_requests`, `org_invite_codes`
 - `cloud_projects` (scope personal|organization, `hourly_rate`), `project_members`, `project_repositories` (per-user repo → project links, C1)
-- `time_tracking_sessions` (`is_billable` NOT NULL; the trigger derives `duration` from `end_time` only when `duration` is NULL)
+- `time_tracking_sessions` (`is_billable` NOT NULL; the trigger derives `duration` from `end_time` only when `duration` is NULL; `supervising_seconds`/`supervising_spans`, C4)
 - `usage_logs`, `daily_usage_summary`
 - `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_work_sessions`, `scheduled_session_tags`
 - `user_preferences` (theme, accent JSON, editor_colors, notification_settings, idle_timeout_seconds, tracking interval)
@@ -236,7 +244,7 @@ In priority order (cheapest and highest value first):
 
 **Open findings from Phase A**
 - [x] **Updater (resolved):** replaced `electron-updater` (incompatible with Forge's Squirrel output) with Electron's built-in `autoUpdater` and update.electronjs.org (`src/updater.ts`). Windows only, on by default in installed builds. Squirrel install events are handled (`electron-squirrel-startup` in `src/index.ts`). `release.yml` now builds on a Windows runner and uploads RELEASES/.nupkg/Setup.exe; before this, releases had no Windows build at all. Updates reach users only from **published** releases, and the release version must be higher than the installed one.
-- **Idle time before the auto-pause is still counted** (the 5 idle minutes before detection count as work). Decide this together with C4 ("supervising" time).
+- ~~Idle time before the auto-pause is still counted~~ — resolved in C4: the auto-pause is backdated to the last input (or agent activity).
 - **Team-analytics SQL still buckets sessions by UTC day** (`start_time::DATE` in the `get_org_*` functions). Fixing that needs a stored local date or tz per session.
 - `.env.production` is not loaded by the build; only `.env.local` and `.env` are.
 
@@ -283,7 +291,10 @@ In priority order (cheapest and highest value first):
   - Not done: terminal agents whose title has no path (e.g. `claude` in Windows Terminal) — C3's transcripts/process cwd will cover them. Remote (WSL/SSH/container) windows are skipped. Scheduled sessions still don't set `project_id`.
 - [ ] C2 Git stats per session (`session_code_stats`)
 - [ ] C3 Agent source: Claude Code hooks installer plus local receiver; transcript fallback; process detection
-- [ ] C4 Active / Supervising / Away idle model
+- [x] C4 Active / Supervising / Away idle model — done on `phase-c4-supervising` (2026-10-15); see "Activity model" in Part 1.
+  - **DB change:** `cloud_projects.bill_supervising`, `time_tracking_sessions.supervising_seconds`/`supervising_spans` (additive `ALTER TABLE`s; the app fails to save sessions without them).
+  - Judgment calls: the first 60 s without input count as active (reading/thinking); supervising is capped at 1 h without any input so an overnight autonomous run isn't billed; on away, the time after the agent's last write isn't kept even though the 10-min window was used to wait for the user.
+  - The heartbeat is any agent anywhere, not tied to the session's repo; C3 can attribute by cwd. Verified: unit tests (policy, clock spans/backdating, heartbeat on a fake tree, timeline slices, billing), PGlite checks, and a live probe of the packaged app (fake transcript touched every 4 s, real system idle → "Supervising" on rail/Home, hatched slice, session not paused).
 - [ ] C5 Browser URL classification
 - [ ] C6 Dashboard: human vs agent time, lines changed, agent cost per project; agent cost as an optional invoice line item
 
@@ -300,7 +311,7 @@ In priority order (cheapest and highest value first):
 - [x] U3 Home (timer + project picker before Start + timeline) — done on `ui-u3-home` (2026-10-15). Sessions' List / Calendar / Insights already landed in U1.
   - Home top: timer card (`components/HomeTimer.ts`: project picker, Start/Stop, Pause, live clock) and today's timeline (`components/TodayTimeline.ts`, layout in `utils/timelineLayout.ts` with tests; bars colored by project, running session striped and growing, totals tracked/billable). Then goal, Daily Summary, earnings, calendar widget, stats, App activity.
   - One ticking clock for rail and Home (`renderer/liveClock.ts`).
-  - Remaining for C4: show the supervising slice on the timeline. (The C1 prefill is done.) Scheduled sessions have a `project_id` column the calendar UI never sets — starting a scheduled session could select its project.
+  - The C1 prefill and the C4 supervising slice are done. Scheduled sessions have a `project_id` column the calendar UI never sets — starting a scheduled session could select its project.
 
 **Phase D — later / optional**
 - [ ] Always-on auto-segmentation with the review inbox

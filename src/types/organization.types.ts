@@ -53,6 +53,8 @@ export interface CloudProject {
   description?: string | null;
   color: string;
   hourly_rate?: number | null;
+  /** Bill time spent supervising an AI agent (default true) */
+  bill_supervising?: boolean;
   scope: "personal" | "organization";
   is_active: boolean;
   /** Set by archive_project(); archived projects also have is_active false */
@@ -96,6 +98,7 @@ export interface CreateCloudProjectData {
   description?: string | null;
   color?: string;
   hourly_rate?: number | null;
+  bill_supervising?: boolean;
   scope?: "personal" | "organization";
   manager_id?: string;
   org_id?: string | null;
@@ -106,6 +109,7 @@ export interface UpdateCloudProjectData {
   description?: string | null;
   color?: string;
   hourly_rate?: number | null;
+  bill_supervising?: boolean;
   scope?: "personal" | "organization";
   is_active?: boolean;
   manager_id?: string;

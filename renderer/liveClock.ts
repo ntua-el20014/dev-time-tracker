@@ -30,6 +30,14 @@ export function currentSeconds(): number {
   return baseSeconds + extra;
 }
 
+/** Supervising seconds of the current session right now. */
+export function currentSupervisingSeconds(): number {
+  if (!state?.isRecording) return 0;
+  const supervising = running() && state.activity === "supervising";
+  const extra = supervising ? Math.floor((Date.now() - baseAt) / 1000) : 0;
+  return (state.supervisingSeconds ?? 0) + extra;
+}
+
 function emit() {
   if (!state) return;
   const seconds = currentSeconds();

@@ -20,7 +20,7 @@ import os from "os";
 import { BrowserWindow } from "electron";
 import { CONFIG_DIR } from "../../shared/constants";
 import { logUsage } from "../supabase/usageLogs";
-import { addSession } from "../supabase/timeTracking";
+import { addSession, type SupervisingTime } from "../supabase/timeTracking";
 import { supabase } from "../supabase/config";
 import { logError, classifyError } from "./errorHandler";
 
@@ -61,6 +61,7 @@ export interface QueuedSession {
     isBillable: boolean;
     /** Wall-clock end (absent on items queued by older versions) */
     endTime?: string;
+    supervising?: SupervisingTime;
   };
 }
 
@@ -220,6 +221,7 @@ export function enqueueSession(
   projectId?: string,
   isBillable: boolean = false,
   endTime?: string,
+  supervising?: SupervisingTime,
 ): void {
   const key = `session:${userId}:${startTime}`;
   if (keySet.has(key)) return; // duplicate
@@ -238,6 +240,7 @@ export function enqueueSession(
       projectId,
       isBillable,
       endTime,
+      supervising,
     },
   };
 
@@ -310,6 +313,7 @@ export async function flush(): Promise<number> {
           d.projectId,
           d.isBillable,
           d.endTime,
+          d.supervising,
         );
       }
 

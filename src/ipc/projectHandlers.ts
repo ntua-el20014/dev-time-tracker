@@ -32,6 +32,7 @@ ipcMain.handle(
     color: string,
     hourlyRate?: number | null,
     scope: "personal" | "organization" = "personal",
+    billSupervising?: unknown,
   ) => {
     try {
       const user = await getCurrentUser();
@@ -46,6 +47,9 @@ ipcMain.handle(
         hourly_rate: hourlyRate ?? null,
         scope: scope === "organization" ? "organization" : "personal",
       };
+      if (typeof billSupervising === "boolean") {
+        projectData.bill_supervising = billSupervising;
+      }
       if (projectData.scope === "organization") {
         const org = await getCurrentOrganization(user.id);
         if (!org) throw new Error("Not in an organization");
@@ -209,6 +213,7 @@ ipcMain.handle(
     description: string,
     color: string,
     hourlyRate?: number | null,
+    billSupervising?: unknown,
   ) => {
     try {
       const projectId = String(id);
@@ -218,6 +223,9 @@ ipcMain.handle(
         color,
         hourly_rate: hourlyRate ?? null,
       };
+      if (typeof billSupervising === "boolean") {
+        updates.bill_supervising = billSupervising;
+      }
 
       return await cloudProjects.updateCloudProject(projectId, updates);
     } catch (err) {

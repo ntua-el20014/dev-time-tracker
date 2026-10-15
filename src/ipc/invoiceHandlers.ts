@@ -2,6 +2,37 @@ import { ipcMain } from "electron";
 import { getCurrentUser } from "../supabase/api";
 import { supabase } from "../supabase/client";
 import { localDayStartISO, localDayEndISO } from "../utils/timeFormat";
+import { billableSecondsOf } from "../../shared/billing";
+
+/**
+ * Adds billed_seconds to each session: its duration, minus supervising time
+ * for projects that don't bill it.
+ */
+async function withBilledSeconds<
+  T extends { project_id?: string | null; duration?: number | null },
+>(sessions: T[]): Promise<(T & { billed_seconds: number })[]> {
+  const projectIds = [
+    ...new Set(sessions.map((s) => s.project_id).filter(Boolean)),
+  ] as string[];
+  const unbilled = new Set<string>();
+  if (projectIds.length > 0) {
+    const { data, error } = await supabase
+      .from("cloud_projects")
+      .select("id, bill_supervising")
+      .in("id", projectIds);
+    if (error) throw error;
+    for (const p of data || []) {
+      if ((p as any).bill_supervising === false) unbilled.add((p as any).id);
+    }
+  }
+  return sessions.map((s) => ({
+    ...s,
+    billed_seconds: billableSecondsOf(
+      s,
+      !(s.project_id && unbilled.has(s.project_id)),
+    ),
+  }));
+}
 
 // Get billable sessions for projects in a date range
 ipcMain.handle(
@@ -45,7 +76,7 @@ ipcMain.handle(
       });
 
       if (error) throw error;
-      return data || [];
+      return await withBilledSeconds(data || []);
     } catch (error) {
       console.error("Error fetching billable sessions:", error);
       throw error;
@@ -95,7 +126,9 @@ ipcMain.handle(
       // Get user's sessions grouped by project
       const { data: sessions, error: sessionsError } = await supabase
         .from("time_tracking_sessions")
-        .select("id, project_id, duration, start_time, description")
+        .select(
+          "id, project_id, duration, supervising_seconds, start_time, description",
+        )
         .eq("user_id", user.id)
         .eq("is_billable", true)
         .gte("start_time", localDayStartISO(startDate))
@@ -105,7 +138,7 @@ ipcMain.handle(
 
       // Group sessions by project_id
       const sessionsByProject = new Map<string, any[]>();
-      (sessions || []).forEach((session: any) => {
+      (await withBilledSeconds(sessions || [])).forEach((session: any) => {
         if (!sessionsByProject.has(session.project_id)) {
           sessionsByProject.set(session.project_id, []);
         }

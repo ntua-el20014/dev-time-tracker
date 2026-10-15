@@ -1,4 +1,5 @@
 import { supabase } from "./config";
+import { billableSecondsOf } from "../../shared/billing";
 import {
   getLocalDateString,
   localDayStartISO,
@@ -14,6 +15,9 @@ export interface BillableHoursSummary {
   billableSeconds: number;
   billableSessions: number;
   earnings: number; // hourly_rate * billable_hours
+  /** Supervising time in these sessions (billed only if billSupervising) */
+  supervisingSeconds: number;
+  billSupervising: boolean;
 }
 
 /** Billable sessions with no project: no rate, so no earnings. */
@@ -44,7 +48,7 @@ export async function getProjectBillableHours(
   // Get project details
   const { data: projectData, error: projectError } = await supabase
     .from("cloud_projects")
-    .select("id, name, color, hourly_rate")
+    .select("id, name, color, hourly_rate, bill_supervising")
     .eq("id", projectId)
     .single();
 
@@ -55,7 +59,7 @@ export async function getProjectBillableHours(
   // Get billable sessions for this project
   const { data: sessions, error: sessionsError } = await supabase
     .from("time_tracking_sessions")
-    .select("duration, is_billable")
+    .select("duration, is_billable, supervising_seconds")
     .eq("project_id", projectId)
     .eq("is_billable", true);
 
@@ -63,8 +67,13 @@ export async function getProjectBillableHours(
     throw sessionsError;
   }
 
+  const billSupervising = (projectData as any).bill_supervising !== false;
   const billableSeconds = (sessions || []).reduce(
-    (sum, s) => sum + (s.duration || 0),
+    (sum, s) => sum + billableSecondsOf(s, billSupervising),
+    0,
+  );
+  const supervisingSeconds = (sessions || []).reduce(
+    (sum, s) => sum + ((s as any).supervising_seconds || 0),
     0,
   );
   const billableHours = billableSeconds / 3600;
@@ -80,6 +89,8 @@ export async function getProjectBillableHours(
     billableSeconds,
     billableSessions: sessions?.length || 0,
     earnings: Math.round(earnings * 100) / 100, // 2 decimal places
+    supervisingSeconds,
+    billSupervising,
   };
 }
 
@@ -103,7 +114,7 @@ export async function getUserEarningsSummary(
   // Get all billable sessions for this user in the date range
   let query = supabase
     .from("time_tracking_sessions")
-    .select("id, project_id, duration, is_billable, start_time");
+    .select("id, project_id, duration, is_billable, start_time, supervising_seconds");
 
   query = query
     .eq("user_id", userId)
@@ -120,7 +131,7 @@ export async function getUserEarningsSummary(
   // Get all projects with hourly rates
   const { data: projects, error: projectsError } = await supabase
     .from("cloud_projects")
-    .select("id, name, color, hourly_rate");
+    .select("id, name, color, hourly_rate, bill_supervising");
 
   if (projectsError) {
     throw projectsError;
@@ -160,12 +171,18 @@ export async function getUserEarningsSummary(
         billableSeconds: 0,
         billableSessions: 0,
         earnings: 0,
+        supervisingSeconds: 0,
+        billSupervising: (project as any).bill_supervising !== false,
       };
     }
 
-    const duration = (session as any).duration || 0;
-    byProject[projectId].billableSeconds += duration;
-    byProject[projectId].billableSessions += 1;
+    const summary = byProject[projectId];
+    summary.billableSeconds += billableSecondsOf(
+      session as any,
+      summary.billSupervising,
+    );
+    summary.supervisingSeconds += (session as any).supervising_seconds || 0;
+    summary.billableSessions += 1;
   }
 
   // Calculate billable hours and earnings

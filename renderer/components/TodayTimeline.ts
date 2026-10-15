@@ -1,12 +1,18 @@
 /**
  * Home's "Today" timeline: today's sessions as bars on the day, colored by
- * project, with the running session growing live.
+ * project, with the running session growing live. Time spent supervising an
+ * AI agent is hatched over the bars.
  */
 import { escapeHtml } from "../utils/domUtils";
 import { safeIpcInvoke } from "../utils/ipcHelpers";
 import { getLocalDateString } from "../../src/utils/timeFormat";
 import { getTrackingState, onTrackingState } from "../trackingControls";
-import { currentSeconds, onClockTick } from "../liveClock";
+import {
+  currentSeconds,
+  currentSupervisingSeconds,
+  onClockTick,
+} from "../liveClock";
+import { billableSecondsOf } from "../../shared/billing";
 import {
   layoutTimeline,
   type TimelineSession,
@@ -14,6 +20,9 @@ import {
 import type { SessionRow } from "../../shared/types";
 
 type SessionWithEnd = SessionRow & { end_time?: string | null };
+
+const toSpans = (spans: [string, string][] | null | undefined) =>
+  (spans ?? []).map(([a, b]) => ({ start: new Date(a), end: new Date(b) }));
 
 let todaysSessions: TimelineSession[] = [];
 let projectNames = new Map<string, { name: string; color?: string | null }>();
@@ -48,6 +57,9 @@ function toTimeline(s: SessionWithEnd): TimelineSession {
     projectName: s.project_name ?? null,
     color: s.project_color ?? null,
     billable: s.is_billable,
+    billedSeconds: billableSecondsOf(s, s.project_bill_supervising),
+    supervisingSeconds: s.supervising_seconds || 0,
+    supervisingSpans: toSpans(s.supervising_spans),
   };
 }
 
@@ -55,6 +67,10 @@ function runningSession(): TimelineSession | null {
   const state = getTrackingState();
   if (!state.isRecording || !state.startedAt) return null;
   const project = state.projectId ? projectNames.get(state.projectId) : undefined;
+  const spans = toSpans(state.supervisingSpans);
+  // The open span keeps growing until main reports otherwise
+  const last = spans[spans.length - 1];
+  if (last && state.activity === "supervising" && !state.isPaused) last.end = new Date();
   return {
     id: "running",
     title: "Current session",
@@ -63,11 +79,16 @@ function runningSession(): TimelineSession | null {
     duration: currentSeconds(),
     projectName: project?.name ?? null,
     color: project?.color ?? null,
+    supervisingSeconds: currentSupervisingSeconds(),
+    supervisingSpans: spans,
     running: true,
   };
 }
 
-/** "2h 05m tracked · 1h 30m billable", counting the running session live. */
+/**
+ * "2h 05m tracked · 1h 30m billable · 25m supervising", counting the running
+ * session live.
+ */
 function drawTotals() {
   const totals = document.querySelector("#homeTimeline .timeline-totals");
   if (!totals) return;
@@ -75,11 +96,16 @@ function drawTotals() {
   const running = state.isRecording ? currentSeconds() : 0;
   const tracked = todaysSessions.reduce((sum, s) => sum + s.duration, 0) + running;
   const billable = todaysSessions.reduce(
-    (sum, s) => sum + (s.billable ? s.duration : 0),
+    (sum, s) => sum + (s.billable ? (s.billedSeconds ?? s.duration) : 0),
     0,
   );
+  const supervising =
+    todaysSessions.reduce((sum, s) => sum + (s.supervisingSeconds || 0), 0) +
+    (state.isRecording ? currentSupervisingSeconds() : 0);
   totals.textContent = tracked
-    ? `${hm(tracked)} tracked · ${hm(billable)} billable`
+    ? `${hm(tracked)} tracked · ${hm(billable)} billable${
+        supervising ? ` · ${hm(supervising)} supervising` : ""
+      }`
     : "Nothing tracked yet today";
 }
 
@@ -112,6 +138,7 @@ function draw() {
             s.projectName || "No project",
             `${clock(start)}–${s.running ? "now" : clock(end)}`,
             hm(s.duration),
+            s.supervisingSeconds ? `${hm(s.supervisingSeconds)} supervising an agent` : "",
             s.billable ? "billable" : "",
           ]
             .filter(Boolean)
@@ -120,6 +147,12 @@ function draw() {
             style="left:${left}%;width:${width}%;${s.color ? `background:${escapeHtml(s.color)};` : ""}"
             title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"></div>`;
         })
+        .join("")}
+      ${layout.supervising
+        .map(
+          (sv) =>
+            `<div class="today-supervising" style="left:${sv.left}%;width:${sv.width}%" aria-hidden="true"></div>`,
+        )
         .join("")}
     </div>
   `;

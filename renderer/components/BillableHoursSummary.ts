@@ -14,6 +14,23 @@ interface BillableHoursSummary {
   billableSeconds: number;
   billableSessions: number;
   earnings: number;
+  /** Supervising (AI agent) time in these sessions */
+  supervisingSeconds?: number;
+  billSupervising?: boolean;
+}
+
+/** "incl. 25m supervising" or "+ 25m supervising, not billed" under the hours. */
+function supervisingNote(p: BillableHoursSummary): string {
+  const seconds = p.supervisingSeconds ?? 0;
+  if (seconds < 60) return "";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const span = h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
+  const text =
+    p.billSupervising === false
+      ? `+ ${span} supervising an agent, not billed`
+      : `incl. ${span} supervising an agent`;
+  return `<div class="billable-supervising-note">${escapeHtml(text)}</div>`;
 }
 
 interface EarningsSummary {
@@ -138,7 +155,7 @@ function renderBillableHoursMarkup(
                   <td>
                     ${project.hourlyRate != null ? `$${project.hourlyRate.toFixed(2)}/h` : "No rate"}
                   </td>
-                  <td>${project.billableHours.toFixed(1)}h</td>
+                  <td>${project.billableHours.toFixed(1)}h${supervisingNote(project)}</td>
                   <td>${project.billableSessions}</td>
                   <td class="earnings-value">$${project.earnings.toFixed(2)}</td>
                   <td>

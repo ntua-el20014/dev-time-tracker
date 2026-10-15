@@ -34,8 +34,8 @@ let projects: PickerProject[] = [];
 
 function statusText(state: TrackingState): string {
   if (!state.isRecording) return "Ready";
-  if (state.isPaused) return state.autoPaused ? "Paused — you were idle" : "Paused";
-  return "Recording";
+  if (state.isPaused) return state.autoPaused ? "Paused — you were away" : "Paused";
+  return state.activity === "supervising" ? "Supervising an agent" : "Recording";
 }
 
 function projectLabel(id: string | null): string {
