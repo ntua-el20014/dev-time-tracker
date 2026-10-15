@@ -21,6 +21,7 @@ import {
   linkedProjectFor,
   onRepoLinksChanged,
   resolveRepoForDir,
+  send,
 } from "./tracker";
 import {
   assignAgentSessionsProject,
@@ -131,6 +132,8 @@ export async function runAgentIngest(): Promise<void> {
   try {
     lastResult = await ingestFor(uid).run();
     lastRunAt = new Date().toISOString();
+    // Pages that show agent numbers (Projects) are stale now
+    if (lastResult.uploaded > 0) send("agent-sessions-synced");
     const err = lastResult.error;
     if (err && classifyError(err) !== "network") logError("agentIngest", err);
   } catch (err) {

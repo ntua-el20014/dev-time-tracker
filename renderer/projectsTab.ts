@@ -20,6 +20,13 @@ import {
 } from "./utils";
 import { showInAppNotification, showConfirmationModal } from "./components";
 import { isNavItemVisible, markTabsDirty } from "./navigation";
+import { getLocalDateString } from "../src/utils/timeFormat";
+import {
+  formatAgentSummary,
+  summarizeAgentSessionsByProject,
+  type AgentSessionLike,
+  type ProjectAgentSummary,
+} from "./utils/agentSummary";
 import type {
   CloudProjectWithManager,
   ProjectMemberWithUser,
@@ -32,6 +39,9 @@ type Role = "admin" | "manager" | "employee";
 
 let projects: Project[] = [];
 let repoLinks: RepoLink[] = [];
+/** AI agent time and cost per project, last 30 days (C3 data) */
+let agentSummaries = new Map<string, ProjectAgentSummary>();
+const AGENT_WINDOW_DAYS = 30;
 let role: Role = "employee";
 let me = "";
 let showArchived = false;
@@ -76,13 +86,22 @@ export async function renderProjects() {
   await withLoading(container, "Loading projects…", async () => {
     me = getCurrentUserIdSafe() ?? "";
     role = (await getCurrentUserRole()) as Role;
-    [projects, repoLinks] = await Promise.all([
+    const today = new Date();
+    const from = new Date(today.getTime() - (AGENT_WINDOW_DAYS - 1) * 86_400_000);
+    let agentSessions: AgentSessionLike[];
+    [projects, repoLinks, agentSessions] = await Promise.all([
       safeIpcInvoke<Project[]>("get-all-projects-with-members", [], { fallback: [] }),
       safeIpcInvoke<RepoLink[]>("get-repo-links", [], {
         fallback: [],
         showNotification: false,
       }),
+      safeIpcInvoke<AgentSessionLike[]>(
+        "get-agent-sessions",
+        [{ startDate: getLocalDateString(from), endDate: getLocalDateString(today) }],
+        { fallback: [], showNotification: false },
+      ),
     ]);
+    agentSummaries = summarizeAgentSessionsByProject(agentSessions ?? []);
   });
 
   const active = projects.filter((p) => !isArchived(p));
@@ -194,6 +213,14 @@ function renderCard(p: Project): string {
             <span class="meta-label">Agent supervising:</span>
             <span class="meta-value">${p.bill_supervising === false ? "Not billed" : "Billed"}</span>
           </div>
+          ${
+            agentSummaries.has(p.id)
+              ? `<div class="project-meta-item" title="Claude Code / Codex sessions in this project's linked repos, last ${AGENT_WINDOW_DAYS} days; cost as reported by the agent">
+                   <span class="meta-label">AI agents (${AGENT_WINDOW_DAYS} d):</span>
+                   <span class="meta-value">${escapeHtml(formatAgentSummary(agentSummaries.get(p.id)!))}</span>
+                 </div>`
+              : ""
+          }
           <div class="project-meta-item">
             <span class="meta-label">Repos:</span>
             <span class="meta-value">${renderRepoLinks(p)}</span>

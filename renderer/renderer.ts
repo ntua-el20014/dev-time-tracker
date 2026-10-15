@@ -160,6 +160,10 @@ ipcRenderer.on("session-saved", () => {
   refreshPages("dashboard", "summary", "projects", "billing", "teamAnalytics");
 });
 
+// New AI agent sessions were uploaded (about once a minute while an agent
+// works): re-render Projects on its next visit rather than under the user
+ipcRenderer.on("agent-sessions-synced", () => markTabsDirty("projects"));
+
 function initUI() {
   initTheme();
 

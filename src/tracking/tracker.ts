@@ -128,7 +128,7 @@ let systemSuspended = false;
 let currentUserId: string | null = null;
 const stateListeners = new Set<(state: TrackingState) => void>();
 
-function send(channel: string, payload?: unknown) {
+export function send(channel: string, payload?: unknown) {
   const win = getWindow();
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }

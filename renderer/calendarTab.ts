@@ -1,5 +1,6 @@
 import { ScheduledSession } from "../shared/types";
 import { getTrackingState, startTracking } from "./trackingControls";
+import { chooseProject } from "./sessionProject";
 import { escapeHtml } from "./utils/domUtils";
 import { safeIpcInvoke, withLoading } from "./utils";
 import { showInAppNotification, showConfirmationModal } from "./components";
@@ -7,6 +8,17 @@ import { showInAppNotification, showConfirmationModal } from "./components";
 // eslint-disable-next-line prefer-const
 let currentDate = new Date(); // Needs to be mutable for month navigation
 let scheduledSessions: ScheduledSession[] = [];
+/** Active projects, for the schedule form and the details view */
+let projectNames = new Map<string, string>();
+
+async function loadProjects() {
+  const projects = await safeIpcInvoke<{ id: string; name: string }[]>(
+    "get-projects-for-user",
+    [],
+    { fallback: [], showNotification: false },
+  );
+  projectNames = new Map((projects ?? []).map((p) => [p.id, p.name]));
+}
 let calendarListenerAttached = false;
 
 function formatLocalDateInput(date: Date): string {
@@ -28,7 +40,7 @@ export async function renderCalendar() {
 
   // Load scheduled sessions for current month (with loading indicator)
   await withLoading(calendarContainer, "Loading calendar…", async () => {
-    await loadScheduledSessions();
+    await Promise.all([loadScheduledSessions(), loadProjects()]);
   });
 
   calendarContainer.innerHTML = `
@@ -200,8 +212,13 @@ function renderUpcomingSessions(): string {
             : ""
         }
         ${
-          session.estimated_duration
-            ? `<div class="session-duration">Estimated: ${session.estimated_duration} minutes</div>`
+          session.project_id && projectNames.has(session.project_id)
+            ? `<div class="session-project">Project: ${escapeHtml(projectNames.get(session.project_id)!)}</div>`
+            : ""
+        }
+        ${
+          session.estimated_duration_minutes
+            ? `<div class="session-duration">Estimated: ${session.estimated_duration_minutes} minutes</div>`
             : ""
         }
         ${
@@ -209,7 +226,7 @@ function renderUpcomingSessions(): string {
             ? `
           <div class="session-tags">
             ${session.tags
-              .map((tag) => `<span class="tag">${tag}</span>`)
+              .map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`)
               .join("")}
           </div>
         `
@@ -378,6 +395,16 @@ function showScheduleSessionModal(selectedDate?: Date) {
             <label for="session-description">Description</label><br>
             <textarea id="session-description" placeholder="Optional description..."></textarea>
           </div>
+
+          <div style="margin-bottom: 15px;">
+            <label for="session-project">Project</label><br>
+            <select id="session-project">
+              <option value="">No project</option>
+              ${[...projectNames]
+                .map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`)
+                .join("")}
+            </select>
+          </div>
           
           <div style="display: flex; gap: 10px; margin-bottom: 15px;">
             <div style="flex: 1;">
@@ -502,6 +529,9 @@ async function handleScheduleSessionSubmit() {
   const estimatedDuration = (
     document.getElementById("estimated-duration") as HTMLInputElement
   ).value;
+  const projectId =
+    (document.getElementById("session-project") as HTMLSelectElement | null)
+      ?.value || null;
   const tagsInput = (
     document.getElementById("session-tags") as HTMLInputElement
   ).value.trim();
@@ -559,9 +589,10 @@ async function handleScheduleSessionSubmit() {
     title,
     description: description || undefined,
     scheduled_datetime,
-    estimated_duration: estimatedDuration
+    estimated_duration_minutes: estimatedDuration
       ? parseInt(estimatedDuration)
       : undefined,
+    project_id: projectId,
     recurrence_type: isRecurring ? "weekly" : "none",
     recurrence_data: isRecurring
       ? {
@@ -628,13 +659,18 @@ async function showSessionDetailsModal(sessionId: string | number) {
             minute: "2-digit",
           })}</p>
           ${
-            session.estimated_duration
-              ? `<p><strong>Estimated Duration:</strong> ${session.estimated_duration} minutes</p>`
+            session.project_id
+              ? `<p><strong>Project:</strong> ${escapeHtml(projectNames.get(session.project_id) ?? "(archived or not visible)")}</p>`
+              : ""
+          }
+          ${
+            session.estimated_duration_minutes
+              ? `<p><strong>Estimated Duration:</strong> ${session.estimated_duration_minutes} minutes</p>`
               : ""
           }
           ${
             session.tags && session.tags.length > 0
-              ? `<p><strong>Tags:</strong> ${session.tags.join(", ")}</p>`
+              ? `<p><strong>Tags:</strong> ${escapeHtml(session.tags.join(", "))}</p>`
               : ""
           }
           <p><strong>Status:</strong> ${session.status}</p>
@@ -746,6 +782,11 @@ async function startSession(
   }
 
   try {
+    // A planned project becomes this session's project (an archived one
+    // isn't offered any more, so it's skipped)
+    if (session.project_id && projectNames.has(session.project_id)) {
+      await chooseProject(session.project_id);
+    }
     await startTracking();
   } catch {
     showInAppNotification("Could not start tracking. Please try again.");

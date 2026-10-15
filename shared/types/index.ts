@@ -95,7 +95,12 @@ export interface ScheduledSession {
   title: string;
   description?: string;
   scheduled_datetime: string; // ISO datetime string
-  estimated_duration?: number; // in minutes
+  /** Minutes (the database column) */
+  estimated_duration_minutes?: number | null;
+  /** @deprecated never stored; use estimated_duration_minutes */
+  estimated_duration?: number;
+  /** Project the session is planned for; selected when it is started */
+  project_id?: string | null;
   recurrence_type: "none" | "weekly";
   recurrence_data?: RecurrenceData;
   status: "pending" | "notified" | "completed" | "missed" | "cancelled";

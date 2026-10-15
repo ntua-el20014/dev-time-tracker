@@ -295,7 +295,7 @@ In priority order (cheapest and highest value first):
   - **DB change:** `project_repositories` (table, policy, trigger, index) is in `schema.sql`. Existing databases need just that part applied (it is additive, no reset needed); until then links fail quietly and nothing is suggested.
   - **Fixed on the way — shipped builds recorded no usage at all:** `editors.ts` read `assets/known_editors.json` from `app.getAppPath()`, which isn't in the package, so every app was "unknown" in installed builds (it only worked under `npm start`). The list is now bundled by webpack. Also: `app.getPath("appData")` can throw (seen with an isolated `USERPROFILE`); detection falls back to `%APPDATA%`/`~/Library/Application Support`/`~/.config`.
   - Verified: unit tests (hints, resolver on a fake tree, attribution policy, IPC), PGlite checks for the table's RLS, e2e unchanged and green, and a live probe of the packaged app signed in (VS Code untitled multi-root workspace → `github.com/ntua-el20014/dev-time-tracker`; Home hint; Stop dialog offers the link; session saved under the picked project). The link round trip against live Supabase waits for the table.
-  - Not done: terminal agents whose title has no path (e.g. `claude` in Windows Terminal) — C3's transcripts/process cwd will cover them. Remote (WSL/SSH/container) windows are skipped. Scheduled sessions still don't set `project_id`.
+  - Not done: terminal agents whose title has no path (e.g. `claude` in Windows Terminal) — C3's transcripts/process cwd will cover them. Remote (WSL/SSH/container) windows are skipped.
 - [ ] C2 Git stats per session (`session_code_stats`)
 - [ ] C3 Agent source: Claude Code hooks installer plus local receiver; transcript fallback; process detection
   - [x] Passive part (transcripts) — done on `phase-c3-agents` (2026-10-15); see "Agent sessions" in Part 1. **DB change:** `agent_sessions` (table, triggers, RLS, indexes; additive). Process detection skipped (see Part 1).
@@ -320,7 +320,10 @@ In priority order (cheapest and highest value first):
 - [x] U3 Home (timer + project picker before Start + timeline) — done on `ui-u3-home` (2026-10-15). Sessions' List / Calendar / Insights already landed in U1.
   - Home top: timer card (`components/HomeTimer.ts`: project picker, Start/Stop, Pause, live clock) and today's timeline (`components/TodayTimeline.ts`, layout in `utils/timelineLayout.ts` with tests; bars colored by project, running session striped and growing, totals tracked/billable). Then goal, Daily Summary, earnings, calendar widget, stats, App activity.
   - One ticking clock for rail and Home (`renderer/liveClock.ts`).
-  - The C1 prefill and the C4 supervising slice are done. Scheduled sessions have a `project_id` column the calendar UI never sets — starting a scheduled session could select its project.
+  - The C1 prefill and the C4 supervising slice are done.
+- [x] Small follow-ups (2026-10-15, branch `small-sched-project-agent-cards`):
+  - Scheduled sessions have a project (schedule form picker; shown in the list and details). Starting one selects its project as a manual pick. `create/update-scheduled-session` only accept a project the user can see and never take `org_id` from the renderer (scheduled-session RLS doesn't check the project). Fixed on the way: the duration estimate was never saved (the form sent `estimated_duration`, the column is `estimated_duration_minutes`), and tag names went into the calendar HTML unescaped.
+  - Project cards show "AI agents (30 d): time · reported cost · sessions" from `agent_sessions` (`renderer/utils/agentSummary.ts`; "+" when some sessions have no reported cost yet). Main sends `agent-sessions-synced` after an upload, which marks Projects dirty.
 
 **Phase D — later / optional**
 - [ ] Always-on auto-segmentation with the review inbox

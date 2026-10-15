@@ -3,6 +3,27 @@ import * as scheduledSessions from "../supabase/scheduledSessions";
 import { getCurrentUser } from "../supabase/api";
 import type { ScheduledSessionData } from "../supabase/scheduledSessions";
 import { logError } from "../utils/errorHandler";
+import { getCloudProjectById } from "../supabase/cloudProjects";
+
+/**
+ * The project a scheduled session may be filed under: one the user can see
+ * (RLS on the lookup), or none. org_id is never taken from the renderer.
+ */
+async function sanitizeProject<T extends Partial<ScheduledSessionData>>(
+  data: T,
+): Promise<T> {
+  const rest = { ...data };
+  delete rest.org_id;
+  if (!("project_id" in data)) return rest;
+  const projectId =
+    typeof data.project_id === "string" && data.project_id
+      ? data.project_id
+      : null;
+  if (projectId && !(await getCloudProjectById(projectId))) {
+    throw new Error("Project not found");
+  }
+  return { ...rest, project_id: projectId } as T;
+}
 
 /**
  * Create a new scheduled session.
@@ -11,13 +32,14 @@ import { logError } from "../utils/errorHandler";
  */
 ipcMain.handle(
   "create-scheduled-session",
-  async (_event, scheduledSession: ScheduledSessionData) => {
+  async (_event, input: ScheduledSessionData) => {
     try {
       // Get current authenticated user
       const user = await getCurrentUser();
       if (!user) {
         throw new Error("User not authenticated");
       }
+      const scheduledSession = await sanitizeProject(input);
 
       // Handle weekly recurrence: create multiple sessions
       if (
@@ -144,7 +166,10 @@ ipcMain.handle(
       }
 
       const sessionId = String(id);
-      await scheduledSessions.updateScheduledSession(sessionId, updates);
+      await scheduledSessions.updateScheduledSession(
+        sessionId,
+        await sanitizeProject(updates ?? {}),
+      );
       return true;
     } catch (err) {
       logError("update-scheduled-session", err);
