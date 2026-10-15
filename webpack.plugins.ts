@@ -9,8 +9,16 @@ import { version } from "./package.json";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ForkTsCheckerWebpackPlugin: typeof IForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
 
-// Real env vars win, then .env.local, then .env (dotenv never overwrites).
+// Real env vars win, then .env.local, then .env.production (only for
+// `electron-forge package/make/publish`, i.e. shipped builds), then .env.
+// dotenv never overwrites a value that is already set.
+const isReleaseBuild = process.argv.some((arg) =>
+  ["package", "make", "publish"].includes(arg),
+);
 dotenv.config({ path: path.resolve(__dirname, ".env.local") });
+if (isReleaseBuild) {
+  dotenv.config({ path: path.resolve(__dirname, ".env.production") });
+}
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 /**

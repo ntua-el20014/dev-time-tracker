@@ -1,20 +1,19 @@
 import { showModal } from "./Modals";
 import { showInAppNotification } from "./Notifications";
 import {
+  getAuthUser,
   signInWithEmail,
   signUpWithEmail,
-  getCurrentSession,
   resetPasswordForEmail,
   resendVerificationEmail,
-} from "../../src/supabase/api";
+  type AuthSession,
+} from "../auth";
+import { escapeHtml } from "../utils/domUtils";
 import {
   validatePassword,
   attachPasswordStrengthIndicator,
 } from "../utils/passwordValidator";
-import {
-  signInWithGitHubElectron,
-  initializeOAuthListener,
-} from "../utils/oauthHandler";
+import { signInWithGitHubElectron } from "../utils/oauthHandler";
 
 interface AuthFormData {
   email: string;
@@ -27,28 +26,17 @@ interface AuthFormData {
  */
 export async function renderLandingPage(
   container: HTMLElement,
-  onAuthSuccess?: (session: any) => void,
+  onAuthSuccess?: (session: AuthSession) => void,
 ) {
-  // Initialize OAuth listener for callback handling
-  if (onAuthSuccess) {
-    initializeOAuthListener(onAuthSuccess);
-  }
-
-  // Check for existing session
+  // Already signed in (main owns the session): go straight to the app
   try {
-    const session = await getCurrentSession();
-    if (session && onAuthSuccess) {
-      onAuthSuccess(session);
+    const user = await getAuthUser();
+    if (user && onAuthSuccess) {
+      onAuthSuccess({ user });
       return;
     }
-  } catch (error: any) {
-    // Session check failed, continue with normal auth flow
-    // If it's a fetch error, show a warning
-    if (error.message && error.message.includes("fetch")) {
-      showInAppNotification(
-        "Warning: Unable to connect to authentication service. Using offline mode.",
-      );
-    }
+  } catch {
+    // Main didn't answer; show the sign-in options
   }
 
   container.innerHTML = `
@@ -249,18 +237,16 @@ async function showAuthModal(
         }
 
         if (type === "login") {
-          const result = await signInWithEmail(
+          const session = await signInWithEmail(
             authData.email,
             authData.password,
           );
 
           // Store user ID in localStorage
-          if (result.session?.user?.id) {
-            localStorage.setItem("currentUserId", result.session.user.id);
-          }
+          localStorage.setItem("currentUserId", session.user.id);
 
           if (onSuccess) {
-            onSuccess(result.session);
+            onSuccess(session);
           }
 
           showInAppNotification("Successfully logged in!");
@@ -351,7 +337,7 @@ function showEmailVerificationPrompt(email: string) {
           container.style.cssText =
             "text-align: center; padding: 10px 0; line-height: 1.6;";
           container.innerHTML = `
-            <p style="margin-bottom: 12px;">Your email address <strong>${email}</strong> has not been verified yet.</p>
+            <p style="margin-bottom: 12px;">Your email address <strong>${escapeHtml(email)}</strong> has not been verified yet.</p>
             <p style="margin-bottom: 16px; color: var(--text-secondary);">Please check your inbox (and spam folder) for the verification link.</p>
           `;
 
@@ -435,5 +421,3 @@ function getAuthErrorMessage(error: any): string {
   return error.message || "Authentication failed";
 }
 
-// Export helper functions for main app
-export { checkAuthStatus, onAuthStateChange } from "../../src/supabase/api";

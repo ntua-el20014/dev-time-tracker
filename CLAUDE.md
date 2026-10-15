@@ -29,7 +29,8 @@ renderer/  (UI — contextIsolation, sandbox, NO Node access)
    │  import { ipcRenderer } from "renderer/ipc.ts"   ← shim over window.electronAPI
    │  safeIpcInvoke() (renderer/utils/ipcHelpers.ts) wraps it with error handling
    ▼
-src/preload.ts  — contextBridge: window.electronAPI = { invoke, send, on, removeAllListeners }
+src/preload.ts  — contextBridge: window.electronAPI = { invoke, send, on, removeAllListeners },
+                  only for channels in shared/ipcChannels.ts
    ▼
 src/ipc/*Handlers.ts + src/tracking/tracker.ts  (main) — ipcMain.handle channels; each resolves the user itself
    ▼
@@ -38,7 +39,9 @@ src/supabase/*.ts  — thin query modules, one per domain, throw on error
 Supabase (RLS enforces per-user / per-org access)
 ```
 - **The renderer cannot `import` from `"electron"` or use Node built-ins.** It is built for the `web` target. Use `renderer/ipc.ts`. Treat everything coming from the renderer as untrusted input in main. Examples: `open-oauth-url` only opens http(s); exports only write to dialog-approved paths.
-- **There are still two Supabase clients.** The renderer has one (localStorage) and main has one (in-memory). The renderer pushes its tokens to main through `sync-auth-session`. **Only the renderer client auto-refreshes tokens** (`autoRefreshToken` is on only when `window` exists), so the two can't rotate the refresh token out from under each other. Some renderer code still queries Supabase directly: `src/supabase/orgAnalytics.ts` (via `teamAnalyticsTab`), `ConnectionStatus.ts`, `oauthHandler.ts`.
+- **One Supabase client, in main.** Main signs in, finishes OAuth/email-link callbacks (`dev-time-tracker://oauth-callback`), refreshes and stores the session (`src/ipc/authHandlers.ts`; storage `src/supabase/authStorage.ts` → `userData/auth-session.bin`, encrypted with Electron `safeStorage`). The renderer has no client and never sees a token: it uses `renderer/auth.ts` (`auth:*` IPC) and hears sign-in/out on `auth-state` (`{ user: { id, email } }` or null); main also passes the user id to the tracker. A login kept in localStorage by older versions is handed to main once (`auth:import-legacy-session`) and deleted. Lint forbids runtime imports of `src/supabase/*` / `@supabase/*` in `renderer/` (type imports are fine).
+- **The renderer's CSP** (header in `src/index.ts` and the `<meta>` in `public/index.html`, which is what applies to the packaged `file://` page — keep them identical): `script-src 'self'` (no eval, no inline), `connect-src 'self'` (the page can't reach Supabase or anything else), `object-src 'none'`, `base-uri 'none'`.
+- **IPC allowlist:** `shared/ipcChannels.ts` lists the invoke/send/event channels the renderer may use; the preload rejects everything else. `tests/ipcChannels.test.ts` fails if a channel the renderer uses isn't listed, a listed one has no handler, or a listed one isn't used. 23 old handlers no UI calls (e.g. `delete-user`, `set-user-role`, `get-or-create-default-users`) are left out, so they're unreachable from the page.
 - The handler files register themselves as an import side effect (`import "./ipc/xHandlers"` in `src/index.ts`). `src/utils/langMap.ts` also registers handlers this way.
 
 ### The tracking engine (`src/tracking/`)
@@ -111,6 +114,8 @@ Local files:
 - `~/.dev-time-tracker/offline-queue.json`: flushed only while signed in, and only the signed-in user's items
 - `userData/custom-apps-<uid>.json`
 - `userData/lang-<uid>.json`
+- `userData/auth-session.bin`: the Supabase session, encrypted with `safeStorage` (OS keychain / DPAPI). Chromium saves the encryption key in "Local State" about 10 s after the first launch on a machine; force-killing the app before that means one extra sign-in, nothing worse.
+- `userData/agent-ingest-<uid>.json`, `userData/integrations-<uid>.json` (C3)
 
 ### Renderer layout
 - **Layout (since U1/U2):** a left sidebar rail (`public/index.html`) with Home · Sessions · Projects · Billing · Team · Settings, and the rail timer (record/pause/incognito/bell, elapsed active time) pinned at the bottom. Sessions and Team have sub-views (a `.subnav` segmented control).
@@ -127,7 +132,7 @@ Local files:
 - CSS is one file per feature in `renderer/styles/`, all imported in `renderer.ts`. Theming uses CSS variables (`--accent`).
 
 ### Conventions to follow when changing code
-- **New data feature:** add a `src/supabase/<domain>.ts` function that throws on error. Add a handler in `src/ipc/<domain>Handlers.ts` that calls `getCurrentUser()` and never takes `userId` from the renderer (exception: admin ops on *other* users). Import the handler file in `src/index.ts`. Call it from the renderer with `safeIpcInvoke(channel, args, { fallback })`.
+- **New data feature:** add a `src/supabase/<domain>.ts` function that throws on error. Add a handler in `src/ipc/<domain>Handlers.ts` that calls `getCurrentUser()` and never takes `userId` from the renderer (exception: admin ops on *other* users). Import the handler file in `src/index.ts`. **Add the channel to `shared/ipcChannels.ts`** (the preload blocks unlisted ones; the test tells you). Call it from the renderer with `safeIpcInvoke(channel, args, { fallback })`.
 - **DB change:** the app has no production users, so there are no migrations. Edit `database/schema.sql` directly, keep its order (tables → functions → triggers → RLS → indexes), update `src/types/database.types.ts`, and rebuild the dev database with `reset.sql` + `schema.sql`. New SECURITY DEFINER functions must `SET search_path = public` and check the caller. If real users ever exist, switch to numbered migrations.
 - **Tests:** go in `tests/` and use the chainable mock in `tests/helpers/supabaseMock.ts`. New query functions should get tests in the same style.
 - **Renderer ↔ main:** import `ipcRenderer` from `renderer/ipc.ts`, never from `"electron"`. Files are saved by main: use `savePdf()` (`renderer/utils/saveFile.ts`) or the `show-save-dialog` → `export-custom-*` pair, never jsPDF's `doc.save()`.
@@ -252,8 +257,9 @@ In priority order (cheapest and highest value first):
 **Open findings from Phase A**
 - [x] **Updater (resolved):** replaced `electron-updater` (incompatible with Forge's Squirrel output) with Electron's built-in `autoUpdater` and update.electronjs.org (`src/updater.ts`). Windows only, on by default in installed builds. Squirrel install events are handled (`electron-squirrel-startup` in `src/index.ts`). `release.yml` now builds on a Windows runner and uploads RELEASES/.nupkg/Setup.exe; before this, releases had no Windows build at all. Updates reach users only from **published** releases, and the release version must be higher than the installed one.
 - ~~Idle time before the auto-pause is still counted~~ — resolved in C4: the auto-pause is backdated to the last input (or agent activity).
-- **Team-analytics SQL still buckets sessions by UTC day** (`start_time::DATE` in the `get_org_*` functions). Fixing that needs a stored local date or tz per session.
-- `.env.production` is not loaded by the build; only `.env.local` and `.env` are.
+- ~~Team-analytics SQL buckets sessions by UTC day~~ — resolved 2026-10-15: `get_org_analytics_summary/top_projects/member_activity` take `p_time_zone` (main sends its IANA zone) and, with billable-only, count billed seconds (`session_billed_seconds()`: supervising left out where the project doesn't bill it). Existing databases: run `database/upgrade/2026-10-15-team-analytics.sql`.
+- ~~`.env.production` is not loaded by the build~~ — resolved: loaded for `electron-forge package/make/publish` (after `.env.local`, before `.env`).
+- `SENTRY_DSN` GitHub secret: exists (2026-10-14).
 
 **Phase B — structural cleanup** — done on `phase-a-fixes` (2026-10-14)
 - [x] B1 Tracking engine extracted into `src/tracking/` (see Part 1), with unit tests for the clock, idle policy, sampler and batcher. `src/index.ts` is now app lifecycle, window, tray, auth sync and OAuth. Also fixed: the saved idle timeout and tracking interval were never applied after a restart; they are now loaded on sign-in.
@@ -272,7 +278,7 @@ In priority order (cheapest and highest value first):
   - Removed the unused `signInWithGitHub` that needed `require("electron")`.
   - Only the renderer's Supabase client refreshes tokens.
   - Verified with a packaged-app smoke test and a dev-mode smoke test over CDP (UI renders, no Node in the page, record/pause/stop and incognito round-trip through main, export/open hardening). Signed-in flows were **not** exercised (that would need a test account).
-  - Still open: **one Supabase client** (move the renderer's direct queries behind IPC); an IPC channel allowlist in the preload; dropping `'unsafe-eval'` from the production CSP.
+  - ~~Still open: one Supabase client; an IPC channel allowlist in the preload; dropping `'unsafe-eval'` from the CSP~~ — all resolved 2026-10-15 (branch `open-items`, see Part 1). Verified: unit tests (auth storage + handlers, allowlist sync), smoke (packaged + dev: eval and inline script blocked, unlisted channel rejected, no `sb-*` in localStorage), e2e (all flows over the new auth, plus: no token in the page, page can't reach Supabase, unlisted handler unreachable), and a persistence probe (stay signed in across restarts and a hard kill; sign-out clears the session file).
 
 **Database rebuild** — done 2026-10-14
 - [x] Everything (base files + patches 001–007) merged into one ordered `database/schema.sql`, plus `database/reset.sql` to wipe and start over. Verified in PGlite (Postgres 16) with a stubbed Supabase `auth` schema and roles: about 55 checks across signup, RLS, invite/role/removal flows, analytics permissions and org attribution, on a fresh build and again after reset + rebuild.

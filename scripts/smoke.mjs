@@ -154,6 +154,12 @@ try {
     steps.passwordFieldShown = await ev(`!!document.querySelector("input[type=password]")`);
     steps.unapprovedExportRejected = await ev(`window.electronAPI.invoke("export-custom-json", {a:[1]}, "C:\\Windows\\Temp\\dtt-smoke.json").then(r => r.status)`);
     steps.nonHttpOpenRejected = await ev(`window.electronAPI.invoke("open-oauth-url", "file:///C:/Windows/System32/calc.exe").then(() => "opened", e => "rejected")`);
+    // Hardening: strict CSP (no eval, no network but the app) and the IPC allowlist
+    // (DevTools-evaluated code is exempt from CSP, so test what the page itself runs)
+    steps.evalBlocked = await ev(`new Promise(r => { window.__t = "blocked"; try { setTimeout("window.__t = 'allowed'", 0); } catch {} setTimeout(() => r(window.__t), 200); })`);
+    steps.inlineScriptBlocked = await ev(`new Promise(r => { window.__s = "blocked"; const el = document.createElement("script"); el.textContent = "window.__s = 'allowed'"; document.body.appendChild(el); setTimeout(() => r(window.__s), 200); })`);
+    steps.unlistedChannelRejected = await ev(`window.electronAPI.invoke("get-or-create-default-users").then(() => "reached", () => "rejected")`);
+    steps.noRendererSession = await ev(`!Object.keys(localStorage).some(k => k.startsWith("sb-"))`);
     results.interact = steps;
   }
   results.updater = (

@@ -12,14 +12,24 @@
     "ecmaVersion": 2020,
     "sourceType": "module"
   },
-  "plugins": ["@typescript-eslint"],
+  "plugins": [
+    "@typescript-eslint"
+  ],
   "globals": {
     "NodeJS": "readonly"
   },
   "rules": {
-    "semi": ["error", "always"],
+    "semi": [
+      "error",
+      "always"
+    ],
     "no-unused-vars": "off",
-    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_"
+      }
+    ],
     "no-console": "warn",
     "no-debugger": "error",
     "prefer-const": "error",
@@ -27,9 +37,33 @@
   },
   "overrides": [
     {
-      "files": ["src/**/*.ts"],
+      "files": [
+        "src/**/*.ts"
+      ],
       "rules": {
         "no-console": "off"
+      }
+    },
+    {
+      "files": [
+        "renderer/**/*.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@supabase/*",
+                  "**/src/supabase/*"
+                ],
+                "allowTypeImports": true,
+                "message": "The renderer has no Supabase client: the main process owns the session. Use IPC (renderer/auth.ts, safeIpcInvoke); type-only imports are fine."
+              }
+            ]
+          }
+        ]
       }
     }
   ]

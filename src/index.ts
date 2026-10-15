@@ -6,7 +6,6 @@ import {
   Menu,
   nativeImage,
   globalShortcut,
-  shell,
 } from "electron";
 import os from "os";
 import path from "path";
@@ -16,8 +15,6 @@ import {
   markNotificationSent,
 } from "./supabase/scheduledSessions";
 import { getCurrentUser } from "./supabase/api";
-import { supabase } from "./supabase/config";
-import { SUPABASE_CONFIG } from "./supabase/env";
 import { logError, classifyError } from "./utils/errorHandler";
 import {
   initOfflineQueue,
@@ -50,6 +47,11 @@ import "./ipc/preferencesHandlers";
 import "./ipc/projectHandlers";
 import "./ipc/repoHandlers";
 import "./ipc/agentHandlers";
+import {
+  handleAuthCallbackUrl,
+  initAuth,
+  signOutEverywhere,
+} from "./ipc/authHandlers";
 import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";
 import "./ipc/analyticsHandlers";
@@ -111,34 +113,13 @@ process.on("unhandledRejection", (reason) => {
   }
 });
 
-// Sync auth session from renderer to main process
-// The renderer has localStorage and holds the Supabase session;
-// the main process needs the tokens to make authenticated API calls.
-ipcMain.handle(
-  "sync-auth-session",
-  async (
-    _event,
-    tokens: { access_token: string; refresh_token: string } | null,
-  ) => {
-    if (tokens) {
-      const { data, error } = await supabase.auth.setSession({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-      });
-      if (error) {
-        return false;
-      }
-      setTrackingUser(data.user?.id ?? data.session?.user.id ?? null);
-      return true;
-    } else {
-      // Write buffered usage while still authenticated, then sign out
-      await flushTrackedUsage();
-      setTrackingUser(null);
-      await supabase.auth.signOut();
-      return true;
-    }
-  },
-);
+// Sign out: write buffered usage while still authenticated, then end the
+// session (the SIGNED_OUT event clears the tracking user and the renderer)
+ipcMain.handle("auth:sign-out", async () => {
+  await flushTrackedUsage();
+  await signOutEverywhere();
+  return true;
+});
 
 let mainWindow: BrowserWindow | null = null;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -161,7 +142,12 @@ if (isolatedProfileDir) {
   app.setAsDefaultProtocolClient("dev-time-tracker");
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Auth first: the window asks who is signed in as soon as it loads
+  await initAuth({
+    getWindow: () => mainWindow,
+    onUserChange: setTrackingUser,
+  });
   createWindow();
 
   setUpdaterStateSink((state: import("../shared/types").UpdaterState) => {
@@ -356,32 +342,22 @@ function updateTrayMenu() {
 }
 
 /**
- * CSP for the renderer, built from the configured Supabase URL so a custom
- * SUPABASE_URL works. public/index.html carries a matching <meta> CSP (needed
- * for the packaged file:// page) that allows any *.supabase.co project; a
- * self-hosted Supabase on another domain must be added there as well.
+ * CSP for the renderer. The page talks to nothing but main (IPC): Supabase
+ * is reached only from the main process, so there is no network origin to
+ * allow, and no eval (the bundle doesn't need it). public/index.html has the
+ * same policy as a <meta> tag, which is what applies to the packaged
+ * file:// page; keep the two in sync.
  */
 function buildContentSecurityPolicy(): string {
-  let supabaseOrigin = "";
-  try {
-    supabaseOrigin = new URL(SUPABASE_CONFIG.URL).origin;
-  } catch {
-    // Invalid URL — the *.supabase.co wildcard below still applies
-  }
-  const connectSrc = [
-    "'self'",
-    "https://*.supabase.co",
-    supabaseOrigin,
-    "http://localhost:3000",
-  ].filter((src, i, all) => src && all.indexOf(src) === i);
-
-  return (
-    "default-src 'self'; " +
-    "script-src 'self' 'unsafe-eval' http://localhost:3000; " +
-    "style-src 'self' 'unsafe-inline'; " +
-    "img-src 'self' data:; " +
-    `connect-src ${connectSrc.join(" ")};`
-  );
+  return [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+  ].join("; ");
 }
 
 const CONTENT_SECURITY_POLICY = buildContentSecurityPolicy();
@@ -463,22 +439,6 @@ ipcMain.handle("flush-offline-queue", async () => {
   return { flushed, status: getSyncStatus() };
 });
 
-// Handle OAuth redirect to open external browser
-// Only http(s): openExternal on file:// or custom schemes could launch
-// local programs if a compromised renderer called this.
-ipcMain.handle("open-oauth-url", async (_event, url: string) => {
-  let protocol = "";
-  try {
-    protocol = new URL(url).protocol;
-  } catch {
-    // invalid URL
-  }
-  if (protocol !== "https:" && protocol !== "http:") {
-    throw new Error("open-oauth-url only opens http(s) URLs");
-  }
-  await shell.openExternal(url);
-});
-
 // Before quitting, save a running/paused session, settle an open
 // session-info prompt and flush buffered usage
 let quitInProgress = false;
@@ -538,27 +498,8 @@ if (!gotTheLock) {
   });
 }
 
-// Function to handle OAuth callback.
-// Never log the URL or params — they carry auth tokens/codes.
+// OAuth / email-link callbacks are finished in main (authHandlers.ts).
+// Never log the URL: it carries auth tokens/codes.
 function handleOAuthCallback(url: string) {
-  // Extract hash fragment (#) or query params (?)
-  const hashIndex = url.indexOf("#");
-  const queryIndex = url.indexOf("?");
-
-  let params = "";
-  if (hashIndex !== -1) {
-    params = url.substring(hashIndex + 1);
-  } else if (queryIndex !== -1) {
-    params = url.substring(queryIndex + 1);
-  }
-
-  // Send to renderer process to handle auth
-  if (mainWindow && params) {
-    mainWindow.webContents.send("oauth-callback", params);
-  } else {
-    logError(
-      "handleOAuthCallback",
-      new Error("No params found or mainWindow not available"),
-    );
-  }
+  void handleAuthCallbackUrl(url);
 }

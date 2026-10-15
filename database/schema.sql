@@ -927,12 +927,33 @@ END;
 $$;
 
 -- ── Team analytics (admins/managers of the org) ─────
+-- Sessions are bucketed by the viewer's local day (p_time_zone, an IANA
+-- name sent by the app). With p_billable_only, hours are what is billed:
+-- supervising time is left out where the project doesn't bill it.
+
+-- Seconds of a session that count as billed
+CREATE OR REPLACE FUNCTION session_billed_seconds(
+    p_duration INTEGER,
+    p_supervising_seconds INTEGER,
+    p_bill_supervising BOOLEAN
+)
+RETURNS INTEGER
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT GREATEST(
+        0,
+        COALESCE(p_duration, 0)
+        - CASE WHEN p_bill_supervising = false THEN COALESCE(p_supervising_seconds, 0) ELSE 0 END
+    );
+$$;
 
 CREATE OR REPLACE FUNCTION get_org_analytics_summary(
     p_org_id UUID,
     p_start_date DATE,
     p_end_date DATE,
-    p_billable_only BOOLEAN DEFAULT false
+    p_billable_only BOOLEAN DEFAULT false,
+    p_time_zone TEXT DEFAULT 'UTC'
 )
 RETURNS TABLE (
     total_hours_tracked NUMERIC,
@@ -951,12 +972,19 @@ BEGIN
 
     RETURN QUERY
     SELECT
-        COALESCE(SUM(tts.duration)::NUMERIC / 3600, 0),
+        COALESCE(SUM(
+            CASE WHEN p_billable_only
+                THEN session_billed_seconds(tts.duration, tts.supervising_seconds, cp.bill_supervising)
+                ELSE tts.duration
+            END
+        )::NUMERIC / 3600, 0),
         COUNT(DISTINCT tts.id)::INTEGER,
         COUNT(DISTINCT tts.user_id)::INTEGER
     FROM time_tracking_sessions tts
+    LEFT JOIN cloud_projects cp ON cp.id = tts.project_id
     WHERE tts.org_id = p_org_id
-      AND tts.start_time::DATE BETWEEN p_start_date AND p_end_date
+      AND (tts.start_time AT TIME ZONE COALESCE(NULLIF(p_time_zone, ''), 'UTC'))::DATE
+          BETWEEN p_start_date AND p_end_date
       AND (NOT p_billable_only OR tts.is_billable);
 END;
 $$;
@@ -967,7 +995,8 @@ CREATE OR REPLACE FUNCTION get_org_top_projects(
     p_end_date DATE,
     p_project_ids UUID[] DEFAULT NULL,
     p_billable_only BOOLEAN DEFAULT false,
-    p_limit INT DEFAULT 10
+    p_limit INT DEFAULT 10,
+    p_time_zone TEXT DEFAULT 'UTC'
 )
 RETURNS TABLE (
     project_id UUID,
@@ -990,13 +1019,19 @@ BEGIN
     SELECT
         cp.id,
         cp.name,
-        COALESCE(SUM(tts.duration)::NUMERIC / 3600, 0) AS total_hours,
+        COALESCE(SUM(
+            CASE WHEN p_billable_only
+                THEN session_billed_seconds(tts.duration, tts.supervising_seconds, cp.bill_supervising)
+                ELSE tts.duration
+            END
+        )::NUMERIC / 3600, 0) AS total_hours,
         COUNT(DISTINCT tts.id)::INTEGER,
         COUNT(DISTINCT tts.user_id)::INTEGER
     FROM cloud_projects cp
     JOIN time_tracking_sessions tts ON tts.project_id = cp.id
     WHERE cp.org_id = p_org_id
-      AND tts.start_time::DATE BETWEEN p_start_date AND p_end_date
+      AND (tts.start_time AT TIME ZONE COALESCE(NULLIF(p_time_zone, ''), 'UTC'))::DATE
+          BETWEEN p_start_date AND p_end_date
       AND (p_project_ids IS NULL OR cp.id = ANY(p_project_ids))
       AND (NOT p_billable_only OR tts.is_billable)
     GROUP BY cp.id, cp.name
@@ -1063,7 +1098,8 @@ CREATE OR REPLACE FUNCTION get_org_member_activity(
     p_end_date DATE,
     p_project_ids UUID[] DEFAULT NULL,
     p_member_ids UUID[] DEFAULT NULL,
-    p_billable_only BOOLEAN DEFAULT false
+    p_billable_only BOOLEAN DEFAULT false,
+    p_time_zone TEXT DEFAULT 'UTC'
 )
 RETURNS TABLE (
     user_id UUID,
@@ -1088,11 +1124,18 @@ BEGIN
         SELECT
             tts.user_id,
             COUNT(DISTINCT tts.id)::INTEGER AS session_count,
-            COALESCE(SUM(tts.duration)::NUMERIC / 3600, 0) AS total_hours,
+            COALESCE(SUM(
+                CASE WHEN p_billable_only
+                    THEN session_billed_seconds(tts.duration, tts.supervising_seconds, cp.bill_supervising)
+                    ELSE tts.duration
+                END
+            )::NUMERIC / 3600, 0) AS total_hours,
             COUNT(DISTINCT tts.project_id)::INTEGER AS active_projects
         FROM time_tracking_sessions tts
+        LEFT JOIN cloud_projects cp ON cp.id = tts.project_id
         WHERE tts.org_id = p_org_id
-          AND tts.start_time::DATE BETWEEN p_start_date AND p_end_date
+          AND (tts.start_time AT TIME ZONE COALESCE(NULLIF(p_time_zone, ''), 'UTC'))::DATE
+              BETWEEN p_start_date AND p_end_date
           AND (p_project_ids IS NULL OR tts.project_id = ANY(p_project_ids))
           AND (p_member_ids IS NULL OR tts.user_id = ANY(p_member_ids))
           AND (NOT p_billable_only OR tts.is_billable)

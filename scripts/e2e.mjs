@@ -164,24 +164,34 @@ async function answerSessionInfo(app, title) {
   return true;
 }
 
-// Raw PostgREST call with the page's own session token — what an attacker
-// with a valid account could do outside the app
-async function rawApi(app, method, pathAndQuery, body) {
-  return app.ev(`(async () => {
-    const key = Object.keys(localStorage).find(k => k.startsWith("sb-") && k.endsWith("-auth-token"));
-    const token = JSON.parse(localStorage.getItem(key)).access_token;
-    const r = await fetch(${JSON.stringify(SUPA.url)} + "/rest/v1/" + ${JSON.stringify(pathAndQuery)}, {
-      method: ${JSON.stringify(method)},
-      headers: {
-        apikey: ${JSON.stringify(SUPA.key)},
-        Authorization: "Bearer " + token,
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      },
-      body: ${body ? JSON.stringify(JSON.stringify(body)) : "undefined"},
+// Raw PostgREST call as one of the test users, from this script — what an
+// attacker with a valid account could do outside the app. The app's page
+// can't do this itself: it has no token and its CSP blocks Supabase.
+const tokens = {};
+async function tokenFor(app) {
+  const i = app.name === "user2" ? 1 : 0;
+  if (!tokens[i]) {
+    const r = await fetch(`${SUPA.url}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { apikey: SUPA.key, "Content-Type": "application/json" },
+      body: JSON.stringify(creds[i]),
     });
-    return { status: r.status, body: (await r.text()).slice(0, 300) };
-  })()`);
+    tokens[i] = (await r.json()).access_token;
+  }
+  return tokens[i];
+}
+async function rawApi(app, method, pathAndQuery, body) {
+  const r = await fetch(`${SUPA.url}/rest/v1/${pathAndQuery}`, {
+    method,
+    headers: {
+      apikey: SUPA.key,
+      Authorization: `Bearer ${await tokenFor(app)}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { status: r.status, body: (await r.text()).slice(0, 300) };
 }
 
 const apps = [];
@@ -193,6 +203,23 @@ try {
   apps.push(u1);
   check("user 1 signs in", await login(u1, creds[0]));
   await sleep(3000);
+  // Main owns the session: the page holds no token and can't reach Supabase
+  check(
+    "renderer keeps no Supabase session",
+    await u1.ev(`!Object.keys(localStorage).some(k => k.startsWith("sb-"))`),
+  );
+  check(
+    "renderer can't reach Supabase (CSP)",
+    (await u1.ev(`fetch(${JSON.stringify(SUPA.url + "/rest/v1/")}).then(() => "reached", () => "blocked")`)) === "blocked",
+  );
+  check(
+    "handlers outside the IPC allowlist are unreachable",
+    (await u1.invoke("delete-user", "x")).ok === false,
+  );
+  check(
+    "main knows who is signed in",
+    (await u1.invoke("auth:get-user")).v?.email?.toLowerCase() === creds[0].email.toLowerCase(),
+  );
   // First login in a fresh profile shows the onboarding tour — skip it
   await u1.ev(`[...document.querySelectorAll("button, a")].find(b => b.textContent.trim() === "Skip Tour")?.click()`);
   await sleep(500);

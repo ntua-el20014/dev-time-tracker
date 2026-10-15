@@ -1,43 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../types/database.types";
 import { SUPABASE_CONFIG } from "./env";
-
-// Create a custom storage adapter for Electron
-// In the renderer process, use localStorage. In the main process (no window),
-// use an in-memory store so setSession/getSession work after syncing tokens.
-const memoryStore: Record<string, string> = {};
-
-const electronStorage = {
-  getItem: (key: string) => {
-    if (typeof window !== "undefined" && window.localStorage) {
-      return window.localStorage.getItem(key);
-    }
-    return memoryStore[key] ?? null;
-  },
-  setItem: (key: string, value: string) => {
-    if (typeof window !== "undefined" && window.localStorage) {
-      window.localStorage.setItem(key, value);
-    }
-    memoryStore[key] = value;
-  },
-  removeItem: (key: string) => {
-    if (typeof window !== "undefined" && window.localStorage) {
-      window.localStorage.removeItem(key);
-    }
-    delete memoryStore[key];
-  },
-};
+import { authStorage } from "./authStorage";
 
 // Initialize Supabase client with configuration from env
 export const createSupabaseClient = () => {
   return createClient<Database>(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY, {
     auth: {
       persistSession: true,
-      storage: electronStorage,
-      // Only the renderer refreshes tokens. Main gets fresh ones through the
-      // sync-auth-session IPC. Two clients refreshing the same rotating
-      // refresh token can invalidate each other and sign the user out.
-      autoRefreshToken: typeof window !== "undefined",
+      // The main process is the only Supabase client (the renderer talks to
+      // it over IPC), so it alone keeps and refreshes the session
+      storage: authStorage,
+      autoRefreshToken: true,
       detectSessionInUrl: false, // Important for Electron
       flowType: "pkce", // Use PKCE flow for better security
     },

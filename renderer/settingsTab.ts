@@ -1,4 +1,4 @@
-import { applyAccentColor } from "./renderer";
+import { applyAccentColor, signOutAndSave } from "./renderer";
 import { escapeHtml } from "./utils/domUtils";
 import { ipcRenderer } from "./ipc";
 import {
@@ -968,12 +968,11 @@ export async function renderSettingsView() {
     logoutBtn.style.boxShadow = "0 2px 8px #0002";
   };
   logoutBtn.onclick = async () => {
-    // Sign out from Supabase first
+    // Save a running session, then main signs out (and tells the UI)
     try {
-      const { signOut } = await import("../src/supabase/api");
-      await signOut();
+      await signOutAndSave();
     } catch (error) {
-      // Continue with local logout even if Supabase signout fails
+      // Continue with local logout even if the sign-out call fails
     }
 
     localStorage.removeItem("currentUserId");

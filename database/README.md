@@ -21,6 +21,14 @@ Requires Postgres 15+ (all Supabase projects created since 2023).
 
 The project URL and anon key are unchanged by a reset, so `.env` stays as it is.
 
+## Upgrading an existing database
+
+`schema.sql` always describes the whole current database. When a change can't be applied by simply adding things (for example, a function whose parameters changed), `upgrade/` has a dated script for databases built from an older `schema.sql`. Run the ones newer than your database in date order, in the SQL editor. A fresh database needs none of them.
+
+| File | What it does |
+|---|---|
+| [`upgrade/2026-10-15-team-analytics.sql`](./upgrade/2026-10-15-team-analytics.sql) | Team analytics by the viewer's local day (`p_time_zone`) and billed time (`session_billed_seconds`); replaces three `get_org_*` functions |
+
 ## Security model
 
 All tables have RLS enabled. Policies use `auth.uid()` and these `SECURITY DEFINER` helpers, which read `user_profiles` without recursing into its own policies:

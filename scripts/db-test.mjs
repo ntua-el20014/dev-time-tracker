@@ -263,6 +263,25 @@ async function runScenario(label) {
   const stats = await one(`SELECT * FROM get_project_stats($1)`, [proj.id]);
   check("project stats run", stats !== undefined);
 
+  // ── Team analytics: local days and billed time ──
+  await db.query(
+    `INSERT INTO time_tracking_sessions (user_id, project_id, start_time, duration, is_billable, supervising_seconds)
+     VALUES ($1, $2, '2026-11-14T22:30:00Z', 3600, true, 1800)`,
+    [A, proj.id],
+  );
+  const dayIn = async (tz) =>
+    Number((await one(`SELECT * FROM get_org_analytics_summary($1, '2026-11-15', '2026-11-15', false, $2)`, [orgA, tz])).total_sessions);
+  check("analytics buckets sessions by the viewer's local day", (await dayIn("Europe/Athens")) === 1 && (await dayIn("UTC")) === 0);
+  const billed = async () =>
+    Number((await one(`SELECT * FROM get_org_analytics_summary($1, '2026-11-15', '2026-11-15', true, 'Europe/Athens')`, [orgA])).total_hours_tracked);
+  check("billable hours include supervising by default", (await billed()) === 1);
+  await db.query(`UPDATE cloud_projects SET bill_supervising = false WHERE id = $1`, [proj.id]);
+  check("billable hours leave out unbilled supervising", (await billed()) === 0.5);
+  const top = await one(`SELECT * FROM get_org_top_projects($1, '2026-11-15', '2026-11-15', NULL, true, 10, 'Europe/Athens')`, [orgA]);
+  const member = await one(`SELECT * FROM get_org_member_activity($1, '2026-11-15', '2026-11-15', NULL, NULL, true, 'Europe/Athens')`, [orgA]);
+  check("top projects and member activity agree", Number(top?.total_hours) === 0.5 && Number(member?.total_hours) === 0.5, JSON.stringify({ top: top?.total_hours, member: member?.total_hours }));
+  await db.query(`UPDATE cloud_projects SET bill_supervising = true WHERE id = $1`, [proj.id]);
+
   // ── Supervising time ──
   check(
     "projects bill supervising time by default",

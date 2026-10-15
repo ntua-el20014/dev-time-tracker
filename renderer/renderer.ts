@@ -43,11 +43,12 @@ import {
 } from "./utils";
 import { getCachedPreferences } from "./utils/preferencesCache";
 import {
-  checkAuthStatus,
-  onAuthStateChange,
-  getCurrentUser,
-  getCurrentSession,
-} from "../src/supabase/api";
+  getAuthUser,
+  importLegacySession,
+  onAuthState,
+  signOut,
+  type AuthSession,
+} from "./auth";
 import { initializeOAuthListener } from "./utils/oauthHandler";
 import {
   showOnboarding,
@@ -706,15 +707,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const landing = document.getElementById("userLanding") as HTMLDivElement;
   const mainUI = document.getElementById("mainUI");
 
-  // Initialize OAuth listener globally to handle password resets and email confirmations
-  initializeOAuthListener((session: any) => {
-    // This callback will be triggered when auth events (password reset, email confirmation, etc.) occur
-    if (session?.user?.id) {
-      showMainUIForUser(session.user.id);
-      if (landing) landing.style.display = "none";
-      if (mainUI) mainUI.style.display = "";
-    }
-  });
+  // Notices and the password-reset form for links finished by main
+  initializeOAuthListener();
 
   // Initialize automatic text color updates for accent backgrounds
 
@@ -772,167 +766,63 @@ document.addEventListener("DOMContentLoaded", async () => {
     (window as any).showMainUIForUser = showMainUIForUser;
   }
 
-  // Check if user is authenticated with Supabase
-  try {
-    const isAuthenticated = await checkAuthStatus();
-
-    if (isAuthenticated) {
-      // User is authenticated, show main UI
-      if (landing) landing.style.display = "none";
-      if (mainUI) mainUI.style.display = "";
-
-      // Get the current user and sync session to main process
-      const user = await getCurrentUser();
-      if (user) {
-        // Sync existing session to main process
-        const session = await getCurrentSession();
-        if (session) {
-          await ipcRenderer.invoke("sync-auth-session", {
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-          });
-        }
-        showMainUIForUser(user.id);
-      } else {
-        throw new Error("No authenticated user found");
-      }
-    } else {
-      // No authenticated user, show auth landing
-      if (landing) {
-        if (mainUI) mainUI.style.display = "none";
-        landing.style.display = "";
-        renderLandingPage(landing, async (session: any) => {
-          try {
-            await ipcRenderer.invoke("sync-auth-session", {
-              access_token: session.access_token,
-              refresh_token: session.refresh_token,
-            });
-            showMainUIForUser(session.user.id);
-            if (landing) landing.style.display = "none";
-          } catch {
-            showInAppNotification(
-              "Sign-in failed. Please try again.",
-              3500,
-              "error",
-            );
-          }
-        });
-      }
-    }
-  } catch (error) {
-    // If there's an error checking auth, fall back to stored user ID
-    addBreadcrumb("Auth check failed, using fallback", { error: String(error) });
-    const storedUserId = localStorage.getItem("currentUserId");
-
-    if (storedUserId) {
-      // If we have a stored user, go straight to main UI
-      if (landing) landing.style.display = "none";
-      if (mainUI) mainUI.style.display = "";
-      showMainUIForUser(storedUserId);
-    } else {
-      // No stored user, show auth landing
-      if (landing) {
-        if (mainUI) mainUI.style.display = "none";
-        landing.style.display = "";
-        renderLandingPage(landing, async (session: any) => {
-          try {
-            await ipcRenderer.invoke("sync-auth-session", {
-              access_token: session.access_token,
-              refresh_token: session.refresh_token,
-            });
-            showMainUIForUser(session.user.id);
-            landing.style.display = "none";
-          } catch {
-            showInAppNotification(
-              "Sign-in failed. Please try again.",
-              3500,
-              "error",
-            );
-          }
-        });
-      }
-    }
+  /** Show the landing page; signing in there opens the main UI. */
+  function showLanding() {
+    if (mainUI) mainUI.style.display = "none";
+    if (!landing) return;
+    landing.style.display = "";
+    renderLandingPage(landing, (session: AuthSession) => {
+      showMainUIForUser(session.user.id);
+      landing.style.display = "none";
+    });
   }
 
-  // Listen for auth state changes
-  onAuthStateChange(
-    // Main callback: sign-in / sign-out
-    async (session: any) => {
-      try {
-        if (session) {
-          // Sync session tokens to main process so IPC handlers can authenticate
-          await ipcRenderer.invoke("sync-auth-session", {
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-          });
-          // User signed in
-          showMainUIForUser(session.user.id);
-          if (landing) landing.style.display = "none";
-        } else {
-          // Auto-save active recording before clearing session
-          await autoSaveRecordingOnTimeout();
+  /** Signed out, or the session expired: reset everything for the next user. */
+  async function handleSignedOut() {
+    if (!isMainUIInitialized && landing?.style.display !== "none") return;
+    isMainUIInitialized = false;
+    destroyConnectionStatus();
+    destroySyncStatus();
+    stopSessionHealthCheck();
+    clearSentryUser(); // Clear user context from error logging
+    if (dailyGoalCheckInterval) {
+      clearInterval(dailyGoalCheckInterval);
+      dailyGoalCheckInterval = null;
+    }
+    localStorage.removeItem("currentUserId");
+    clearRoleCache();
+    invalidateDailyGoalCache();
+    invalidatePreferencesCache();
+    invalidateLogsCache();
+    // Every page re-renders for the next user
+    resetNavigation();
+    setNavItemVisible("team", false);
+    showLanding();
+  }
 
-          // Clear session in main process
-          await ipcRenderer.invoke("sync-auth-session", null);
-          // User signed out or session expired - reset the initialization flag
-          isMainUIInitialized = false;
-          destroyConnectionStatus();
-          destroySyncStatus();
-          stopSessionHealthCheck();
-          clearSentryUser(); // Clear user context from error logging
-          if (dailyGoalCheckInterval) {
-            clearInterval(dailyGoalCheckInterval);
-            dailyGoalCheckInterval = null;
-          }
-          localStorage.removeItem("currentUserId");
-          clearRoleCache();
-          invalidateDailyGoalCache();
-          invalidatePreferencesCache();
-          invalidateLogsCache();
-          // Every page re-renders for the next user
-          resetNavigation();
-          setNavItemVisible("team", false);
-          if (mainUI) mainUI.style.display = "none";
-          if (landing) {
-            landing.style.display = "";
-            renderLandingPage(landing, async (newSession: any) => {
-              try {
-                await ipcRenderer.invoke("sync-auth-session", {
-                  access_token: newSession.access_token,
-                  refresh_token: newSession.refresh_token,
-                });
-                showMainUIForUser(newSession.user.id);
-                landing.style.display = "none";
-              } catch {
-                showInAppNotification(
-                  "Sign-in failed. Please try again.",
-                  3500,
-                  "error",
-                );
-              }
-            });
-          }
-        }
-      } catch (err) {
-        showInAppNotification(
-          "Authentication error. Please try again.",
-          3500,
-          "error",
-        );
-      }
-    },
-    // Token refreshed callback: keep main process in sync
-    async (session: any) => {
-      try {
-        await ipcRenderer.invoke("sync-auth-session", {
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-        });
-      } catch {
-        // Token sync failed — will be retried on next refresh
-      }
-    },
-  );
+  // Main owns the session (it signs in, refreshes and stores it); ask it
+  // who is signed in, after handing over a login kept by older versions
+  try {
+    await importLegacySession();
+    const user = await getAuthUser();
+    if (user) showMainUIForUser(user.id);
+    else showLanding();
+  } catch (error) {
+    // Main didn't answer: fall back to the last user, if any
+    addBreadcrumb("Auth check failed, using fallback", { error: String(error) });
+    const storedUserId = localStorage.getItem("currentUserId");
+    if (storedUserId) showMainUIForUser(storedUserId);
+    else showLanding();
+  }
+
+  // Sign-in (password, GitHub, email link) and sign-out / expiry, from main
+  onAuthState((session) => {
+    if (session) {
+      showMainUIForUser(session.user.id);
+    } else {
+      void handleSignedOut();
+    }
+  });
 });
 
 function renderMainUI() {
@@ -993,24 +883,18 @@ const SESSION_HEALTH_CHECK_MS = 15 * 60 * 1000; // Every 15 minutes
 
 async function checkSessionHealth() {
   try {
-    const session = await getCurrentSession();
-    if (!session) {
-      // Session is gone — auto-refresh must have failed
-
-      // If actively recording, auto-save the session before signing out
-      await autoSaveRecordingOnTimeout();
-
+    // Main refreshes the session; if that failed for good, it is gone and
+    // main has already announced the sign-out. This catches a missed event.
+    if (!(await getAuthUser())) {
       showInAppNotification(
         "Your session has expired. Please sign in again.",
         5000,
         "warning",
       );
-      // Trigger sign-out flow which will show the landing page
-      const { signOut } = await import("../src/supabase/api");
-      await signOut();
+      await signOutAndSave();
     }
   } catch {
-    // Network error during health check — ignore, will retry next interval
+    // Main not answering — try again next interval
   }
 }
 
@@ -1043,4 +927,13 @@ async function autoSaveRecordingOnTimeout() {
   } catch (err) {
     void err;
   }
+}
+
+/**
+ * Sign out: save a running session first (it needs the signed-in user),
+ * then main ends the session and announces it on "auth-state".
+ */
+export async function signOutAndSave() {
+  await autoSaveRecordingOnTimeout();
+  await signOut();
 }

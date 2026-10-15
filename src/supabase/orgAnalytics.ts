@@ -5,6 +5,15 @@
 
 import { supabase } from "./config";
 
+/** IANA time zone of this machine; sessions are grouped by its local days. */
+export function localTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 export interface OrgAnalyticsSummary {
   total_hours_tracked: number;
   total_sessions: number;
@@ -42,6 +51,7 @@ export async function getOrgAnalyticsSummary(
   startDate: string,
   endDate: string,
   billableOnly: boolean = false,
+  timeZone: string = localTimeZone(),
 ): Promise<OrgAnalyticsSummary> {
   const { data, error } = await (supabase as any).rpc(
     "get_org_analytics_summary",
@@ -50,6 +60,7 @@ export async function getOrgAnalyticsSummary(
       p_start_date: startDate,
       p_end_date: endDate,
       p_billable_only: billableOnly,
+      p_time_zone: timeZone,
     },
   );
 
@@ -76,6 +87,7 @@ export async function getOrgTopProjects(
   projectIds?: string[],
   billableOnly: boolean = false,
   limit: number = 10,
+  timeZone: string = localTimeZone(),
 ): Promise<TopProject[]> {
   const { data, error } = await (supabase as any).rpc("get_org_top_projects", {
     p_org_id: orgId,
@@ -84,6 +96,7 @@ export async function getOrgTopProjects(
     p_project_ids: projectIds || null,
     p_billable_only: billableOnly,
     p_limit: limit,
+    p_time_zone: timeZone,
   });
 
   if (error) throw error;
@@ -127,6 +140,7 @@ export async function getOrgMemberActivity(
   projectIds?: string[],
   memberIds?: string[],
   billableOnly: boolean = false,
+  timeZone: string = localTimeZone(),
 ): Promise<MemberActivity[]> {
   const { data, error } = await (supabase as any).rpc(
     "get_org_member_activity",
@@ -137,6 +151,7 @@ export async function getOrgMemberActivity(
       p_project_ids: projectIds || null,
       p_member_ids: memberIds || null,
       p_billable_only: billableOnly,
+      p_time_zone: timeZone,
     },
   );
 

@@ -4,7 +4,7 @@
  * reflecting whether the app is online and can reach Supabase.
  */
 
-import { supabase } from "../../src/supabase/client";
+import { ipcRenderer } from "../ipc";
 import { showInAppNotification } from "./Notifications";
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -56,12 +56,8 @@ function notifyListeners() {
  */
 async function pingSupabase(): Promise<boolean> {
   try {
-    const { error } = await supabase
-      .from("user_profiles")
-      .select("id")
-      .limit(1)
-      .maybeSingle();
-    return !error;
+    // Main has the only Supabase client; the renderer can't reach it
+    return (await ipcRenderer.invoke("check-connection")) === true;
   } catch {
     return false;
   }

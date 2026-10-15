@@ -1,4 +1,3 @@
-import { supabase } from "../../src/supabase/client";
 import { ipcRenderer } from "../ipc";
 import { showInAppNotification } from "../components/Notifications";
 import { showModal } from "../components/Modals";
@@ -6,187 +5,40 @@ import {
   validatePassword,
   attachPasswordStrengthIndicator,
 } from "./passwordValidator";
-
+import { signInWithGitHub, updatePassword } from "../auth";
 
 /**
- * Initialize OAuth callback listener for Electron
- * This handles the deep link callback after OAuth authentication
+ * OAuth and email-link callbacks (GitHub sign-in, email confirmation,
+ * password reset) are finished by the main process, which owns the session.
+ * The renderer only shows what main reports: notices, and the new-password
+ * form after a reset link. Signing in itself arrives on "auth-state".
  */
-export function initializeOAuthListener(onSuccess: (session: any) => void) {
-  // Remove all existing listeners to prevent duplicates
-  ipcRenderer.removeAllListeners("oauth-callback");
+export function initializeOAuthListener() {
+  ipcRenderer.removeAllListeners("auth-notice");
+  ipcRenderer.removeAllListeners("auth-password-recovery");
 
-  // Listen for OAuth callback from main process
-  ipcRenderer.on("oauth-callback", async (_event: any, hash: string) => {
-    try {
-      // Parse the hash parameters
-      const params = new URLSearchParams(hash);
-      const access_token = params.get("access_token");
-      const refresh_token = params.get("refresh_token");
-      const code = params.get("code");
-      const type = params.get("type");
-
-      // Handle password recovery
-      // Check for both 'recovery' type and if we're in a recovery flow
-      if (
-        (type === "recovery" || params.get("error_code") === "401") &&
-        access_token
-      ) {
-        // Set the session with the recovery token
-        const { data, error } = await supabase.auth.setSession({
-          access_token,
-          refresh_token: refresh_token || "",
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        // Show password reset modal
-        showInAppNotification("Please enter your new password");
-        await showPasswordUpdateModal();
-
-        // After password update, call success callback
-        if (data.session && onSuccess) {
-          onSuccess(data.session);
-        }
-        return;
+  ipcRenderer.on(
+    "auth-notice",
+    (_event: unknown, notice: { message?: string; type?: "info" | "error" }) => {
+      if (notice?.message) {
+        showInAppNotification(notice.message, 4000, notice.type === "error" ? "error" : "info");
       }
+    },
+  );
 
-      // If we have an authorization code, exchange it for tokens
-      if (code) {
-        const { data, error } =
-          await supabase.auth.exchangeCodeForSession(code);
-
-        if (error) {
-          throw error;
-        }
-
-        if (data.session) {
-          // Store user ID
-          if (data.session.user?.id) {
-            localStorage.setItem("currentUserId", data.session.user.id);
-          }
-
-          // Check if this is a password recovery session
-          // Supabase indicates recovery via the recovery_sent_at field on the user object
-          const isRecovery =
-            type === "recovery" || data.session.user.recovery_sent_at;
-
-          if (isRecovery) {
-            showInAppNotification("Please enter your new password");
-            await showPasswordUpdateModal();
-
-            // Call success callback after password update
-            if (onSuccess) {
-              onSuccess(data.session);
-            }
-            return;
-          }
-
-          // Check if this is email confirmation
-          if (type === "signup" || type === "email") {
-            showInAppNotification("Email confirmed! Welcome!");
-          } else {
-            showInAppNotification("Successfully signed in with GitHub!");
-          }
-
-          // Call success callback
-          if (onSuccess) {
-            onSuccess(data.session);
-          }
-        }
-      }
-      // If we already have tokens (direct hash redirect), use them
-      else if (access_token) {
-        // Set the session using the tokens
-        const { data, error } = await supabase.auth.setSession({
-          access_token,
-          refresh_token: refresh_token || "",
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        if (data.session) {
-          // Store user ID
-          if (data.session.user?.id) {
-            localStorage.setItem("currentUserId", data.session.user.id);
-          }
-
-          // Check if this is a password recovery session
-          // Supabase indicates recovery via the recovery_sent_at field on the user object
-          const isRecovery =
-            type === "recovery" || data.session.user.recovery_sent_at;
-
-          if (isRecovery) {
-            showInAppNotification("Please enter your new password");
-            await showPasswordUpdateModal();
-
-            // Call success callback after password update
-            if (onSuccess) {
-              onSuccess(data.session);
-            }
-            return;
-          }
-
-          // Check if this is email confirmation
-          if (type === "signup" || type === "email") {
-            showInAppNotification("Email confirmed! Welcome!");
-          } else {
-            showInAppNotification("Successfully signed in!");
-          }
-
-          // Call success callback
-          if (onSuccess) {
-            onSuccess(data.session);
-          }
-        }
-      } else if (params.get("error")) {
-        throw new Error(
-          params.get("error_description") || "OAuth authentication failed",
-        );
-      }
-    } catch (error: any) {
-      // eslint-disable-next-line no-console
-      console.error("OAuth callback error:", error);
-      showInAppNotification(
-        `OAuth Error: ${error.message || "Authentication failed"}`,
-      );
-    }
+  ipcRenderer.on("auth-password-recovery", () => {
+    showInAppNotification("Please enter your new password");
+    void showPasswordUpdateModal().catch(() => {});
   });
 }
 
 /**
- * Sign in with GitHub using external browser
+ * Sign in with GitHub: main opens the browser; the result comes back
+ * through the dev-time-tracker:// link.
  */
 export async function signInWithGitHubElectron() {
-  try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: {
-        redirectTo: "dev-time-tracker://oauth-callback",
-        skipBrowserRedirect: true, // We'll handle it manually
-      },
-    });
-
-    if (error) {
-      throw error;
-    }
-
-    // Open OAuth URL in external browser via IPC
-    if (data.url) {
-      await ipcRenderer.invoke("open-oauth-url", data.url);
-      showInAppNotification("Opening GitHub in your browser...");
-    }
-
-    return data;
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("Error in signInWithGitHubElectron:", error);
-    throw error;
-  }
+  await signInWithGitHub();
+  showInAppNotification("Opening GitHub in your browser...");
 }
 
 /**
@@ -240,14 +92,7 @@ async function showPasswordUpdateModal(): Promise<void> {
             throw new Error(validation.errors.join(". "));
           }
 
-          // Update password
-          const { error } = await supabase.auth.updateUser({
-            password: newPassword,
-          });
-
-          if (error) {
-            throw error;
-          }
+          await updatePassword(newPassword);
 
           showInAppNotification("Password updated successfully!");
           resolve();
