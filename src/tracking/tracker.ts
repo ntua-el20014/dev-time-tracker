@@ -40,6 +40,7 @@ import {
 import { SessionClock, type SessionSnapshot } from "./sessionClock";
 import { decideIdleAction, type Activity } from "./idlePolicy";
 import { createAgentHeartbeat } from "./agentHeartbeat";
+import { LiveAgents, type HookEvent, type LiveStatus } from "./agentLive";
 import { createUsageSampler } from "./usageSampler";
 import { UsageBatcher } from "./usageBatcher";
 import { getWorkspaceHint } from "./workspaceHints";
@@ -87,8 +88,19 @@ export interface TrackingState {
   supervisingSeconds: number;
   /** Its [start, end] ISO pairs; an open span ends when the state was taken */
   supervisingSpans: [string, string][];
-  /** Last time an AI agent wrote to its transcript (ISO), or null */
+  /** Last sign of AI agent work (transcript write or hook event, ISO), or null */
   agentActiveAt: string | null;
+  /** Claude Code sessions reporting through hooks (Connect Claude Code), latest first */
+  liveAgents: LiveAgentSummary[];
+}
+
+export interface LiveAgentSummary {
+  source: "claude-code";
+  status: LiveStatus;
+  /** When the status started (ISO) */
+  since: string;
+  /** Repo of the agent's working directory, else the folder's name */
+  repoName: string | null;
 }
 
 export type { ProjectSource };
@@ -104,6 +116,8 @@ const IDLE_POLL_MS = 2000;
 const DETECT_MS = 5000;
 /** How often agent transcripts are checked for activity. */
 const HEARTBEAT_MS = 15_000;
+/** A terminal without a path in its title gets the repo of an agent busy this recently. */
+const TERMINAL_AGENT_MS = 10 * 60_000;
 
 // ── State ────────────────────────────────────────────────────────────
 
@@ -150,6 +164,7 @@ export function getTrackingState(): TrackingState {
     supervisingSeconds: clock.supervisingSeconds(new Date()),
     supervisingSpans: clock.supervisingSpans(new Date()),
     agentActiveAt: agentActiveAt(),
+    liveAgents: liveAgentSummaries(),
   };
 }
 
@@ -387,9 +402,14 @@ function detectFocusedRepo(userId: string): RepoInfo | null {
   if (!win || !execName) return null;
   const known = matchApp(execName, userId);
   if (!known) return null;
-  return repoResolver()(
-    getWorkspaceHint(execName, win.title ?? "", known.category),
-  );
+  const hint = getWorkspaceHint(execName, win.title ?? "", known.category);
+  // A terminal title without a path (e.g. running `claude`): the repo of
+  // the Claude Code session that was busy most recently, if hooks are on
+  if (!hint && known.name === "Terminal") {
+    const cwd = liveAgents.recentCwd(Date.now(), TERMINAL_AGENT_MS);
+    return cwd ? resolveRepoForDir(cwd) : null;
+  }
+  return repoResolver()(hint);
 }
 
 /**
@@ -717,6 +737,10 @@ export async function finalizeTrackingForQuit() {
 
 // ── Agent heartbeat ──────────────────────────────────────────────────
 
+/** Claude Code's config folder (~/.claude, or CLAUDE_CONFIG_DIR). */
+export const CLAUDE_DIR =
+  process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+
 const heartbeat = createAgentHeartbeat({
   fs: {
     async readDir(p) {
@@ -735,8 +759,7 @@ const heartbeat = createAgentHeartbeat({
       }
     },
   },
-  claudeDir:
-    process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"),
+  claudeDir: CLAUDE_DIR,
   codexDir: process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
   platform: process.platform,
 });
@@ -746,9 +769,63 @@ export function getAgentTranscripts() {
   return heartbeat.transcripts();
 }
 
+/** Claude Code sessions as reported by its hooks (claudeHooks.ts). */
+const liveAgents = new LiveAgents();
+let liveAgentsShown = "";
+
+/** Last sign of agent work: a transcript write or a hook event (ms). */
+function lastAgentActivity(now: number): number | null {
+  const a = heartbeat.lastActivity();
+  const b = liveAgents.heartbeatMs(now);
+  if (a === null) return b;
+  return b === null ? a : Math.max(a, b);
+}
+
 function agentActiveAt(): string | null {
-  const last = heartbeat.lastActivity();
+  const last = lastAgentActivity(Date.now());
   return last === null ? null : new Date(last).toISOString();
+}
+
+function liveAgentSummaries(): LiveAgentSummary[] {
+  return liveAgents.view(Date.now()).map((s) => ({
+    source: s.source,
+    status: s.status,
+    since: s.since,
+    repoName: s.cwd
+      ? (resolveRepoForDir(s.cwd)?.name ?? path.basename(s.cwd))
+      : null,
+  }));
+}
+
+/** Broadcast if the shown agents changed on their own (gone stale or old). */
+function refreshLiveAgents() {
+  const now = Date.now();
+  liveAgents.prune(now);
+  const shown = liveAgents
+    .view(now)
+    .map((s) => `${s.sessionId}:${s.status}`)
+    .join();
+  if (shown !== liveAgentsShown) {
+    liveAgentsShown = shown;
+    emitState();
+  }
+}
+
+/** A Claude Code hook event arrived (already reduced to metadata). */
+export function applyAgentHookEvent(event: HookEvent) {
+  liveAgents.apply(event);
+  refreshLiveAgents();
+  pollIdle();
+}
+
+/** Hooks were disconnected: forget the live sessions. */
+export function clearLiveAgents() {
+  liveAgents.clear();
+  refreshLiveAgents();
+}
+
+export function getLiveAgentStats() {
+  return liveAgents.stats();
 }
 
 async function pollHeartbeat() {
@@ -758,6 +835,7 @@ async function pollHeartbeat() {
   } catch (err) {
     logError("agentHeartbeat", err);
   }
+  refreshLiveAgents();
   if (heartbeat.lastActivity() !== before) pollIdle();
 }
 
@@ -768,7 +846,7 @@ const clockTime = (d: Date) =>
 
 function pollIdle() {
   const now = new Date();
-  const lastAgent = heartbeat.lastActivity();
+  const lastAgent = lastAgentActivity(now.getTime());
   const decision = decideIdleAction({
     idleSeconds: powerMonitor.getSystemIdleTime(),
     idleTimeoutSeconds,

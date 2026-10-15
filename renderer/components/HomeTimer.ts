@@ -7,6 +7,9 @@
  * Below the picker, the repo main detected in the focused editor/terminal:
  * a linked repo's project is selected automatically before Start (unless
  * the user picked one); an unlinked repo can be linked in one click.
+ *
+ * Then the Claude Code sessions that report through hooks (Settings →
+ * Integrations → Connect Claude Code): working, waiting for you, or done.
  */
 import { escapeHtml } from "../utils/domUtils";
 import { safeIpcInvoke } from "../utils/ipcHelpers";
@@ -16,6 +19,7 @@ import {
   onTrackingState,
   toggleRecording,
   togglePause,
+  type LiveAgent,
   type TrackingState,
 } from "../trackingControls";
 import { currentSeconds, formatClock, onClockTick } from "../liveClock";
@@ -65,6 +69,32 @@ function repoHintHtml(state: TrackingState): string {
   return `<span>Repo ${name} isn't linked — pick its project to link it</span>`;
 }
 
+const AGENT_STATUS: Record<LiveAgent["status"], string> = {
+  working: "working",
+  waiting: "waiting for you",
+  idle: "done",
+};
+
+function minutesSince(iso: string): string {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  return m < 1 ? "just now" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+/** Live Claude Code sessions, one chip each (at most three). */
+function agentsHtml(state: TrackingState): string {
+  const agents = state.liveAgents ?? [];
+  if (agents.length === 0) return "";
+  const chips = agents
+    .slice(0, 3)
+    .map(
+      (a) =>
+        `<span class="home-agent ${a.status}" title="Claude Code, ${escapeHtml(AGENT_STATUS[a.status])} since ${escapeHtml(new Date(a.since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}"><span class="home-agent-dot" aria-hidden="true"></span>Claude Code${a.repoName ? ` · <strong>${escapeHtml(a.repoName)}</strong>` : ""} · ${escapeHtml(AGENT_STATUS[a.status])} <span class="home-agent-since">${escapeHtml(minutesSince(a.since))}</span></span>`,
+    )
+    .join("");
+  const more = agents.length > 3 ? `<span class="home-agent-more">+${agents.length - 3} more</span>` : "";
+  return chips + more;
+}
+
 /** Reflect main's state into the card, if it's on screen. */
 function sync(state: TrackingState) {
   const card = document.getElementById("homeTimer");
@@ -95,6 +125,12 @@ function sync(state: TrackingState) {
     if (hint.innerHTML !== html) hint.innerHTML = html;
     hint.hidden = html === "";
   }
+  const agents = card.querySelector<HTMLElement>("#homeAgents");
+  if (agents) {
+    const html = agentsHtml(state);
+    if (agents.innerHTML !== html) agents.innerHTML = html;
+    agents.hidden = html === "";
+  }
   const status = card.querySelector("#homeTimerStatus");
   if (status) {
     status.textContent = state.isRecording
@@ -104,6 +140,11 @@ function sync(state: TrackingState) {
 }
 
 onTrackingState(sync);
+// Keep the agents' "for 5m" fresh between state broadcasts
+setInterval(() => {
+  const state = getTrackingState();
+  if (state.liveAgents?.length) sync(state);
+}, 30_000);
 onClockTick((seconds) => {
   const el = document.getElementById("homeTimerClock");
   if (el) el.textContent = formatClock(seconds);
@@ -151,6 +192,7 @@ export async function renderHomeTimer(container: HTMLElement) {
         </div>
       </div>
       <div id="homeRepoHint" class="home-repo-hint" aria-live="polite" hidden></div>
+      <div id="homeAgents" class="home-agents" aria-live="polite" hidden></div>
       ${
         projects.length === 0
           ? `<p class="home-timer-hint">Create a project on the Projects page to bill your time per project.</p>`

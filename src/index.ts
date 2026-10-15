@@ -38,6 +38,11 @@ import {
   finalizeTrackingForQuit,
 } from "./tracking/tracker";
 import { initAgentIngest } from "./tracking/agents";
+import {
+  initClaudeHooks,
+  removeClaudeHooksOnUninstall,
+  shutdownClaudeHooks,
+} from "./tracking/claudeHooks";
 import "./ipc/sessionHandlers";
 import "./ipc/usageHandlers";
 import "./ipc/tagHandlers";
@@ -66,6 +71,10 @@ import { initUpdater, setUpdaterStateSink } from "./updater";
 // ── Windows installer events ──────────────────────────────────────
 // Squirrel runs the app with --squirrel-install/--squirrel-updated/
 // --squirrel-uninstall to create or remove shortcuts; handle and exit.
+// On uninstall, also take this app's hooks out of Claude Code's settings.
+if (process.argv.includes("--squirrel-uninstall")) {
+  removeClaudeHooksOnUninstall();
+}
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 if (require("electron-squirrel-startup")) {
   app.quit();
@@ -174,6 +183,7 @@ app.whenReady().then(async () => {
   // Tracking engine: idle/lock/sleep handling, state broadcasts
   initTracking({ getWindow: () => mainWindow });
   initAgentIngest();
+  void initClaudeHooks();
   onTrackingStateChange(() => updateTrayMenu());
 
   // Check for scheduled session notifications every minute for real-time notifications
@@ -467,6 +477,7 @@ app.on("window-all-closed", () => {
 // Unregister global shortcuts when the app is about to quit
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  void shutdownClaudeHooks();
 });
 
 // Handle OAuth callback URLs (for deep linking)

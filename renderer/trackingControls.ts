@@ -27,8 +27,19 @@ export interface TrackingState {
   supervisingSeconds: number;
   /** Its [start, end] ISO pairs; an open span ends when main sent this */
   supervisingSpans: [string, string][];
-  /** Last time an AI agent wrote to its transcript (ISO), or null */
+  /** Last sign of AI agent work (transcript write or hook event, ISO), or null */
   agentActiveAt: string | null;
+  /** Claude Code sessions reporting through hooks (Connect Claude Code), latest first */
+  liveAgents: LiveAgent[];
+}
+
+export interface LiveAgent {
+  source: "claude-code";
+  /** "waiting": it asked for permission or input */
+  status: "working" | "waiting" | "idle";
+  /** When the status started (ISO) */
+  since: string;
+  repoName: string | null;
 }
 
 export interface DetectedRepo {
@@ -52,6 +63,7 @@ let state: TrackingState = {
   supervisingSeconds: 0,
   supervisingSpans: [],
   agentActiveAt: null,
+  liveAgents: [],
 };
 const listeners = new Set<(state: TrackingState) => void>();
 

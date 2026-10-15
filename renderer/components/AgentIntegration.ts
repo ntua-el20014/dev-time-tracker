@@ -1,13 +1,14 @@
 /**
  * Settings → Integrations → AI coding agents: whether the app reads Claude
- * Code / Codex session logs (metadata only), its sync status, and the agent
- * sessions it recorded this week.
+ * Code / Codex session logs (metadata only), its sync status, the agent
+ * sessions it recorded this week, and Connect Claude Code (live hooks).
  */
 import { escapeHtml } from "../utils/domUtils";
 import { safeIpcInvoke } from "../utils/ipcHelpers";
 import { getLocalDateString } from "../../src/utils/timeFormat";
 import { showConfirmationModal } from "./Modals";
 import { showInAppNotification } from "./Notifications";
+import { renderClaudeHooks } from "./ClaudeHooks";
 
 interface Status {
   enabled: boolean;
@@ -141,8 +142,12 @@ export async function renderAgentIntegration(container: HTMLElement) {
       </div>
       <h4>Last 7 days</h4>
       ${sessionsTable(sessions ?? [], projectNames)}
+      <div id="claudeHooks"></div>
     </div>
   `;
+
+  const hooks = container.querySelector<HTMLElement>("#claudeHooks");
+  if (hooks) void renderClaudeHooks(hooks);
 
   const rerender = () => void renderAgentIntegration(container);
 

@@ -9,6 +9,7 @@
 /** Renderer → main request/response (ipcMain.handle). */
 export const INVOKE_CHANNELS = [
   "add-project-member",
+  "apply-claude-hooks",
   "auth:get-user",
   "auth:import-legacy-session",
   "auth:resend-verification",
@@ -43,6 +44,7 @@ export const INVOKE_CHANNELS = [
   "get-all-tags",
   "get-all-users",
   "get-billable-sessions",
+  "get-claude-hooks-status",
   "get-current-month-earnings",
   "get-current-user-id",
   "get-daily-goal",
@@ -105,6 +107,7 @@ export const INVOKE_CHANNELS = [
   "org:update",
   "org:update-user-role",
   "pause-tracking",
+  "preview-claude-hooks",
   "remove-project-member",
   "restore-project",
   "resume-tracking",

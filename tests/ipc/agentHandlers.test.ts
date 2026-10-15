@@ -25,6 +25,13 @@ const agents = {
 };
 vi.mock("../../src/tracking/agents", () => agents);
 
+const hooks = {
+  applyClaudeHooks: vi.fn(),
+  getClaudeHooksStatus: vi.fn(),
+  previewClaudeHooks: vi.fn(),
+};
+vi.mock("../../src/tracking/claudeHooks", () => hooks);
+
 beforeAll(async () => {
   await import("../../src/ipc/agentHandlers");
 });
@@ -62,5 +69,36 @@ describe("agent handlers", () => {
     getCurrentUser.mockResolvedValue(null);
     expect(await handlers["delete-agent-data"]({})).toBe(false);
     expect(await handlers["get-agent-integration"]({})).toBeNull();
+  });
+
+  describe("Connect Claude Code", () => {
+    const HASH = "a".repeat(64);
+
+    it("previews only connect or disconnect, signed in", async () => {
+      hooks.previewClaudeHooks.mockResolvedValue({ ok: true });
+      expect(await handlers["preview-claude-hooks"]({}, "connect")).toEqual({ ok: true });
+      expect(hooks.previewClaudeHooks).toHaveBeenCalledWith("connect");
+      expect(await handlers["preview-claude-hooks"]({}, "install-everything")).toBeNull();
+      getCurrentUser.mockResolvedValue(null);
+      expect(await handlers["preview-claude-hooks"]({}, "disconnect")).toBeNull();
+      expect(hooks.previewClaudeHooks).toHaveBeenCalledTimes(1);
+    });
+
+    it("applies only with an action and the preview's hash", async () => {
+      hooks.applyClaudeHooks.mockResolvedValue({ ok: true });
+      expect(await handlers["apply-claude-hooks"]({}, { action: "connect", baseHash: HASH })).toEqual({ ok: true });
+      expect(hooks.applyClaudeHooks).toHaveBeenCalledWith("connect", HASH);
+      expect(await handlers["apply-claude-hooks"]({}, { action: "connect", baseHash: "nope" })).toBeNull();
+      expect(await handlers["apply-claude-hooks"]({}, { action: "rm -rf", baseHash: HASH })).toBeNull();
+      expect(await handlers["apply-claude-hooks"]({}, null)).toBeNull();
+      expect(hooks.applyClaudeHooks).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports the status when signed in", async () => {
+      hooks.getClaudeHooksStatus.mockResolvedValue({ state: "connected" });
+      expect(await handlers["get-claude-hooks-status"]({})).toEqual({ state: "connected" });
+      getCurrentUser.mockResolvedValue(null);
+      expect(await handlers["get-claude-hooks-status"]({})).toBeNull();
+    });
   });
 });

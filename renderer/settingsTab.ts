@@ -908,6 +908,9 @@ const CHAPTERS: Record<string, (el: HTMLElement) => void | Promise<void>> = {
   account: renderAccountSection,
 };
 
+/** The open chapter, kept when Settings re-renders (e.g. after an org change). */
+let openChapter = "preferences";
+
 export async function renderSettingsView() {
   const settingsDiv = document.getElementById("settingsContent");
   if (!settingsDiv) return;
@@ -935,10 +938,16 @@ export async function renderSettingsView() {
   async function showChapter(chapter: string) {
     const render = CHAPTERS[chapter];
     if (!render) return;
-    contentDiv.innerHTML = "";
-    await withLoading(contentDiv, "Loading…", async () => {
-      await render(contentDiv);
+    openChapter = chapter;
+    // Each chapter renders into its own pane: a slower render that is still
+    // running (e.g. Preferences when the user clicks on) fills a pane that's
+    // no longer on screen instead of replacing the chapter they opened
+    const pane = document.createElement("div");
+    contentDiv.replaceChildren(pane);
+    await withLoading(pane, "Loading…", async () => {
+      await render(pane);
     });
+    if (pane.parentElement !== contentDiv) return;
     buttons.forEach((btn) => {
       btn.classList.toggle(
         "active",
@@ -947,7 +956,7 @@ export async function renderSettingsView() {
     });
   }
 
-  showChapter("preferences");
+  showChapter(openChapter);
   buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
       const chapter = (btn as HTMLButtonElement).dataset.chapter;

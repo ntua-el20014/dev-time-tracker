@@ -1,6 +1,6 @@
 /**
- * AI agent sessions (C3): status and settings of the transcript ingest, and
- * the user's uploaded agent sessions.
+ * AI agent sessions (C3): status and settings of the transcript ingest, the
+ * user's uploaded agent sessions, and Connect Claude Code (hooks).
  */
 import { ipcMain } from "electron";
 import { getCurrentUser } from "../supabase/api";
@@ -11,6 +11,12 @@ import {
   runAgentIngest,
   setAgentIngestEnabled,
 } from "../tracking/agents";
+import {
+  applyClaudeHooks,
+  getClaudeHooksStatus,
+  previewClaudeHooks,
+  type HookAction,
+} from "../tracking/claudeHooks";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -72,3 +78,47 @@ ipcMain.handle("delete-agent-data", async () => {
     return false;
   }
 });
+
+// ── Connect Claude Code (hooks) ──────────────────────────────────────
+
+const hookAction = (v: unknown): HookAction | null =>
+  v === "connect" || v === "disconnect" ? v : null;
+
+ipcMain.handle("get-claude-hooks-status", async () => {
+  try {
+    await requireUserId();
+    return await getClaudeHooksStatus();
+  } catch {
+    return null;
+  }
+});
+
+/** The exact change to Claude Code's settings.json, before it's made. */
+ipcMain.handle("preview-claude-hooks", async (_event, action: unknown) => {
+  try {
+    const a = hookAction(action);
+    if (!a) return null;
+    await requireUserId();
+    return await previewClaudeHooks(a);
+  } catch {
+    return null;
+  }
+});
+
+/** Make the previewed change; refused if the file changed since. */
+ipcMain.handle(
+  "apply-claude-hooks",
+  async (_event, args: { action?: unknown; baseHash?: unknown }) => {
+    try {
+      const a = hookAction(args?.action);
+      const hash = args?.baseHash;
+      if (!a || typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)) {
+        return null;
+      }
+      await requireUserId();
+      return await applyClaudeHooks(a, hash);
+    } catch {
+      return null;
+    }
+  },
+);
