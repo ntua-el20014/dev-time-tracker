@@ -40,6 +40,7 @@ import {
   hasUnsavedTrackingWork,
   finalizeTrackingForQuit,
 } from "./tracking/tracker";
+import { initAgentIngest } from "./tracking/agents";
 import "./ipc/sessionHandlers";
 import "./ipc/usageHandlers";
 import "./ipc/tagHandlers";
@@ -48,6 +49,7 @@ import "./ipc/scheduledSessionHandlers";
 import "./ipc/preferencesHandlers";
 import "./ipc/projectHandlers";
 import "./ipc/repoHandlers";
+import "./ipc/agentHandlers";
 import "./ipc/userHandlers";
 import "./ipc/organizationHandlers";
 import "./ipc/analyticsHandlers";
@@ -185,6 +187,7 @@ app.whenReady().then(() => {
 
   // Tracking engine: idle/lock/sleep handling, state broadcasts
   initTracking({ getWindow: () => mainWindow });
+  initAgentIngest();
   onTrackingStateChange(() => updateTrayMenu());
 
   // Check for scheduled session notifications every minute for real-time notifications

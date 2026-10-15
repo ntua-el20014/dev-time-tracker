@@ -112,4 +112,21 @@ describe("agentHeartbeat", () => {
     expect(b).toBeNull();
     expect(fs.mtimeMs).toHaveBeenCalledTimes(1);
   });
+
+  it("lists session transcripts by source, without subagent files", async () => {
+    const day = new Date(NOW);
+    const codexFile = P.join(CODEX, "sessions", `${day.getFullYear()}/${String(day.getMonth() + 1).padStart(2, "0")}/${String(day.getDate()).padStart(2, "0")}`, "rollout-1.jsonl");
+    const { hb } = setup(
+      new Map([
+        [claude("p", "s1.jsonl"), NOW - MIN],
+        [claude("p", "s1/subagents/agent-1.jsonl"), NOW - MIN],
+        [codexFile, NOW - 2 * MIN],
+      ]),
+    );
+    await hb.poll();
+    expect(hb.transcripts().sort((a, b) => a.path.localeCompare(b.path))).toEqual([
+      { path: claude("p", "s1.jsonl"), source: "claude-code", mtimeMs: NOW - MIN },
+      { path: codexFile, source: "codex", mtimeMs: NOW - 2 * MIN },
+    ]);
+  });
 });

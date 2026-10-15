@@ -320,6 +320,40 @@ async function runScenario(label) {
   );
   await as(A);
 
+  // ── Agent sessions ──
+  const agentRow = `INSERT INTO agent_sessions (user_id, source, external_id, project_id, org_id, started_at, ended_at, active_seconds, prompts, input_tokens, models, cost_usd)
+     VALUES ($1, 'claude-code', $2, $3, $4, '2026-10-15T10:00:00Z', '2026-10-15T10:30:00Z', 1500, 4, 1000, '{"claude-opus-5-5":{"input":1000}}', 1.25)`;
+  err = await fails(agentRow, [A, "cc-1", proj.id, orgB]);
+  check("user records an agent session for a visible project", !err, err ?? "");
+  check(
+    "agent session org_id comes from the server, not the client",
+    (await one(`SELECT org_id FROM agent_sessions WHERE external_id = 'cc-1'`)).org_id === orgA,
+  );
+  err = await fails(
+    `INSERT INTO agent_sessions (user_id, source, external_id, started_at, ended_at, prompts)
+     VALUES ($1, 'claude-code', 'cc-1', '2026-10-15T10:00:00Z', '2026-10-15T10:45:00Z', 6)
+     ON CONFLICT (user_id, source, external_id) DO UPDATE SET ended_at = EXCLUDED.ended_at, prompts = EXCLUDED.prompts`,
+    [A],
+  );
+  check("re-ingesting an agent session upserts it", !err && (await one(`SELECT prompts FROM agent_sessions WHERE external_id = 'cc-1'`)).prompts === 6, err ?? "");
+  err = await fails(
+    `INSERT INTO agent_sessions (user_id, source, external_id, started_at, ended_at) VALUES ($1, 'cursor', 'x', NOW(), NOW())`,
+    [A],
+  );
+  check("unknown agent sources are rejected", !!err, err ?? "");
+  err = await fails(
+    `INSERT INTO agent_sessions (user_id, source, external_id, started_at, ended_at) VALUES ($1, 'codex', 'x', NOW(), NOW() - interval '1 hour')`,
+    [A],
+  );
+  check("agent session can't end before it starts", !!err, err ?? "");
+  await as(C);
+  check("outsiders can't see agent sessions", (await rows(`SELECT * FROM agent_sessions`)).length === 0);
+  err = await fails(agentRow, [C, "cc-2", proj.id, null]);
+  check("can't attribute an agent session to an invisible project", !!err, err ?? "");
+  err = await fails(agentRow, [A, "cc-3", null, null]);
+  check("can't record agent sessions for someone else", !!err, err ?? "");
+  await as(A);
+
   // ── Leaving an org ──
   await as(C);
   err = await fails(`UPDATE user_profiles SET org_id = NULL, role = 'employee' WHERE id = $1`, [C]);

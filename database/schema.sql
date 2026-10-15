@@ -161,6 +161,43 @@ CREATE TABLE project_repositories (
     UNIQUE(user_id, repo_key)
 );
 
+-- One row per AI coding agent session (Claude Code, Codex), read from the
+-- agent's local transcript. Metadata only: never prompt/response content or
+-- file paths. project_id comes from the user's repo links.
+CREATE TABLE agent_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+    org_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+    source TEXT NOT NULL CHECK (source IN ('claude-code', 'codex')),
+    external_id TEXT NOT NULL CHECK (length(external_id) BETWEEN 1 AND 200),
+    repo_key TEXT CHECK (length(repo_key) <= 512),
+    repo_name TEXT CHECK (length(repo_name) <= 200),
+    project_id UUID REFERENCES cloud_projects(id) ON DELETE SET NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    ended_at TIMESTAMPTZ NOT NULL,
+    -- Time between transcript entries, gaps over 5 minutes left out
+    active_seconds INTEGER NOT NULL DEFAULT 0 CHECK (active_seconds >= 0),
+    prompts INTEGER NOT NULL DEFAULT 0 CHECK (prompts >= 0),
+    tool_calls INTEGER NOT NULL DEFAULT 0 CHECK (tool_calls >= 0),
+    files_changed INTEGER NOT NULL DEFAULT 0 CHECK (files_changed >= 0),
+    lines_added INTEGER,
+    lines_removed INTEGER,
+    input_tokens BIGINT NOT NULL DEFAULT 0,
+    output_tokens BIGINT NOT NULL DEFAULT 0,
+    cache_read_tokens BIGINT NOT NULL DEFAULT 0,
+    cache_write_tokens BIGINT NOT NULL DEFAULT 0,
+    -- { "<model>": { "input": n, "output": n, "cacheRead": n, "cacheWrite": n } }
+    models JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(models) = 'object'),
+    -- File edits per language: { "TypeScript": 12 }
+    languages JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(languages) = 'object'),
+    -- As reported by the agent (Claude Code); NULL when unknown
+    cost_usd NUMERIC(12,4) CHECK (cost_usd IS NULL OR cost_usd >= 0),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CHECK (ended_at >= started_at),
+    UNIQUE(user_id, source, external_id)
+);
+
 CREATE TABLE user_tags (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
@@ -1120,6 +1157,10 @@ CREATE TRIGGER set_org_id_daily_usage_summary
 BEFORE INSERT OR UPDATE ON daily_usage_summary
 FOR EACH ROW EXECUTE FUNCTION set_org_id_from_user();
 
+CREATE TRIGGER set_org_id_agent_sessions
+BEFORE INSERT OR UPDATE ON agent_sessions
+FOR EACH ROW EXECUTE FUNCTION set_org_id_from_user();
+
 CREATE TRIGGER calculate_session_duration
 BEFORE INSERT OR UPDATE ON time_tracking_sessions
 FOR EACH ROW EXECUTE FUNCTION calculate_session_duration();
@@ -1140,6 +1181,8 @@ FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 CREATE TRIGGER set_timestamp_daily_usage_summary BEFORE UPDATE ON daily_usage_summary
 FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 CREATE TRIGGER set_timestamp_project_repositories BEFORE UPDATE ON project_repositories
+FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+CREATE TRIGGER set_timestamp_agent_sessions BEFORE UPDATE ON agent_sessions
 FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
 CREATE TRIGGER set_timestamp_user_tags BEFORE UPDATE ON user_tags
 FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
@@ -1165,6 +1208,7 @@ ALTER TABLE time_tracking_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_usage_summary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE project_repositories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session_tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_work_goals ENABLE ROW LEVEL SECURITY;
@@ -1308,6 +1352,20 @@ WITH CHECK (
     AND project_id IN (SELECT id FROM cloud_projects)
 );
 
+-- ── Agent sessions ── (own rows; a project only if the caller can see it)
+
+CREATE POLICY "Users can manage their own agent sessions"
+ON agent_sessions FOR ALL
+USING (user_id = auth.uid())
+WITH CHECK (
+    user_id = auth.uid()
+    AND (project_id IS NULL OR project_id IN (SELECT id FROM cloud_projects))
+);
+
+CREATE POLICY "Admins/managers can view org agent sessions"
+ON agent_sessions FOR SELECT
+USING (org_id = get_current_user_org_id() AND is_user_admin_or_manager());
+
 -- ── Sessions ──
 
 CREATE POLICY "Users can view their own sessions"
@@ -1426,6 +1484,9 @@ CREATE INDEX idx_cloud_projects_org_id ON cloud_projects(org_id);
 CREATE INDEX idx_cloud_projects_manager_id ON cloud_projects(manager_id);
 CREATE INDEX idx_project_members_user_id ON project_members(user_id);
 CREATE INDEX idx_project_repositories_project_id ON project_repositories(project_id);
+CREATE INDEX idx_agent_sessions_user_started ON agent_sessions(user_id, started_at DESC);
+CREATE INDEX idx_agent_sessions_project ON agent_sessions(project_id);
+CREATE INDEX idx_agent_sessions_org_started ON agent_sessions(org_id, started_at);
 
 CREATE INDEX idx_sessions_user_start ON time_tracking_sessions(user_id, start_time DESC);
 CREATE INDEX idx_sessions_org_start ON time_tracking_sessions(org_id, start_time);

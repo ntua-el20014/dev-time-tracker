@@ -50,6 +50,7 @@ Rules that go beyond plain policies:
 | `cloud_projects` | owner (personal); org members (organization) | owner; admins/managers create org projects; admins update them; projects can't be moved to another org |
 | `project_members` | members of projects you can see | project manager |
 | `project_repositories` | owner | owner, and only to projects they can see |
+| `agent_sessions` | owner; admins/managers of the org | owner, project only if visible; `org_id` set by the server |
 | `time_tracking_sessions`, `usage_logs` | owner; admins/managers of the org | owner |
 | `daily_usage_summary` | owner; admins/managers of the org | owner (via `update_daily_usage_summary()`) |
 | `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_*`, `user_preferences` | owner (admins can also read the team's goals) | owner; tags only on your own sessions with your own tags |

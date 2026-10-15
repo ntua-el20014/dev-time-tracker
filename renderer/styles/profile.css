@@ -574,3 +574,50 @@
     gap: 0;
   }
 }
+
+/* ── Settings → Integrations → AI coding agents ── */
+.agent-integration p {
+  margin: 6px 0 10px;
+  line-height: 1.45;
+}
+
+.agent-integration h4 {
+  margin: 16px 0 6px;
+}
+
+.agent-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.agent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.agent-sessions-table {
+  overflow-x: auto;
+}
+
+.agent-sessions-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.agent-sessions-table th,
+.agent-sessions-table td {
+  padding: 5px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.agent-sessions-table .agent-project {
+  opacity: 0.7;
+}

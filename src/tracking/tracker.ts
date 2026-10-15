@@ -171,6 +171,10 @@ export function hasTrackingUser(): boolean {
   return currentUserId !== null;
 }
 
+export function getTrackingUserId(): string | null {
+  return currentUserId;
+}
+
 /** Called whenever the renderer syncs (or clears) the auth session. */
 export function setTrackingUser(userId: string | null) {
   if (userId === currentUserId) return;
@@ -206,6 +210,7 @@ export async function reloadRepoLinks() {
     );
     attribution.setLinks(links.filter((l) => active.has(l.project_id)));
     if (!applyDetectedProject()) emitState();
+    for (const listener of repoLinkListeners) listener();
   } catch (err) {
     if (classifyError(err) !== "network") logError("reloadRepoLinks", err);
   }
@@ -423,6 +428,27 @@ export function getDetectedRepo(): RepoInfo | null {
   return attribution.currentRepo();
 }
 
+/** The repo containing a folder (e.g. an agent's working directory). */
+export function resolveRepoForDir(dir: string): RepoInfo | null {
+  return repoResolver()({ kind: "path", path: dir });
+}
+
+/** The (active) project a repo is linked to, if any. */
+export function linkedProjectFor(repoKey: string): string | null {
+  return attribution.projectFor(repoKey);
+}
+
+type RepoLinksListener = (link?: { repoKey: string; projectId: string }) => void;
+const repoLinkListeners = new Set<RepoLinksListener>();
+
+/**
+ * Called when the repo links change: after the user links a repo (with the
+ * link), and after the links are (re)loaded (without).
+ */
+export function onRepoLinksChanged(listener: RepoLinksListener) {
+  repoLinkListeners.add(listener);
+}
+
 /** Link a repo to a project (or replace its link) for the signed-in user. */
 export async function linkRepo(repo: RepoInfo, projectId: string) {
   const uid = currentUserId;
@@ -434,6 +460,9 @@ export async function linkRepo(repo: RepoInfo, projectId: string) {
   });
   attribution.setLink(repo.key, projectId);
   if (!applyDetectedProject()) emitState();
+  for (const listener of repoLinkListeners) {
+    listener({ repoKey: repo.key, projectId });
+  }
 }
 
 // ── Session control ──────────────────────────────────────────────────
@@ -711,6 +740,11 @@ const heartbeat = createAgentHeartbeat({
   codexDir: process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
   platform: process.platform,
 });
+
+/** Agent session transcripts the heartbeat knows about. */
+export function getAgentTranscripts() {
+  return heartbeat.transcripts();
+}
 
 function agentActiveAt(): string | null {
   const last = heartbeat.lastActivity();

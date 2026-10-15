@@ -12,6 +12,7 @@
  * re-stat'ed every few minutes. Filesystem access is injected for tests.
  */
 import * as nodePath from "path";
+import type { AgentSource } from "./agentTranscripts";
 
 export interface HeartbeatFs {
   /** Entries of a folder, or [] if it can't be read */
@@ -130,6 +131,21 @@ export function createAgentHeartbeat(opts: HeartbeatOptions) {
     /** Latest agent write seen so far (ms since epoch), or null. */
     lastActivity(): number | null {
       return latest;
+    },
+    /**
+     * Session transcripts seen so far (subagent files left out: they belong
+     * to their parent session), with their last known mtime.
+     */
+    transcripts(): { path: string; source: AgentSource; mtimeMs: number }[] {
+      const subagent = `${P.sep}subagents${P.sep}`;
+      const codexRoot = P.join(opts.codexDir, "sessions") + P.sep;
+      return [...known]
+        .filter(([path]) => !path.includes(subagent))
+        .map(([path, mtimeMs]) => ({
+          path,
+          source: path.startsWith(codexRoot) ? ("codex" as const) : ("claude-code" as const),
+          mtimeMs,
+        }));
     },
   };
 }

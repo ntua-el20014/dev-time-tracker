@@ -251,6 +251,99 @@ export interface Database {
           },
         ];
       };
+      agent_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          org_id: string | null;
+          source: "claude-code" | "codex";
+          external_id: string;
+          repo_key: string | null;
+          repo_name: string | null;
+          project_id: string | null;
+          started_at: TimestampString;
+          ended_at: TimestampString;
+          active_seconds: number;
+          prompts: number;
+          tool_calls: number;
+          files_changed: number;
+          lines_added: number | null;
+          lines_removed: number | null;
+          input_tokens: number;
+          output_tokens: number;
+          cache_read_tokens: number;
+          cache_write_tokens: number;
+          models: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }>;
+          languages: Record<string, number>;
+          cost_usd: number | null;
+          created_at: TimestampString;
+          updated_at: TimestampString;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          org_id?: string | null;
+          source: "claude-code" | "codex";
+          external_id: string;
+          repo_key?: string | null;
+          repo_name?: string | null;
+          project_id?: string | null;
+          started_at: TimestampString;
+          ended_at: TimestampString;
+          active_seconds?: number;
+          prompts?: number;
+          tool_calls?: number;
+          files_changed?: number;
+          lines_added?: number | null;
+          lines_removed?: number | null;
+          input_tokens?: number;
+          output_tokens?: number;
+          cache_read_tokens?: number;
+          cache_write_tokens?: number;
+          models?: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }>;
+          languages?: Record<string, number>;
+          cost_usd?: number | null;
+          created_at?: TimestampString;
+          updated_at?: TimestampString;
+        };
+        Update: {
+          source?: "claude-code" | "codex";
+          external_id?: string;
+          repo_key?: string | null;
+          repo_name?: string | null;
+          project_id?: string | null;
+          started_at?: TimestampString;
+          ended_at?: TimestampString;
+          active_seconds?: number;
+          prompts?: number;
+          tool_calls?: number;
+          files_changed?: number;
+          lines_added?: number | null;
+          lines_removed?: number | null;
+          input_tokens?: number;
+          output_tokens?: number;
+          cache_read_tokens?: number;
+          cache_write_tokens?: number;
+          models?: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }>;
+          languages?: Record<string, number>;
+          cost_usd?: number | null;
+          updated_at?: TimestampString;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "agent_sessions_project_id_fkey";
+            columns: ["project_id"];
+            referencedRelation: "cloud_projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "agent_sessions_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "user_profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       time_tracking_sessions: {
         Row: {
           id: string;

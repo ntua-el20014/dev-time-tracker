@@ -49,7 +49,8 @@ Supabase (RLS enforces per-user / per-org access)
 | `tracker.ts` | Orchestrator with Electron dependencies: tick and flush timers, idle poll, lock/sleep handling, session-info prompt, session save, quit finalization, tracking IPC (`get-tracking-state`, `start/pause/resume/stop-tracking`, `toggle-incognito`). The user ID comes from `setTrackingUser()`, called by `sync-auth-session`, so ticks make no auth network call. On sign-in it also loads the user's saved idle timeout and tracking interval. |
 | `sessionClock.ts` | Pure timing: active seconds excluding pauses, manual vs automatic pause, supervising spans; a pause may be backdated (spans after it are clipped); stop → `{start, end, duration, supervisingSeconds, supervisingSpans}` |
 | `idlePolicy.ts` | Pure Active / Supervising / Away rules (C4, below): pause when away, backdated; resume an *automatic* pause when idle < 5s and not locked or suspended |
-| `agentHeartbeat.ts` | When an AI agent last wrote a transcript, from mtimes only (no contents): Claude Code `<CLAUDE_CONFIG_DIR or ~/.claude>/projects/*/*.jsonl` (+ `<session>/subagents/*.jsonl`), Codex `<CODEX_HOME or ~/.codex>/sessions/YYYY/MM/DD/*.jsonl` (today, yesterday). Async; between 5-min full scans only new and hot (<2 h) files are stat'ed. Polled every 15 s. |
+| `agentHeartbeat.ts` | When an AI agent last wrote a transcript, from mtimes only (no contents): Claude Code `<CLAUDE_CONFIG_DIR or ~/.claude>/projects/*/*.jsonl` (+ `<session>/subagents/*.jsonl`), Codex `<CODEX_HOME or ~/.codex>/sessions/YYYY/MM/DD/*.jsonl` (today, yesterday). Async; between 5-min full scans only new and hot (<2 h) files are stat'ed. Polled every 15 s. Also lists the session transcripts for C3 (`transcripts()`). |
+| `agentTranscripts.ts` / `agentIngest.ts` / `agents.ts` | C3, see "Agent sessions" below. |
 | `usageSampler.ts` | Foreground window (x-win) → `{appName, windowTitle, language, languageExtension, icon}`. Matches `execName` against `assets/known_editors.json` plus per-user `custom-apps-<uid>.json`; **unknown apps are dropped**. Language comes from `getLanguageDataFromTitle()` (`src/utils/extractData.ts`). |
 | `workspaceHints.ts` / `repoResolver.ts` / `projectAttribution.ts` | C1, see "Project detection" below. |
 | `usageBatcher.ts` | Buffers ticks; every 60s (and on pause/stop/sign-out/quit) does **one INSERT** into `usage_logs` plus one `update_daily_usage_summary` RPC per (local day, app, language). Network failure → offline queue. Icons are sent once per summary row. The Today tab refreshes on each flush (`window-tracked`). |
@@ -68,6 +69,12 @@ Supabase (RLS enforces per-user / per-org access)
 - Supervising time is part of `duration` and stored as `supervising_seconds` + `supervising_spans`. It is billed unless the project's `bill_supervising` is false: `shared/billing.ts` `billableSecondsOf()` is used by `billableHours.ts`, the invoice handlers (`billed_seconds` per session, used by the PDF) and the Home timeline. Team-analytics SQL still counts full duration.
 - UI: rail "Supervising agent", Home "Supervising an agent", timeline hatches supervising slices and adds "· Xm supervising" to totals, Billing notes the supervising part per project, the project form has "Bill time spent supervising an AI agent".
 
+**Agent sessions (C3, passive)** — `agents.ts` runs every 60 s while signed in and enabled (on by default; Settings → Integrations → AI coding agents):
+- `agentTranscripts.ts` (pure) folds transcript lines into a per-session aggregate: start/end, active seconds (gaps ≤ 5 min), prompts (Claude `origin.kind === "human"`; Codex `user_message`), tool calls, distinct files edited and edits per language, tokens per model (Claude lines sharing a `message.id` replace, not add; Codex `token_count` is cumulative), and Claude's own `cost-state` (`totalCostUSD`, lines added/removed). Every field optional — the formats are internal and change.
+- `agentIngest.ts` reads each session transcript from its saved byte offset, complete lines only, ≤ 32 MB per pass, files touched in the last 30 days; state (offsets + aggregates) in `userData/agent-ingest-<uid>.json`; failed uploads stay dirty and retry. Session identity = transcript file name (resumed Claude sessions copy lines with the old `sessionId`); subagent transcripts are skipped (they'd collide with their parent; their tokens are only in the parent's `cost-state`).
+- Uploaded to `agent_sessions` (one row per agent session, upsert on `(user_id, source, external_id)`): repo key/name and project (from repo links), times, counts, tokens, models, languages, cost. **Never** content, file paths or the cwd. Linking a repo backfills `project_id` on earlier rows (`assignAgentSessionsProject`) and re-uploads local ones. "Delete uploaded agent data" deletes the rows and turns recording off.
+- Not done: process detection (transcripts say more, and Windows can't read another process's cwd without native code); the opt-in "Connect Claude Code" hooks.
+
 Flows:
 - **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` with `{projectId}` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" with the chosen project + `session-info-timeout`), then saves with `end_time`. The dialog preselects the project and, if it has an hourly rate, Billable.
 - **Quit:** `hasUnsavedTrackingWork()` / `finalizeTrackingForQuit()` settle an open prompt, save a running or paused session, and flush usage.
@@ -85,7 +92,7 @@ Flows:
 ### Data model (`database/schema.sql` — the whole database in one file; `database/README.md` explains setup, reset and the security model)
 Tables:
 - `organizations`, `user_profiles` (role: admin/manager/employee), `org_join_requests`, `org_invite_codes`
-- `cloud_projects` (scope personal|organization, `hourly_rate`), `project_members`, `project_repositories` (per-user repo → project links, C1)
+- `cloud_projects` (scope personal|organization, `hourly_rate`), `project_members`, `project_repositories` (per-user repo → project links, C1), `agent_sessions` (C3)
 - `time_tracking_sessions` (`is_billable` NOT NULL; the trigger derives `duration` from `end_time` only when `duration` is NULL; `supervising_seconds`/`supervising_spans`, C4)
 - `usage_logs`, `daily_usage_summary`
 - `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_work_sessions`, `scheduled_session_tags`
@@ -291,6 +298,8 @@ In priority order (cheapest and highest value first):
   - Not done: terminal agents whose title has no path (e.g. `claude` in Windows Terminal) — C3's transcripts/process cwd will cover them. Remote (WSL/SSH/container) windows are skipped. Scheduled sessions still don't set `project_id`.
 - [ ] C2 Git stats per session (`session_code_stats`)
 - [ ] C3 Agent source: Claude Code hooks installer plus local receiver; transcript fallback; process detection
+  - [x] Passive part (transcripts) — done on `phase-c3-agents` (2026-10-15); see "Agent sessions" in Part 1. **DB change:** `agent_sessions` (table, triggers, RLS, indexes; additive). Process detection skipped (see Part 1).
+  - [ ] Opt-in "Connect Claude Code" hooks (preview, backup, merge, uninstall; localhost receiver, metadata only)
 - [x] C4 Active / Supervising / Away idle model — done on `phase-c4-supervising` (2026-10-15); see "Activity model" in Part 1.
   - **DB change:** `cloud_projects.bill_supervising`, `time_tracking_sessions.supervising_seconds`/`supervising_spans` (additive `ALTER TABLE`s; the app fails to save sessions without them).
   - Judgment calls: the first 60 s without input count as active (reading/thinking); supervising is capped at 1 h without any input so an overnight autonomous run isn't billed; on away, the time after the agent's last write isn't kept even though the 10-min window was used to wait for the user.

@@ -18,6 +18,7 @@ import {
   withLoading,
 } from "./utils";
 import { createPersonalExportModal } from "./utils/sessionExporter";
+import { renderAgentIntegration } from "./components/AgentIntegration";
 import {
   getCurrentOrganization,
   getCurrentUserProfile,
@@ -726,11 +727,15 @@ async function renderSettings(container: HTMLElement) {
   }
 }
 
-/** Settings → Integrations: files that teach the tracker about apps and languages. */
-function renderIntegrations(container: HTMLElement) {
+/**
+ * Settings → Integrations: AI coding agents, and files that teach the
+ * tracker about apps and languages.
+ */
+async function renderIntegrations(container: HTMLElement) {
   container.innerHTML = `
   <h2>Integrations</h2>
-  <div class="language-pie-info">
+  <div id="agentIntegration"></div>
+  <div class="language-pie-info" style="margin-top: 16px;">
     <b>Track more apps:</b><br>
     Edit the file <code>custom-apps.json</code> in your app data folder:<br>
     <div class="centered-btn">
@@ -780,6 +785,9 @@ function renderIntegrations(container: HTMLElement) {
     ?.addEventListener("click", () => {
       safeIpcInvoke("open-custom-apps-json", [], { fallback: null });
     });
+
+  const agents = container.querySelector<HTMLElement>("#agentIntegration");
+  if (agents) await renderAgentIntegration(agents);
 }
 
 /** Settings → Account & team: who you are, your org, and the way into Team. */
