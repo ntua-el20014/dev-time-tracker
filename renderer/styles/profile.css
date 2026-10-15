@@ -17,6 +17,8 @@
 }
 .profile-chapter-content {
   flex: 1;
+  /* Let wide content (tables) scroll instead of widening the column */
+  min-width: 0;
   padding: 0 0 0 32px;
 }
 
