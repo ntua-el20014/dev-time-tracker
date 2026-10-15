@@ -14,6 +14,8 @@ import { getLangIconUrl } from "../src/utils/langIconUrl";
 import { showInAppNotification } from "./components/Notifications";
 import { showModal } from "./components/Modals";
 import { navigateTo } from "./navigation";
+import { renderHomeTimer } from "./components/HomeTimer";
+import { renderTodayTimeline } from "./components/TodayTimeline";
 import { renderEarningsWidget } from "./components/BillableHoursSummary";
 import type { DailySummaryRow, SessionRow } from "../shared/types";
 
@@ -115,11 +117,12 @@ export async function renderDashboard() {
   if (!container) return;
   container.innerHTML = `
     <div id="dashboard-inner">
+      <div id="home-timer"></div>
+      <div id="home-timeline"></div>
       <div id="dashboard-goal-progress"></div>
-      <h1 class="dashboard-title">Developer Time Tracker</h1>
       <div class="standup-btn-row">
         <button id="generate-standup-btn" class="standup-btn" title="Generate a daily summary for standups">
-          📋 Generate Daily Summary
+          📋 Daily Summary
         </button>
       </div>
       <div id="dashboard-earnings"></div>
@@ -128,6 +131,14 @@ export async function renderDashboard() {
       <div id="dashboard-charts"></div>
     </div>
   `;
+
+  // --- Timer card and today's timeline (above the fold) ---
+  const timerDiv = document.getElementById("home-timer");
+  const timelineDiv = document.getElementById("home-timeline");
+  await Promise.all([
+    timerDiv ? renderHomeTimer(timerDiv) : null,
+    timelineDiv ? renderTodayTimeline(timelineDiv) : null,
+  ]);
 
   // Attach standup button handler
   const standupBtn = document.getElementById("generate-standup-btn");

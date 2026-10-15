@@ -100,6 +100,8 @@ import {
   togglePause,
   type TrackingState,
 } from "./trackingControls";
+import { formatClock, onClockTick } from "./liveClock";
+import { restoreLastProject } from "./sessionProject";
 
 // ── Pages ──────────────────────────────────────────────────────────
 // Each page renders on its first visit and then only when marked dirty
@@ -177,27 +179,13 @@ function initUI() {
   navigateTo("home");
 }
 
-function formatClock(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const sec = totalSeconds % 60;
-  return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-}
-
-// The rail timer counts up locally from the active seconds main last
-// reported, and resyncs on every tracking-state broadcast.
-let timerBaseSeconds = 0;
-let timerBaseAt = 0;
-let timerTicker: ReturnType<typeof setInterval> | null = null;
-
-function renderTimer(state: TrackingState) {
+/** Rail timer: status text and the live active-time clock. */
+onClockTick((seconds, state) => {
   const box = document.getElementById("navTimer");
   const status = document.getElementById("navTimerStatus");
   const clockEl = document.getElementById("navTimerClock");
   if (!box || !status || !clockEl) return;
-
-  const running = state.isRecording && !state.isPaused;
-  box.classList.toggle("recording", running);
+  box.classList.toggle("recording", state.isRecording && !state.isPaused);
   box.classList.toggle("paused", state.isRecording && state.isPaused);
   status.textContent = !state.isRecording
     ? "Not recording"
@@ -206,22 +194,11 @@ function renderTimer(state: TrackingState) {
         ? "Paused (idle)"
         : "Paused"
       : "Recording";
-
-  timerBaseSeconds = state.isRecording ? state.activeSeconds ?? 0 : 0;
-  timerBaseAt = Date.now();
-  const draw = () => {
-    const extra = running ? Math.floor((Date.now() - timerBaseAt) / 1000) : 0;
-    clockEl.textContent = formatClock(timerBaseSeconds + extra);
-  };
-  draw();
-
-  if (timerTicker) clearInterval(timerTicker);
-  timerTicker = running ? setInterval(draw, 1000) : null;
-}
+  clockEl.textContent = formatClock(seconds);
+});
 
 /** Render the record/pause buttons and the rail timer from main's state. */
 function renderTrackingButtons(state: TrackingState) {
-  renderTimer(state);
   const recordBtn = document.getElementById("recordBtn") as HTMLButtonElement;
   const recordIcon = document.getElementById("recordIcon") as HTMLImageElement;
   const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
@@ -329,7 +306,10 @@ function setupHotkeys() {
   hotkeyListenerAdded = true;
 }
 
-ipcRenderer.on("get-session-info", async () => {
+ipcRenderer.on(
+  "get-session-info",
+  async (_event: any, request?: { projectId?: string | null }) => {
+  const preselectedProjectId = request?.projectId ?? "";
   // Add a small delay to ensure any previous modals are fully closed
   setTimeout(async () => {
     // Load available projects for selection
@@ -344,7 +324,17 @@ ipcRenderer.on("get-session-info", async () => {
     }
 
     // Add project selection if there are active projects
-    const activeProjects = projects.filter((p: any) => p.is_active); // Clean up any existing modals first
+    const activeProjects = projects.filter((p: any) => p.is_active);
+    const preselected = activeProjects.find(
+      (p: any) => String(p.id) === String(preselectedProjectId),
+    );
+    // A project with a rate is usually billed: preselect Billable
+    const defaultBillable = preselected
+      ? preselected.hourly_rate != null
+        ? "true"
+        : "false"
+      : "";
+    // Clean up any existing modals first
     const existingModal = document.getElementById("customModal");
     const existingOverlay = document.getElementById("customModalOverlay");
     if (existingModal) existingModal.remove();
@@ -384,9 +374,9 @@ ipcRenderer.on("get-session-info", async () => {
 
           <label for="session-billable-status">Billing:</label><br>
           <select id="session-billable-status" name="billableStatus" required>
-            <option value="" disabled selected>Select billing status</option>
-            <option value="false">Non-billable</option>
-            <option value="true">Billable</option>
+            <option value="" disabled ${defaultBillable ? "" : "selected"}>Select billing status</option>
+            <option value="false" ${defaultBillable === "false" ? "selected" : ""}>Non-billable</option>
+            <option value="true" ${defaultBillable === "true" ? "selected" : ""}>Billable</option>
           </select><br>
           
           <div class="session-modal-actions">
@@ -412,6 +402,7 @@ ipcRenderer.on("get-session-info", async () => {
           id: "session-project",
           name: "project",
           placeholder: "No project",
+          value: preselected ? String(preselected.id) : "",
           options: [
             { value: "", label: "No project" },
             ...activeProjects.map((p: any) => ({
@@ -497,7 +488,8 @@ ipcRenderer.on("get-session-info", async () => {
         e.stopPropagation();
       });
   }, 100);
-});
+  },
+);
 
 // Main gave up waiting for the session-info modal (timeout, newer stop, or
 // quit) and saved the session with a default title — close the stale modal.
@@ -694,7 +686,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       renderMainUI();
       setupRecordAndPauseBtns();
       // Main may already be recording (e.g. after a window reload)
-      void refreshTrackingState();
+      void refreshTrackingState().then(restoreLastProject);
       void updateTeamVisibility();
     }
     if (landing) landing.style.display = "none";

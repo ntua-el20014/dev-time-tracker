@@ -250,13 +250,31 @@ try {
   check("restored project is active again", (await findProj())?.is_active === true);
   await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
 
+  // ── Record: pick the project on Home, start there, stop from the rail ──
   const title = `E2E session ${new Date().toISOString().slice(11, 19)}`;
-  await u1.ev(`document.getElementById("recordBtn").click()`);
-  check("record button starts tracking", await u1.waitFor(`document.getElementById("recordBtn").title === "Finish Recording"`, 5000));
+  check("Home offers the new project before Start", await u1.waitFor(`!!document.querySelector('#homeProjectSelect option[value=${JSON.stringify(String(proj?.id))}]')`, 10000));
+  await u1.ev(`(() => {
+    const sel = document.getElementById("homeProjectSelect");
+    sel.value = ${JSON.stringify(String(proj?.id))};
+    sel.dispatchEvent(new Event("change"));
+  })()`);
+  check("choosing a project tells main", await u1.waitFor(`true`, 1) && (await u1.invoke("get-tracking-state")).v?.projectId === proj?.id);
+  await u1.ev(`document.getElementById("homeStartBtn").click()`);
+  check("Home Start starts tracking (rail button agrees)", await u1.waitFor(`document.getElementById("recordBtn").title === "Finish Recording"`, 5000));
+  check("Home timer shows the project", await u1.waitFor(`(document.getElementById("homeTimerStatus")?.textContent || "").includes(${JSON.stringify(projName)})`, 5000));
   await sleep(13000);
   const clock = await u1.ev(`document.getElementById("navTimerClock").textContent`);
   check("rail timer counts the session", /^0:00:1\d$/.test(clock), clock);
+  const homeClock = await u1.ev(`document.getElementById("homeTimerClock").textContent`);
+  check("Home timer counts the same session", /^0:00:1\d$/.test(homeClock), homeClock);
+  check("timeline shows the running session", await u1.ev(`!!document.querySelector("#homeTimeline .today-bar.running")`));
+  const totalsText = await u1.ev(`document.querySelector("#homeTimeline .timeline-totals")?.textContent || ""`);
+  check("timeline totals count the running session", /tracked/.test(totalsText), totalsText);
+  await u1.shot("u1-home-recording.png");
   await u1.ev(`document.getElementById("recordBtn").click()`);
+  const modalShown = await u1.waitFor(`!!document.getElementById("sessionInfoForm")`, 10000);
+  const billingDefault = await u1.ev(`document.getElementById("session-billable-status")?.value`);
+  check("Stop dialog preselects Billable for a project with a rate", modalShown && billingDefault === "true", billingDefault);
   check("stop shows the session-info modal", await answerSessionInfo(u1, title));
   let saved;
   for (let i = 0; i < 20 && !saved; i++) {
@@ -268,12 +286,15 @@ try {
   check("saved with active duration ≥ 10s", (saved?.duration ?? 0) >= 10, `duration=${saved?.duration}`);
   check("saved with end_time (needs new schema trigger)", !!saved?.end_time);
   check("saved as billable", saved?.is_billable === true);
+  check("saved with the project chosen before Start", saved?.project_id === proj?.id, String(saved?.project_id));
   check("session date is the local day", saved?.date === new Date().toLocaleDateString("en-CA"), saved?.date);
 
-  // The session is billable with no project: Billing must still show it
+  check("Home timeline shows the saved session", await u1.waitFor(`[...document.querySelectorAll("#homeTimeline .today-bar")].some(b => b.getAttribute("aria-label").includes(${JSON.stringify(title)}))`, 10000));
+  await u1.shot("u1-home-after.png");
+
+  // The session is billed under its project
   await u1.ev(`document.querySelector('.nav-item[data-view="billing"]').click()`);
-  check("Billing flags the billable session that has no project", await u1.waitFor(`/billable sessions? \(.*\) ha(s|ve) no project/.test(document.querySelector(".billable-unassigned")?.innerText || "")`, 10000));
-  await u1.shot("u1-billing-unassigned.png");
+  check("Billing lists the project's billable session", await u1.waitFor(`(document.querySelector(".billable-projects-table")?.innerText || "").includes(${JSON.stringify(projName)})`, 10000));
   await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
 
   // Server-side org attribution of the session

@@ -13,6 +13,10 @@ export interface TrackingState {
   isIncognito: boolean;
   /** Active seconds of the current session when main sent this state */
   activeSeconds: number;
+  /** Wall-clock start of the current session (ISO), or null */
+  startedAt: string | null;
+  /** Project of the current (or next) session, chosen before Start */
+  projectId: string | null;
 }
 
 let state: TrackingState = {
@@ -21,6 +25,8 @@ let state: TrackingState = {
   autoPaused: false,
   isIncognito: false,
   activeSeconds: 0,
+  startedAt: null,
+  projectId: null,
 };
 const listeners = new Set<(state: TrackingState) => void>();
 
@@ -65,6 +71,11 @@ export async function pauseTracking() {
 
 export async function resumeTracking() {
   apply(await ipcRenderer.invoke("resume-tracking"));
+}
+
+/** Choose the project for the current session, or the next one. */
+export async function setSessionProject(projectId: string | null) {
+  apply(await ipcRenderer.invoke("set-session-project", projectId));
 }
 
 export async function toggleRecording() {

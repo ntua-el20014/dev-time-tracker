@@ -32,6 +32,11 @@ export class SessionClock {
   private runningSince: Date | null = null;
   private pausedAutomatically = false;
 
+  /** Wall-clock start of the current session, or null */
+  get startedAt(): Date | null {
+    return this.start;
+  }
+
   get isRecording(): boolean {
     return this.start !== null;
   }

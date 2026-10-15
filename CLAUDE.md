@@ -42,7 +42,7 @@ Supabase (RLS enforces per-user / per-org access)
 - The handler files register themselves as an import side effect (`import "./ipc/xHandlers"` in `src/index.ts`). `src/utils/langMap.ts` also registers handlers this way.
 
 ### The tracking engine (`src/tracking/`)
-**The main process owns the recording state.** The renderer and tray only request changes, and render the `tracking-state` broadcast (`{isRecording, isPaused, autoPaused, isIncognito}`). On the renderer side, `renderer/trackingControls.ts` mirrors that state and exposes `startTracking`/`stopTracking`/`togglePause`/… Never flip recording state locally.
+**The main process owns the recording state.** The renderer and tray only request changes, and render the `tracking-state` broadcast (`{isRecording, isPaused, autoPaused, isIncognito, activeSeconds, startedAt, projectId}`). `projectId` is the project of the current *or next* session: chosen before Start (`set-session-project`, Home's picker), used by every start path (Home, rail, Ctrl+R, tray), kept for the following sessions, preselected in the Stop dialog and used by the timeout/quit auto-saves. It resets on user change; the renderer restores the user's last choice from localStorage (`renderer/sessionProject.ts`). C1 should *suggest* into this, not overwrite a choice the user made. On the renderer side, `renderer/trackingControls.ts` mirrors that state and exposes `startTracking`/`stopTracking`/`togglePause`/… Never flip recording state locally.
 
 | Module | Role |
 |---|---|
@@ -53,7 +53,7 @@ Supabase (RLS enforces per-user / per-org access)
 | `usageBatcher.ts` | Buffers ticks; every 60s (and on pause/stop/sign-out/quit) does **one INSERT** into `usage_logs` plus one `update_daily_usage_summary` RPC per (local day, app, language). Network failure → offline queue. Icons are sent once per summary row. The Today tab refreshes on each flush (`window-tracked`). |
 
 Flows:
-- **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" + `session-info-timeout`), then saves with `end_time`.
+- **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` with `{projectId}` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" with the chosen project + `session-info-timeout`), then saves with `end_time`. The dialog preselects the project and, if it has an hourly rate, Billable.
 - **Quit:** `hasUnsavedTrackingWork()` / `finalizeTrackingForQuit()` settle an open prompt, save a running or paused session, and flush usage.
 - **Tray:** calls the tracker directly.
 - **Batching tradeoff:** a crash loses at most ~60s of usage samples, never the session.
@@ -285,7 +285,10 @@ In priority order (cheapest and highest value first):
   - Project cards always showed manager "Unknown"; the Projects tab stacked a new click listener on every render; billing rows put project names into innerHTML unescaped; `org:create-project` accepted `org_id`/`manager_id` from the renderer (removed).
   - Billing page: month navigation, per-project "Invoice" buttons (preselect the project), link from Home's earnings box. Billable sessions without a project (or whose project is no longer visible) were silently dropped from Billing; they are now an `unassigned` bucket in `EarningsSummary`, counted in billable hours/sessions but not earnings, shown as a notice with "Assign in Sessions".
   - e2e: Projects form create → archive → restore round trip, org project + member, Billing renders and flags the unassigned session; Team Analytics check waits for its KPIs instead of a fixed 3 s; Chromium occlusion throttling disabled and screenshots time out after 10 s (a covered window made the run hang).
-- [ ] U3 Home (timer + project picker before Start + timeline) and Sessions (List / Calendar / Insights), built alongside C1/C4
+- [x] U3 Home (timer + project picker before Start + timeline) — done on `ui-u3-home` (2026-10-15). Sessions' List / Calendar / Insights already landed in U1.
+  - Home top: timer card (`components/HomeTimer.ts`: project picker, Start/Stop, Pause, live clock) and today's timeline (`components/TodayTimeline.ts`, layout in `utils/timelineLayout.ts` with tests; bars colored by project, running session striped and growing, totals tracked/billable). Then goal, Daily Summary, earnings, calendar widget, stats, App activity.
+  - One ticking clock for rail and Home (`renderer/liveClock.ts`).
+  - Remaining for C1/C4: prefill the picker from the detected repo (C1); show the supervising slice on the timeline (C4). Scheduled sessions have a `project_id` column the calendar UI never sets — starting a scheduled session could select its project.
 
 **Phase D — later / optional**
 - [ ] Always-on auto-segmentation with the review inbox

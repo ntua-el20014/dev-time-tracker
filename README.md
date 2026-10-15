@@ -52,7 +52,7 @@ Tracks your coding sessions, editor and language usage, and helps you understand
 - **Hotkeys & Tray:**  
   Start/stop and pause tracking with in-app shortcuts (Ctrl+R, Ctrl+P) or from the tray icon, and jump between sidebar sections with Ctrl+1–6. Toggle incognito from any app with Ctrl+Alt+Shift+I.
 - **Sidebar layout:**  
-  Home (timer, today, goal, earnings), Sessions (List / Calendar / Insights), Projects, Billing (billable hours, earnings, invoices), Settings, and Team, which appears once your organization has other members (or someone is waiting to join).
+  Home (project picker + timer, today's timeline, goal, earnings), Sessions (List / Calendar / Insights), Projects, Billing (billable hours, earnings, invoices), Settings, and Team, which appears once your organization has other members (or someone is waiting to join).
 - **Customizable Themes:**  
   Switch between dark and light mode, pick custom accent colors for each theme. Settings sync across devices.
 - **Data Export:**  

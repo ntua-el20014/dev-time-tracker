@@ -1,5 +1,5 @@
 #dashboard-inner {
-  max-width: 600px;
+  max-width: 760px;
   margin: 0 auto;
   width: 100%;
 }
@@ -359,4 +359,185 @@
 .billable-empty-state p {
   margin: 0;
   font-size: 0.95em;
+}
+
+/* ── Home: timer card ─────────────────────────────────────────────── */
+.home-timer {
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: var(--row-odd);
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.home-timer.recording {
+  border-color: var(--accent);
+}
+
+.home-timer.paused {
+  border-color: var(--border);
+}
+
+.home-timer-main {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.home-project-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.home-project-label {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+#homeProjectSelect {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--fg);
+  font: inherit;
+  max-width: 100%;
+}
+
+.home-timer-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 140px;
+}
+
+.home-timer-clock {
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-timer.recording .home-timer-clock {
+  color: var(--accent);
+}
+
+.home-timer-status {
+  font-size: 13px;
+  opacity: 0.8;
+  text-align: center;
+}
+
+.home-timer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.home-start-btn,
+.home-pause-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.home-start-btn {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.home-start-btn.is-stop {
+  background: crimson;
+  color: #fff;
+}
+
+.home-pause-btn {
+  background: var(--row-hover);
+  color: var(--fg);
+}
+
+.home-timer-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+/* ── Home: today's timeline ───────────────────────────────────────── */
+.today-timeline {
+  margin-bottom: 24px;
+}
+
+.today-timeline-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.today-timeline-header h2 {
+  margin: 0 0 8px;
+  font-size: 1.1em;
+  color: var(--accent);
+}
+
+.timeline-totals {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.today-track {
+  position: relative;
+  height: 54px;
+  border-radius: 8px;
+  background: var(--row-odd);
+}
+
+.today-tick {
+  position: absolute;
+  bottom: 2px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  opacity: 0.6;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.today-tick:first-child {
+  transform: none;
+}
+
+.today-tick:last-of-type {
+  transform: translateX(-100%);
+}
+
+.today-bars {
+  position: absolute;
+  inset: 8px 0 20px;
+}
+
+.today-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+.today-bar:hover {
+  opacity: 1;
+}
+
+.today-bar.running {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.25) 0 6px,
+    transparent 6px 12px
+  );
 }

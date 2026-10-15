@@ -46,6 +46,13 @@ export interface TrackingState {
   isIncognito: boolean;
   /** Active seconds of the current session when this state was taken */
   activeSeconds: number;
+  /** Wall-clock start of the current session (ISO), or null */
+  startedAt: string | null;
+  /**
+   * Project the current (or next) session belongs to. Chosen before Start
+   * and kept for the following sessions; the Stop dialog preselects it.
+   */
+  projectId: string | null;
 }
 
 /** Sessions shorter than this (active seconds) are not saved. */
@@ -65,6 +72,7 @@ let flushTimer: ReturnType<typeof setInterval> | null = null;
 let intervalSeconds = DEFAULT_TRACKING_INTERVAL_SECONDS;
 let idleTimeoutSeconds = DEFAULT_IDLE_TIMEOUT_SECONDS;
 let isIncognito = false;
+let selectedProjectId: string | null = null;
 /** System away states: never auto-resume while either is set. */
 let screenLocked = false;
 let systemSuspended = false;
@@ -89,6 +97,8 @@ export function getTrackingState(): TrackingState {
     ...clock.state,
     isIncognito,
     activeSeconds: clock.activeSeconds(new Date()),
+    startedAt: clock.startedAt?.toISOString() ?? null,
+    projectId: selectedProjectId,
   };
 }
 
@@ -114,6 +124,8 @@ export function hasTrackingUser(): boolean {
 export function setTrackingUser(userId: string | null) {
   if (userId === currentUserId) return;
   currentUserId = userId;
+  // Projects belong to a user; the renderer restores the user's last one
+  selectedProjectId = null;
   if (userId) {
     loadUserLangMapFromDisk(userId);
     void loadTrackingPreferences(userId);
@@ -234,6 +246,21 @@ function stopTimers() {
 
 // ── Session control ──────────────────────────────────────────────────
 
+/** Accepts a project id from the renderer; anything else means "none". */
+function normalizeProjectId(value: unknown): string | null {
+  return typeof value === "string" && /^[\w-]{1,64}$/.test(value)
+    ? value
+    : null;
+}
+
+/** Choose the project for the current session, or the next one. */
+export function setSessionProject(projectId: unknown) {
+  const next = normalizeProjectId(projectId);
+  if (next === selectedProjectId) return;
+  selectedProjectId = next;
+  emitState();
+}
+
 export function startTracking() {
   if (clock.isRecording) return;
   clock.startAt(new Date());
@@ -277,8 +304,12 @@ let settleSessionInfo: ((info: SessionInfo) => void) | null = null;
 /** Save of a stopped session that is still waiting on its session-info prompt. */
 let pendingStopSave: Promise<void> | null = null;
 
-/** Ask the renderer for title/project/billing of a stopped session. */
-function askSessionInfo(): Promise<SessionInfo> {
+/**
+ * Ask the renderer for title/project/billing of a stopped session. The
+ * project chosen before Start is preselected, and kept if the prompt times
+ * out.
+ */
+function askSessionInfo(projectId: string | null): Promise<SessionInfo> {
   return new Promise((resolve) => {
     const finish = (info: SessionInfo) => {
       clearTimeout(timeout);
@@ -292,14 +323,16 @@ function askSessionInfo(): Promise<SessionInfo> {
       send("session-info-timeout");
       finish(info);
     };
+    const withProject = (info: SessionInfo): SessionInfo =>
+      projectId ? { ...info, projectId } : info;
     const timeout = setTimeout(
-      () => settleEarly(TIMED_OUT_SESSION_INFO),
+      () => settleEarly(withProject(TIMED_OUT_SESSION_INFO)),
       SESSION_INFO_TIMEOUT_MS,
     );
 
-    settleSessionInfo = settleEarly;
+    settleSessionInfo = (info) => settleEarly(withProject(info));
     ipcMain.on("session-info-reply", onReply);
-    send("get-session-info");
+    send("get-session-info", { projectId });
   });
 }
 
@@ -353,6 +386,7 @@ async function saveSession(
  */
 export async function stopTracking() {
   const session = clock.stop(new Date());
+  const projectId = selectedProjectId;
   stopTimers();
   void flushTrackedUsage();
   emitState();
@@ -365,7 +399,7 @@ export async function stopTracking() {
   settleSessionInfo?.(TIMED_OUT_SESSION_INFO);
 
   const save = (async () => {
-    const info = await askSessionInfo();
+    const info = await askSessionInfo(projectId);
     // An empty title means the user chose "Discard"
     if (info.title && info.title.trim() !== "") {
       await saveSession(uid, session, info);
@@ -412,9 +446,14 @@ export async function finalizeTrackingForQuit() {
   await flushTrackedUsage();
 
   if (session && session.duration >= MIN_SESSION_SECONDS && currentUserId) {
-    await saveSession(currentUserId, session, APP_CLOSED_SESSION_INFO, {
-      queueOnAnyError: true,
-    });
+    await saveSession(
+      currentUserId,
+      session,
+      selectedProjectId
+        ? { ...APP_CLOSED_SESSION_INFO, projectId: selectedProjectId }
+        : APP_CLOSED_SESSION_INFO,
+      { queueOnAnyError: true },
+    );
   }
 }
 
@@ -471,6 +510,10 @@ export function initTracking(options: {
 ipcMain.handle("get-tracking-state", () => getTrackingState());
 ipcMain.handle("start-tracking", () => {
   startTracking();
+  return getTrackingState();
+});
+ipcMain.handle("set-session-project", (_event, projectId: unknown) => {
+  setSessionProject(projectId);
   return getTrackingState();
 });
 ipcMain.handle("pause-tracking", () => {
