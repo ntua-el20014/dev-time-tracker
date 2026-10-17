@@ -6,7 +6,8 @@
 // Needs in .env.local: DTT_TEST_EMAIL_1/DTT_TEST_PASSWORD_1 (becomes the
 // org admin) and DTT_TEST_EMAIL_2/DTT_TEST_PASSWORD_2, both confirmed users;
 // SUPABASE_URL / SUPABASE_ANON_KEY come from .env. Creates and then deletes
-// a session; account 2 ends up in a fresh personal org. Windows only.
+// a session; account 2 ends up in a fresh personal org. Windows only; needs
+// git and curl (a scratch repo and Connect Claude Code cover C2/C3).
 import { spawn, execSync } from "child_process";
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from "fs";
 import os from "os";
@@ -229,6 +230,40 @@ try {
   check("user 1 is admin of it", p1?.role === "admin");
   await u1.shot("u1-dashboard.png");
 
+  // ── C2/C3 setup: a scratch repo, and Connect Claude Code (hooks) ──
+  // The hook events below put the repo into the session (an agent working
+  // in it), so the session's code stats come from this repo.
+  const gitRepo = path.join(work, "dtt-e2e-repo");
+  const git = (...args) => execSync(`git ${args.map((a) => JSON.stringify(a)).join(" ")}`, { cwd: gitRepo, stdio: "pipe" }).toString();
+  const lines = (...l) => l.map((x) => x + "\n").join("");
+  mkdirSync(gitRepo, { recursive: true });
+  git("init", "-q");
+  git("config", "user.email", "e2e@example.invalid");
+  git("config", "user.name", "E2E");
+  git("config", "commit.gpgsign", "false");
+  git("config", "core.autocrlf", "false");
+  git("remote", "add", "origin", "https://github.com/dtt-e2e/dtt-e2e-repo.git");
+  writeFileSync(path.join(gitRepo, "app.ts"), lines("const a = 1;", "const b = 2;", "const c = 3;", "const d = 4;", "const e = 5;"));
+  git("add", "app.ts");
+  git("commit", "-q", "-m", "initial");
+  // Untracked before the session: must not count
+  writeFileSync(path.join(gitRepo, "old.txt"), lines("old", "old"));
+  mkdirSync(path.join(work, "user1", "home", ".claude"), { recursive: true });
+  const preview = (await u1.invoke("preview-claude-hooks", "connect")).v;
+  check("Connect Claude Code: preview offered", preview?.ok === true && preview?.changed === true, preview?.error || "");
+  const applied = (await u1.invoke("apply-claude-hooks", { action: "connect", baseHash: preview?.baseHash })).v;
+  check("Connect Claude Code: applied", applied?.ok === true, applied?.error || "");
+  let hookEp = null;
+  try {
+    hookEp = JSON.parse(readFileSync(path.join(work, "user1", "profile", "claude-hooks.json"), "utf8"));
+  } catch {}
+  const hook = (event) =>
+    fetch(`http://127.0.0.1:${hookEp?.port}/dev-time-tracker/claude-hook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${hookEp?.token}` },
+      body: JSON.stringify({ session_id: "e2e-agent-session", cwd: gitRepo, ...event }),
+    }).then((r) => r.status, () => 0);
+
   // Sidebar: every visible view, and every visible sub-view inside it
   const navVisible = (view) => u1.ev(`!document.querySelector('.nav-item[data-view="${view}"]').hidden`);
   check("solo user: Team is not in the sidebar", !(await navVisible("team")));
@@ -289,7 +324,22 @@ try {
   await u1.ev(`document.getElementById("homeStartBtn").click()`);
   check("Home Start starts tracking (rail button agrees)", await u1.waitFor(`document.getElementById("recordBtn").title === "Finish Recording"`, 5000));
   check("Home timer shows the project", await u1.waitFor(`(document.getElementById("homeTimerStatus")?.textContent || "").includes(${JSON.stringify(projName)})`, 5000));
-  await sleep(13000);
+  const startedAt = Date.now();
+  // An agent starts working in the scratch repo (the repo is snapshotted)
+  check("hook receiver accepts an event", (await hook({ hook_event_name: "UserPromptSubmit" })) === 200);
+  check("Home shows the agent as working in the repo", await u1.waitFor(`(document.getElementById("view-home")?.innerText || "").includes("dtt-e2e-repo")`, 5000));
+  const agents = (await u1.invoke("get-tracking-state")).v?.liveAgents || [];
+  check("tracking state lists the live agent", agents.some((a) => a.status === "working" && a.repoName === "dtt-e2e-repo"), JSON.stringify(agents));
+  await sleep(2000);
+  // During the session: one commit (+4), an uncommitted edit (+3 −1) and a
+  // new untracked file (+2) → +9 −1 · 3 files · 1 commit
+  writeFileSync(path.join(gitRepo, "feature.ts"), lines("export function f() {", "  return 42;", "}", "export const g = f();"));
+  git("add", "feature.ts");
+  git("commit", "-q", "-m", "feature");
+  writeFileSync(path.join(gitRepo, "app.ts"), lines("const a = 1;", "const b = 2;", "const c = 3;", "const d = 4;", "const e = 50;", "const f = 6;", "const g = 7;"));
+  writeFileSync(path.join(gitRepo, "util.py"), lines("def util():", "    return 1"));
+  check("hook receiver accepts the Stop event", (await hook({ hook_event_name: "Stop" })) === 200);
+  await sleep(Math.max(0, startedAt + 13000 - Date.now()));
   const clock = await u1.ev(`document.getElementById("navTimerClock").textContent`);
   check("rail timer counts the session", /^0:00:1\d$/.test(clock), clock);
   const homeClock = await u1.ev(`document.getElementById("homeTimerClock").textContent`);
@@ -315,6 +365,39 @@ try {
   check("saved as billable", saved?.is_billable === true);
   check("saved with the project chosen before Start", saved?.project_id === proj?.id, String(saved?.project_id));
   check("session date is the local day", saved?.date === new Date().toLocaleDateString("en-CA"), saved?.date);
+
+  // ── C2: code stats of the session, from the scratch repo ────────
+  const repoStats = (saved?.code_stats || []).find((s) => s.repo_key === "github.com/dtt-e2e/dtt-e2e-repo");
+  check("code_stats has the repo the agent worked in", !!repoStats, JSON.stringify(saved?.code_stats));
+  check(
+    "code stats: 1 commit, 3 files, +9 −1",
+    repoStats?.commits === 1 && repoStats?.files_changed === 3 && repoStats?.lines_added === 9 && repoStats?.lines_removed === 1,
+    JSON.stringify(repoStats),
+  );
+  check(
+    "code stats per language: TypeScript +7 −1, Python +2",
+    repoStats?.languages?.TypeScript?.added === 7 && repoStats?.languages?.TypeScript?.removed === 1 && repoStats?.languages?.Python?.added === 2,
+    JSON.stringify(repoStats?.languages),
+  );
+  check("code stats keep no paths or file names", !/feature\.ts|util\.py|app\.ts|\\/.test(JSON.stringify(saved?.code_stats || [])));
+  const contains = encodeURIComponent(JSON.stringify([{ repo_key: "github.com/dtt-e2e/dtt-e2e-repo", commits: 1, lines_added: 9 }]));
+  const rawStats = await rawApi(u1, "GET", `time_tracking_sessions?id=eq.${saved?.id}&code_stats=cs.${contains}&select=id`);
+  check("code_stats stored in the database (JSONB query)", rawStats.status === 200 && rawStats.body.includes(String(saved?.id)), `HTTP ${rawStats.status} ${rawStats.body}`);
+  const badStats = await rawApi(u1, "PATCH", `time_tracking_sessions?id=eq.${saved?.id}`, { code_stats: { not: "an array" } });
+  check("database rejects code_stats that isn't an array", badStats.status >= 400, `HTTP ${badStats.status}`);
+  await u1.ev(`document.querySelector('.nav-item[data-view="sessions"]').click()`);
+  await u1.ev(`document.querySelector('#view-sessions .subnav-btn[data-sub="list"]').click()`);
+  await u1.waitFor(`[...document.querySelectorAll(".summary-filter-btn")].some(b => b.textContent === "Summary by Session")`, 8000);
+  await u1.ev(`[...document.querySelectorAll(".summary-filter-btn")].find(b => b.textContent === "Summary by Session").click()`);
+  check("Sessions list shows the code line", await u1.waitFor(`[...document.querySelectorAll(".session-code")].some(e => e.textContent === "+9 −1 · 3 files · 1 commit")`, 10000));
+  await u1.shot("u1-sessions-code.png");
+  await u1.ev(`document.querySelector('#view-sessions .subnav-btn[data-sub="insights"]').click()`);
+  check("Insights shows Code changed with the repo and languages", await u1.waitFor(`(() => {
+    const t = document.querySelector('#view-sessions .subview[data-sub="insights"]')?.innerText || "";
+    return /Code changed/.test(t) && t.includes("dtt-e2e-repo") && t.includes("TypeScript") && t.includes("Python");
+  })()`, 10000));
+  await u1.shot("u1-insights-code.png");
+  await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
 
   check("Home timeline shows the saved session", await u1.waitFor(`[...document.querySelectorAll("#homeTimeline .today-bar")].some(b => b.getAttribute("aria-label").includes(${JSON.stringify(title)}))`, 10000));
   await u1.shot("u1-home-after.png");

@@ -158,7 +158,7 @@ window.addEventListener("organization:changed", () => {
 
 // A session was saved: everything that lists or sums sessions is stale
 ipcRenderer.on("session-saved", () => {
-  refreshPages("dashboard", "summary", "projects", "billing", "teamAnalytics");
+  refreshPages("dashboard", "summary", "insights", "projects", "billing", "teamAnalytics");
 });
 
 // New AI agent sessions were uploaded (about once a minute while an agent
