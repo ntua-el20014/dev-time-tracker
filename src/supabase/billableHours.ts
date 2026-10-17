@@ -1,5 +1,7 @@
 import { supabase } from "./config";
 import { billableSecondsOf } from "../../shared/billing";
+import { roundUsd } from "../../shared/projectActivity";
+import { getAgentTotalsByProject } from "./projectActivity";
 import {
   getLocalDateString,
   localDayStartISO,
@@ -18,6 +20,11 @@ export interface BillableHoursSummary {
   /** Supervising time in these sessions (billed only if billSupervising) */
   supervisingSeconds: number;
   billSupervising: boolean;
+  /** AI agent cost reported in the period (a pass-through expense, not earnings) */
+  agentCostUsd: number;
+  /** Some agent sessions reported no cost, so agentCostUsd is a lower bound */
+  agentCostIncomplete: boolean;
+  agentSessions: number;
 }
 
 /** Billable sessions with no project: no rate, so no earnings. */
@@ -29,6 +36,8 @@ export interface UnassignedBillable {
 
 export interface EarningsSummary {
   totalEarnings: number;
+  /** Reported AI agent cost on the listed projects (not part of earnings) */
+  totalAgentCostUsd: number;
   /** Includes unassigned billable time */
   totalBillableHours: number;
   /** Includes unassigned billable sessions */
@@ -81,6 +90,9 @@ export async function getProjectBillableHours(
   const earnings = hourlyRate ? hourlyRate * billableHours : 0;
 
   return {
+    agentCostUsd: 0,
+    agentCostIncomplete: false,
+    agentSessions: 0,
     projectId: (projectData as any).id,
     projectName: (projectData as any).name,
     projectColor: (projectData as any).color,
@@ -146,6 +158,22 @@ export async function getUserEarningsSummary(
   // Group sessions by project; sessions without a (visible) project are
   // collected as unassigned so the time isn't silently dropped
   const byProject: Record<string, BillableHoursSummary> = {};
+  const entryFor = (projectId: string, project: any) =>
+    (byProject[projectId] ??= {
+      projectId,
+      projectName: project.name,
+      projectColor: project.color,
+      hourlyRate: project.hourly_rate || null,
+      billableHours: 0,
+      billableSeconds: 0,
+      billableSessions: 0,
+      earnings: 0,
+      supervisingSeconds: 0,
+      billSupervising: project.bill_supervising !== false,
+      agentCostUsd: 0,
+      agentCostIncomplete: false,
+      agentSessions: 0,
+    });
   const unassigned: UnassignedBillable = {
     billableHours: 0,
     billableSeconds: 0,
@@ -161,28 +189,25 @@ export async function getUserEarningsSummary(
       continue;
     }
 
-    if (!byProject[projectId]) {
-      byProject[projectId] = {
-        projectId,
-        projectName: (project as any).name,
-        projectColor: (project as any).color,
-        hourlyRate: (project as any).hourly_rate || null,
-        billableHours: 0,
-        billableSeconds: 0,
-        billableSessions: 0,
-        earnings: 0,
-        supervisingSeconds: 0,
-        billSupervising: (project as any).bill_supervising !== false,
-      };
-    }
-
-    const summary = byProject[projectId];
+    const summary = entryFor(projectId, project);
     summary.billableSeconds += billableSecondsOf(
       session as any,
       summary.billSupervising,
     );
     summary.supervisingSeconds += (session as any).supervising_seconds || 0;
     summary.billableSessions += 1;
+  }
+
+  // AI agent cost per project, a pass-through expense: also projects
+  // where only agents worked this period
+  const agents = await getAgentTotalsByProject(userId, defaultStart, defaultEnd);
+  for (const [projectId, t] of agents) {
+    const project = projectMap[projectId];
+    if (!project) continue;
+    const summary = entryFor(projectId, project);
+    summary.agentCostUsd = roundUsd(t.costUsd);
+    summary.agentCostIncomplete = t.costIncomplete;
+    summary.agentSessions = t.sessions;
   }
 
   // Calculate billable hours and earnings
@@ -209,6 +234,9 @@ export async function getUserEarningsSummary(
 
   return {
     totalEarnings,
+    totalAgentCostUsd: roundUsd(
+      summaries.reduce((sum, s) => sum + s.agentCostUsd, 0),
+    ),
     totalBillableHours,
     totalBillableSessions:
       summaries.reduce((sum, s) => sum + s.billableSessions, 0) +

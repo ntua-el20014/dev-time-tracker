@@ -58,6 +58,7 @@ export const INVOKE_CHANNELS = [
   "get-logged-days-of-month",
   "get-logs",
   "get-notification-settings",
+  "get-project-activity",
   "get-project-members",
   "get-project-stats",
   "get-projects-for-invoice",

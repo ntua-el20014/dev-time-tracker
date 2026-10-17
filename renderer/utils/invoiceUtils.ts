@@ -45,6 +45,9 @@ export interface InvoiceData {
     billableSessions: Session[];
     totalHours: number;
     hourlyRate: number;
+    /** Reported AI agent cost billed at cost (0 when not on the invoice) */
+    agentCost: number;
+    agentSessions: number;
     subtotal: number;
   }>;
   dateRange: {
@@ -207,6 +210,19 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
       yPosition += 5;
     }
 
+    if (project.agentCost > 0) {
+      checkNewPage(5);
+      const n = project.agentSessions;
+      doc.text(
+        `AI coding agent usage (${n} session${n === 1 ? "" : "s"}, at cost)`,
+        colStartX.description,
+        yPosition,
+        { maxWidth: colWidths.description + colWidths.duration },
+      );
+      doc.text(`$${project.agentCost.toFixed(2)}`, colStartX.amount, yPosition);
+      yPosition += 5;
+    }
+
     // Project subtotal
     doc.setTextColor(...template.accentColor);
     doc.setFontSize(template.fontSize.heading);
@@ -284,10 +300,15 @@ export function calculateInvoiceData(
     projectName: string;
     hourlyRate: number;
     billableSessions: Session[];
+    /** Reported AI agent cost in the period, and its number of sessions */
+    agentCostUsd?: number;
+    agentSessions?: number;
   }>,
   dateRange: { startDate: Date; endDate: Date },
   customization: InvoiceCustomization,
   template: InvoiceTemplate = DEFAULT_TEMPLATE,
+  /** Add each project's AI agent cost as a line item, at cost */
+  includeAgentCost = false,
 ): InvoiceData {
   const projectsData = projects.map((p) => {
     const totalSeconds = p.billableSessions.reduce(
@@ -295,7 +316,8 @@ export function calculateInvoiceData(
       0,
     );
     const totalHours = totalSeconds / 3600;
-    const subtotal = totalHours * p.hourlyRate;
+    const agentCost = includeAgentCost ? Math.max(0, p.agentCostUsd ?? 0) : 0;
+    const subtotal = totalHours * p.hourlyRate + agentCost;
 
     return {
       projectId: p.projectId,
@@ -303,6 +325,8 @@ export function calculateInvoiceData(
       billableSessions: p.billableSessions,
       totalHours,
       hourlyRate: p.hourlyRate,
+      agentCost,
+      agentSessions: agentCost > 0 ? (p.agentSessions ?? 0) : 0,
       subtotal,
     };
   });

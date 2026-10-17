@@ -405,6 +405,53 @@ try {
   // The session is billed under its project
   await u1.ev(`document.querySelector('.nav-item[data-view="billing"]').click()`);
   check("Billing lists the project's billable session", await u1.waitFor(`(document.querySelector(".billable-projects-table")?.innerText || "").includes(${JSON.stringify(projName)})`, 10000));
+
+  // ── C6: per-project activity, agent cost in Billing and invoices ──
+  // An agent session in the project, as the transcript ingest uploads it
+  const agentRow = await rawApi(u1, "POST", "agent_sessions", {
+    user_id: p1.id, source: "claude-code", external_id: `e2e-${Date.now()}`,
+    repo_key: "github.com/dtt-e2e/dtt-e2e-repo", repo_name: "dtt-e2e-repo", project_id: proj?.id,
+    started_at: new Date(startedAt).toISOString(), ended_at: new Date().toISOString(),
+    active_seconds: 600, cost_usd: 1.25,
+  });
+  check("agent session in the project uploaded", agentRow.status === 201, `HTTP ${agentRow.status} ${agentRow.body}`);
+  const localDay = new Date().toLocaleDateString("en-CA");
+  const activity = ((await u1.invoke("get-project-activity", { startDate: localDay, endDate: localDay })).v || []).find((a) => a.projectId === proj?.id);
+  check(
+    "project activity: your time, agent time and cost, code",
+    activity?.sessions === 1 && activity.humanSeconds + activity.supervisingSeconds === saved?.duration &&
+      activity.agent?.activeSeconds === 600 && activity.agent?.costUsd === 1.25 && activity.code?.linesAdded === 9,
+    JSON.stringify(activity),
+  );
+  // The agent row came from outside the app: re-render on the next visit
+  await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
+  await u1.ev(`window.markTabsDirty("projects", "billing")`);
+  await u1.ev(`document.querySelector('.nav-item[data-view="projects"]').click()`);
+  const cardText = `([...document.querySelectorAll(".project-card")].find(c => c.querySelector(".project-name")?.textContent === ${JSON.stringify(projName)})?.innerText || "")`;
+  check(
+    "Projects card shows your time, AI agents with cost, and code",
+    await u1.waitFor(`(() => { const t = ${cardText}; return /your time/i.test(t) && t.includes("10m · $1.25 · 1 session") && t.includes("+9 −1 · 3 files · 1 commit"); })()`, 10000),
+    await u1.ev(`${cardText}.slice(0, 600)`),
+  );
+  await u1.shot("u1-projects-activity.png");
+  await u1.ev(`document.querySelector('.nav-item[data-view="billing"]').click()`);
+  check(
+    "Billing shows the AI agent cost apart from earnings",
+    await u1.waitFor(`(() => { const t = document.getElementById("billingContent")?.innerText || ""; return /AI Agent Cost/i.test(t) && t.includes("$1.25"); })()`, 10000),
+  );
+  await u1.shot("u1-billing-agent-cost.png");
+  await u1.ev(`document.querySelector('.billable-invoice-btn[data-project-id=${JSON.stringify(String(proj?.id))}]').click()`);
+  check(
+    "invoice offers the agent cost as a line item",
+    await u1.waitFor(`(() => { const r = document.getElementById("invoice-agent-cost-row"); return !!r && !r.hidden && r.textContent.includes("$1.25"); })()`, 10000),
+  );
+  await u1.ev(`(() => { const b = document.getElementById("invoice-include-agent-cost"); b.checked = true; b.dispatchEvent(new Event("change")); })()`);
+  check(
+    "invoice summary adds the agent cost when ticked",
+    await u1.waitFor(`(document.getElementById("invoice-summary")?.textContent || "").includes("+ $1.25 AI agents")`, 5000),
+  );
+  await u1.shot("u1-invoice-agent-cost.png");
+  await u1.ev(`document.getElementById("cancel-invoice-modal")?.click()`);
   await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
 
   // Server-side org attribution of the session
@@ -515,6 +562,8 @@ try {
   const restore = await u2.invoke("org:create-personal", "E2E Test Org");
   check("user 2 creates a personal org again", restore.ok && !!restore.v);
 
+  const delAgents = await rawApi(u1, "DELETE", "agent_sessions?external_id=like.e2e-*");
+  check("delete the e2e agent session", delAgents.status === 200, `HTTP ${delAgents.status}`);
   if (proj?.id) {
     const delProj = await rawApi(u1, "DELETE", `cloud_projects?id=eq.${proj.id}`);
     check("delete the e2e project", delProj.status === 200, `HTTP ${delProj.status}`);

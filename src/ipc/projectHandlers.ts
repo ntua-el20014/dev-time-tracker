@@ -2,11 +2,14 @@ import { ipcMain } from "electron";
 import * as cloudProjects from "../supabase/cloudProjects";
 import { getCurrentUser } from "../supabase/api";
 import { getCurrentOrganization } from "../supabase/organizations";
+import { getProjectActivity } from "../supabase/projectActivity";
 import type {
   CreateCloudProjectData,
   UpdateCloudProjectData,
   AssignProjectMemberData,
 } from "../types/organization.types";
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const projectsChangedListeners = new Set<() => void>();
 
@@ -396,6 +399,27 @@ ipcMain.handle(
     try {
       return await cloudProjects.getProjectMembers(String(projectId));
     } catch (err) {
+      return [];
+    }
+  },
+);
+
+/**
+ * Your activity per project within local days [startDate, endDate] (C6):
+ * session time with input / supervising, AI agent time and cost, code
+ * changed. Only your own work, also on organization projects.
+ */
+ipcMain.handle(
+  "get-project-activity",
+  async (_event, range: { startDate?: unknown; endDate?: unknown }) => {
+    try {
+      const { startDate, endDate } = range ?? {};
+      if (typeof startDate !== "string" || !DATE.test(startDate)) return [];
+      if (typeof endDate !== "string" || !DATE.test(endDate)) return [];
+      const user = await getCurrentUser();
+      if (!user) return [];
+      return await getProjectActivity(user.id, startDate, endDate);
+    } catch {
       return [];
     }
   },

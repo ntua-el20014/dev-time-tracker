@@ -29,6 +29,11 @@ const cp = {
 };
 vi.mock("../../src/supabase/cloudProjects", () => cp);
 
+const getProjectActivity = vi.fn();
+vi.mock("../../src/supabase/projectActivity", () => ({
+  getProjectActivity: (...args: unknown[]) => getProjectActivity(...args),
+}));
+
 beforeAll(async () => {
   await import("../../src/ipc/projectHandlers");
 });
@@ -108,5 +113,26 @@ describe("get-all-projects-with-members", () => {
   it("returns [] when signed out", async () => {
     getCurrentUser.mockResolvedValue(null);
     expect(await call("get-all-projects-with-members")).toEqual([]);
+  });
+});
+
+describe("get-project-activity", () => {
+  it("returns the signed-in user's activity for valid local days", async () => {
+    getProjectActivity.mockResolvedValue([{ projectId: "p" }]);
+    expect(await call("get-project-activity", { startDate: "2026-10-01", endDate: "2026-10-30" })).toEqual([
+      { projectId: "p" },
+    ]);
+    expect(getProjectActivity).toHaveBeenCalledWith("u1", "2026-10-01", "2026-10-30");
+  });
+
+  it("rejects bad input and swallows errors", async () => {
+    expect(await call("get-project-activity", { startDate: "x", endDate: "2026-10-30" })).toEqual([]);
+    expect(await call("get-project-activity", null)).toEqual([]);
+    getCurrentUser.mockResolvedValue(null);
+    expect(await call("get-project-activity", { startDate: "2026-10-01", endDate: "2026-10-30" })).toEqual([]);
+    getCurrentUser.mockResolvedValue({ id: "u1" });
+    getProjectActivity.mockRejectedValue(new Error("down"));
+    expect(await call("get-project-activity", { startDate: "2026-10-01", endDate: "2026-10-30" })).toEqual([]);
+    expect(getProjectActivity).toHaveBeenCalledTimes(1);
   });
 });

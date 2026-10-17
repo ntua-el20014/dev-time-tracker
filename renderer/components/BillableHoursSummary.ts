@@ -17,6 +17,17 @@ interface BillableHoursSummary {
   /** Supervising (AI agent) time in these sessions */
   supervisingSeconds?: number;
   billSupervising?: boolean;
+  /** Reported AI agent cost (C6), not part of earnings */
+  agentCostUsd?: number;
+  agentCostIncomplete?: boolean;
+  agentSessions?: number;
+}
+
+/** "$12.30", "$12.30+" (some sessions reported no cost), or "—". */
+function agentCostCell(p: BillableHoursSummary): string {
+  if (!p.agentSessions) return "—";
+  if (!p.agentCostUsd && p.agentCostIncomplete) return "unknown";
+  return `$${(p.agentCostUsd ?? 0).toFixed(2)}${p.agentCostIncomplete ? "+" : ""}`;
 }
 
 /** "incl. 25m supervising" or "+ 25m supervising, not billed" under the hours. */
@@ -35,6 +46,8 @@ function supervisingNote(p: BillableHoursSummary): string {
 
 interface EarningsSummary {
   totalEarnings: number;
+  /** Reported AI agent cost (absent in older fallbacks) */
+  totalAgentCostUsd?: number;
   totalBillableHours: number;
   totalBillableSessions: number;
   byProject: BillableHoursSummary[];
@@ -94,6 +107,7 @@ function renderBillableHoursMarkup(
     1,
   );
   const canGoNext = activeMonth.getTime() < currentMonth.getTime();
+  const showAgents = summary.byProject.some((p) => (p.agentSessions ?? 0) > 0);
 
   return `
     <div class="billable-hours-summary">
@@ -122,6 +136,14 @@ function renderBillableHoursMarkup(
           <div class="billable-total-value">${summary.totalBillableSessions}</div>
           <div class="billable-total-label">Billable Sessions</div>
         </div>
+        ${
+          showAgents
+            ? `<div class="billable-total-card" title="Cost reported by Claude Code / Codex for sessions in your projects' linked repos. Not part of earnings; you can add it to an invoice as a line item.">
+          <div class="billable-total-value">$${(summary.totalAgentCostUsd ?? 0).toFixed(2)}</div>
+          <div class="billable-total-label">AI Agent Cost</div>
+        </div>`
+            : ""
+        }
       </div>
       
       ${renderUnassignedNotice(summary)}
@@ -138,6 +160,7 @@ function renderBillableHoursMarkup(
                 <th>Hours</th>
                 <th>Sessions</th>
                 <th>Earnings</th>
+                ${showAgents ? `<th title="Reported by the agents; not part of earnings">AI agent cost</th>` : ""}
                 <th><span class="visually-hidden">Actions</span></th>
               </tr>
             </thead>
@@ -158,6 +181,7 @@ function renderBillableHoursMarkup(
                   <td>${project.billableHours.toFixed(1)}h${supervisingNote(project)}</td>
                   <td>${project.billableSessions}</td>
                   <td class="earnings-value">$${project.earnings.toFixed(2)}</td>
+                  ${showAgents ? `<td class="agent-cost-value">${escapeHtml(agentCostCell(project))}</td>` : ""}
                   <td>
                     <button type="button" class="billable-invoice-btn" data-project-id="${escapeHtml(project.projectId)}" title="Create an invoice for ${escapeHtml(project.projectName)}">📄 Invoice</button>
                   </td>

@@ -10,6 +10,18 @@ import {
 } from "../utils/invoiceUtils";
 import type { InvoiceCustomization } from "../utils/invoiceUtils";
 
+/** A project with billable work in the range (get-projects-for-invoice) */
+interface InvoiceProject {
+  projectId: string;
+  projectName: string;
+  hourlyRate: number;
+  totalSessions: number;
+  /** Reported AI agent cost in the range (C6) */
+  agentCostUsd?: number;
+  agentCostIncomplete?: boolean;
+  agentSessions?: number;
+}
+
 export async function showInvoiceGenerationModal(
   initialProjectId?: string,
 ): Promise<void> {
@@ -32,10 +44,9 @@ export async function showInvoiceGenerationModal(
   const today = new Date();
   const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const selectedProjects: Map<
-    string,
-    { id: string; name: string; hourly_rate: number }
-  > = new Map();
+  /** Projects listed for the current range, and the ones ticked */
+  let projects = new Map<string, InvoiceProject>();
+  const selected = new Set<string>();
 
   modal.innerHTML = `
     <div class="session-modal-content">
@@ -64,6 +75,16 @@ export async function showInvoiceGenerationModal(
           <div id="invoice-projects-list">
             <p style="color: var(--fg-secondary); font-size: 12px; margin: 0;">Loading projects with billable hours...</p>
           </div>
+        </div>
+
+        <div id="invoice-agent-cost-row" hidden>
+          <label class="invoice-project-label">
+            <input type="checkbox" id="invoice-include-agent-cost" />
+            <span class="invoice-project-info">
+              <span class="invoice-project-name">Add AI agent costs as a line item</span>
+              <span class="invoice-project-details" id="invoice-agent-cost-note"></span>
+            </span>
+          </label>
         </div>
 
         <div>
@@ -120,7 +141,7 @@ export async function showInvoiceGenerationModal(
       startDate,
       endDate,
     ]);
-    renderProjectsList(projectsData as any[], initialProjectId);
+    renderProjectsList(projectsData as InvoiceProject[], initialProjectId);
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error("Error loading projects:", error);
@@ -167,6 +188,9 @@ export async function showInvoiceGenerationModal(
 
   // Generate invoice button
   generateBtn.addEventListener("click", generateAndDownloadInvoice);
+  document
+    .getElementById("invoice-include-agent-cost")
+    ?.addEventListener("change", updateSummary);
 
   async function updateProjects() {
     const startDate = (
@@ -181,78 +205,71 @@ export async function showInvoiceGenerationModal(
         startDate,
         endDate,
       ]);
-      renderProjectsList(projectsData as any[], initialProjectId);
-      selectedProjects.clear();
-      updateSummary();
+      renderProjectsList(projectsData as InvoiceProject[], initialProjectId);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Error updating projects:", error);
     }
   }
 
-  function renderProjectsList(projects: any[], initial?: string) {
+  function renderProjectsList(list: InvoiceProject[], initial?: string) {
     const projectsList = document.getElementById("invoice-projects-list")!;
+    projects = new Map(list.map((p) => [p.projectId, p]));
+    selected.clear();
 
-    if (projects.length === 0) {
+    if (list.length === 0) {
       projectsList.innerHTML =
         '<p style="color: var(--fg-secondary); font-size: 12px; font-style: italic; margin: 0;">No projects with billable hours in this date range</p>';
+      updateSummary();
       return;
     }
 
-    projectsList.innerHTML = "";
+    projectsList.innerHTML = list
+      .map((p) => {
+        const checked = !initial || p.projectId === initial;
+        if (checked) selected.add(p.projectId);
+        const agent =
+          (p.agentCostUsd ?? 0) > 0 ? ` · ${agentCostText(p)} AI agents` : "";
+        return `
+          <label class="invoice-project-label">
+            <input type="checkbox" class="invoice-project-select" data-project-id="${escapeHtml(p.projectId)}" ${checked ? "checked" : ""} />
+            <span class="invoice-project-info">
+              <span class="invoice-project-name">${escapeHtml(p.projectName)}</span>
+              <span class="invoice-project-details">${escapeHtml(`${p.totalSessions} billable session(s) - $${p.hourlyRate}/hr${agent}`)}</span>
+            </span>
+          </label>`;
+      })
+      .join("");
 
-    projects.forEach((project) => {
-      const label = document.createElement("label");
-      label.className = "invoice-project-label";
-
-      const isChecked =
-        !initial || project.projectId === initial ? " checked" : "";
-
-      label.innerHTML = `
-        <input 
-          type="checkbox" 
-          class="invoice-project-select" 
-          data-project-id="${project.projectId}"
-          data-project-name="${project.projectName}"
-          data-hourly-rate="${project.hourlyRate}"
-          ${isChecked}
-        />
-        <span class="invoice-project-info">
-          <span class="invoice-project-name">${project.projectName}</span>
-          <span class="invoice-project-details">${project.totalSessions} billable session(s) - $${project.hourlyRate}/hr</span>
-        </span>
-      `;
-
-      const input = label.querySelector(
-        'input[type="checkbox"]',
-      ) as HTMLInputElement;
-      input.addEventListener("change", (e) => {
-        const target = e.target as HTMLInputElement;
-        if (target.checked) {
-          selectedProjects.set(target.dataset.projectId!, {
-            id: target.dataset.projectId!,
-            name: target.dataset.projectName!,
-            hourly_rate: parseFloat(target.dataset.hourlyRate!),
-          });
-        } else {
-          selectedProjects.delete(target.dataset.projectId!);
-        }
-        updateSummary();
+    projectsList
+      .querySelectorAll<HTMLInputElement>(".invoice-project-select")
+      .forEach((input) => {
+        input.addEventListener("change", () => {
+          const id = input.dataset.projectId!;
+          if (input.checked) selected.add(id);
+          else selected.delete(id);
+          updateSummary();
+        });
       });
 
-      // Pre-select if it's the initial project
-      if (isChecked) {
-        selectedProjects.set(input.dataset.projectId!, {
-          id: input.dataset.projectId!,
-          name: input.dataset.projectName!,
-          hourly_rate: parseFloat(input.dataset.hourlyRate!),
-        });
-      }
-
-      projectsList.appendChild(label);
-    });
-
     updateSummary();
+  }
+
+  /** "$12.30", or "$12.30+" when some sessions reported no cost */
+  function agentCostText(p: InvoiceProject): string {
+    return `$${(p.agentCostUsd ?? 0).toFixed(2)}${p.agentCostIncomplete ? "+" : ""}`;
+  }
+
+  function selectedProjects(): InvoiceProject[] {
+    return [...selected].map((id) => projects.get(id)).filter(Boolean) as InvoiceProject[];
+  }
+
+  function includeAgentCost(): boolean {
+    const row = document.getElementById("invoice-agent-cost-row");
+    const box = document.getElementById(
+      "invoice-include-agent-cost",
+    ) as HTMLInputElement | null;
+    return !!row && !row.hidden && !!box?.checked;
   }
 
   function updateSummary() {
@@ -260,33 +277,41 @@ export async function showInvoiceGenerationModal(
     const generateBtn = document.getElementById(
       "generate-invoice-btn",
     ) as HTMLButtonElement;
+    const chosen = selectedProjects();
 
-    if (selectedProjects.size === 0) {
+    // The agent-cost option shows only when a chosen project has some
+    const withAgentCost = chosen.filter((p) => (p.agentCostUsd ?? 0) > 0);
+    const agentRow = document.getElementById("invoice-agent-cost-row")!;
+    agentRow.hidden = withAgentCost.length === 0;
+    const agentTotal = withAgentCost.reduce(
+      (sum, p) => sum + (p.agentCostUsd ?? 0),
+      0,
+    );
+    const incomplete = withAgentCost.some((p) => p.agentCostIncomplete);
+    document.getElementById("invoice-agent-cost-note")!.textContent =
+      `$${agentTotal.toFixed(2)} reported by Claude Code / Codex in this range, billed at cost.` +
+      (incomplete
+        ? " Some sessions reported no cost; only reported costs are added."
+        : "");
+
+    if (chosen.length === 0) {
       summaryDiv.innerHTML =
         '<p style="margin: 0; color: var(--text-secondary); font-size: 12px;">Select projects to see summary...</p>';
       generateBtn.disabled = true;
       return;
     }
 
-    let projectsSummary =
-      '<p style="margin: 0 0 8px 0; color: var(--text-primary); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Selected Projects:</p><ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 12px;">';
-
-    selectedProjects.forEach((project) => {
-      const input = document.querySelector(
-        `input[data-project-id="${project.id}"][type="checkbox"]`,
-      ) as HTMLInputElement;
-
-      if (input?.checked) {
-        const projectCheckbox = input.closest("label");
-        const checkboxText = projectCheckbox?.textContent ?? "";
-        const matched = checkboxText.match(/(\d+) billable/);
-        const sessionCount = parseInt(matched?.[1] ?? "0", 10);
-        projectsSummary += `<li>${escapeHtml(project.name)} (${sessionCount} sessions) - $${project.hourly_rate}/hr</li>`;
-      }
-    });
-
-    projectsSummary += "</ul>";
-    summaryDiv.innerHTML = projectsSummary;
+    const withAgents = includeAgentCost();
+    const items = chosen
+      .map((p) => {
+        const agent =
+          withAgents && (p.agentCostUsd ?? 0) > 0
+            ? ` + $${(p.agentCostUsd ?? 0).toFixed(2)} AI agents`
+            : "";
+        return `<li>${escapeHtml(`${p.projectName} (${p.totalSessions} sessions) - $${p.hourlyRate}/hr${agent}`)}</li>`;
+      })
+      .join("");
+    summaryDiv.innerHTML = `<p style="margin: 0 0 8px 0; color: var(--text-primary); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Selected Projects:</p><ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 12px;">${items}</ul>`;
     generateBtn.disabled = false;
   }
 
@@ -306,7 +331,7 @@ export async function showInvoiceGenerationModal(
       return;
     }
 
-    if (selectedProjects.size === 0) {
+    if (selected.size === 0) {
       alert("Please select at least one project");
       return;
     }
@@ -320,7 +345,8 @@ export async function showInvoiceGenerationModal(
 
     try {
       // Fetch billable sessions for selected projects
-      const projectIds = Array.from(selectedProjects.keys());
+      const chosen = selectedProjects();
+      const projectIds = chosen.map((p) => p.projectId);
       const billableSessions = await safeIpcInvoke("get-billable-sessions", [
         {
           projectIds,
@@ -331,19 +357,16 @@ export async function showInvoiceGenerationModal(
       ]);
 
       // Group sessions by project
-      const projectsWithSessions = Array.from(selectedProjects.values()).map(
-        (project) => {
-          const sessions = (billableSessions as any[]).filter(
-            (s: any) => s.project_id === project.id,
-          );
-          return {
-            projectId: project.id,
-            projectName: project.name,
-            hourlyRate: project.hourly_rate,
-            billableSessions: sessions,
-          };
-        },
-      );
+      const projectsWithSessions = chosen.map((project) => ({
+        projectId: project.projectId,
+        projectName: project.projectName,
+        hourlyRate: Number(project.hourlyRate) || 0,
+        billableSessions: (billableSessions as any[]).filter(
+          (s: any) => s.project_id === project.projectId,
+        ),
+        agentCostUsd: project.agentCostUsd ?? 0,
+        agentSessions: project.agentSessions ?? 0,
+      }));
 
       // Create customization object
       const customization: InvoiceCustomization = {
@@ -366,6 +389,7 @@ export async function showInvoiceGenerationModal(
         },
         customization,
         DEFAULT_TEMPLATE,
+        includeAgentCost(),
       );
 
       const doc = generateInvoicePDF(invoiceData);

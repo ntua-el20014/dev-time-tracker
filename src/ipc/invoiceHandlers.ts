@@ -3,6 +3,8 @@ import { getCurrentUser } from "../supabase/api";
 import { supabase } from "../supabase/client";
 import { localDayStartISO, localDayEndISO } from "../utils/timeFormat";
 import { billableSecondsOf } from "../../shared/billing";
+import { roundUsd } from "../../shared/projectActivity";
+import { getAgentTotalsByProject } from "../supabase/projectActivity";
 
 /**
  * Adds billed_seconds to each session: its duration, minus supervising time
@@ -145,8 +147,14 @@ ipcMain.handle(
         sessionsByProject.get(session.project_id)!.push(session);
       });
 
+      // AI agent cost per project (an optional invoice line, C6); a project
+      // where only agents worked can be invoiced too
+      const agentTotals = await getAgentTotalsByProject(user.id, startDate, endDate);
+
       // Get details for each project
-      const projectIds = Array.from(sessionsByProject.keys());
+      const projectIds = [
+        ...new Set([...sessionsByProject.keys(), ...agentTotals.keys()]),
+      ].filter(Boolean);
       if (projectIds.length === 0) {
         return [];
       }
@@ -174,7 +182,12 @@ ipcMain.handle(
           hourlyRate: project.hourly_rate || 0,
           billableSessions: sessionsByProject.get(project.id) || [],
           totalSessions: (sessionsByProject.get(project.id) || []).length,
-        }));
+          agentCostUsd: roundUsd(agentTotals.get(project.id)?.costUsd ?? 0),
+          agentCostIncomplete: agentTotals.get(project.id)?.costIncomplete ?? false,
+          agentSessions: agentTotals.get(project.id)?.sessions ?? 0,
+        }))
+        // Agent sessions without a reported cost give nothing to invoice
+        .filter((p) => p.totalSessions > 0 || p.agentCostUsd > 0);
 
       return results;
     } catch (error) {

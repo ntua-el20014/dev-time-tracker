@@ -10,6 +10,8 @@
  *
  * Each card also lists the git repos the user linked to it (from Home or
  * the Stop dialog); links are per user, so anyone may unlink their own.
+ * And the user's own activity in the last 30 days (C6): their time (with
+ * input / supervising an agent), AI agent time and cost, code changed.
  */
 import { escapeHtml } from "./utils/domUtils";
 import {
@@ -22,11 +24,11 @@ import { showInAppNotification, showConfirmationModal } from "./components";
 import { isNavItemVisible, markTabsDirty } from "./navigation";
 import { getLocalDateString } from "../src/utils/timeFormat";
 import {
-  formatAgentSummary,
-  summarizeAgentSessionsByProject,
-  type AgentSessionLike,
-  type ProjectAgentSummary,
-} from "./utils/agentSummary";
+  formatAgentTotals,
+  formatSpan,
+  type ProjectActivity,
+} from "../shared/projectActivity";
+import { formatCodeTotals } from "../shared/codeStats";
 import type {
   CloudProjectWithManager,
   ProjectMemberWithUser,
@@ -39,9 +41,9 @@ type Role = "admin" | "manager" | "employee";
 
 let projects: Project[] = [];
 let repoLinks: RepoLink[] = [];
-/** AI agent time and cost per project, last 30 days (C3 data) */
-let agentSummaries = new Map<string, ProjectAgentSummary>();
-const AGENT_WINDOW_DAYS = 30;
+/** The user's activity per project, last ACTIVITY_DAYS days (C6) */
+let activity = new Map<string, ProjectActivity>();
+const ACTIVITY_DAYS = 30;
 let role: Role = "employee";
 let me = "";
 let showArchived = false;
@@ -87,21 +89,21 @@ export async function renderProjects() {
     me = getCurrentUserIdSafe() ?? "";
     role = (await getCurrentUserRole()) as Role;
     const today = new Date();
-    const from = new Date(today.getTime() - (AGENT_WINDOW_DAYS - 1) * 86_400_000);
-    let agentSessions: AgentSessionLike[];
-    [projects, repoLinks, agentSessions] = await Promise.all([
+    const from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (ACTIVITY_DAYS - 1));
+    let activityList: ProjectActivity[];
+    [projects, repoLinks, activityList] = await Promise.all([
       safeIpcInvoke<Project[]>("get-all-projects-with-members", [], { fallback: [] }),
       safeIpcInvoke<RepoLink[]>("get-repo-links", [], {
         fallback: [],
         showNotification: false,
       }),
-      safeIpcInvoke<AgentSessionLike[]>(
-        "get-agent-sessions",
+      safeIpcInvoke<ProjectActivity[]>(
+        "get-project-activity",
         [{ startDate: getLocalDateString(from), endDate: getLocalDateString(today) }],
         { fallback: [], showNotification: false },
       ),
     ]);
-    agentSummaries = summarizeAgentSessionsByProject(agentSessions ?? []);
+    activity = new Map((activityList ?? []).map((a) => [a.projectId, a]));
   });
 
   const active = projects.filter((p) => !isArchived(p));
@@ -213,14 +215,7 @@ function renderCard(p: Project): string {
             <span class="meta-label">Agent supervising:</span>
             <span class="meta-value">${p.bill_supervising === false ? "Not billed" : "Billed"}</span>
           </div>
-          ${
-            agentSummaries.has(p.id)
-              ? `<div class="project-meta-item" title="Claude Code / Codex sessions in this project's linked repos, last ${AGENT_WINDOW_DAYS} days; cost as reported by the agent">
-                   <span class="meta-label">AI agents (${AGENT_WINDOW_DAYS} d):</span>
-                   <span class="meta-value">${escapeHtml(formatAgentSummary(agentSummaries.get(p.id)!))}</span>
-                 </div>`
-              : ""
-          }
+          ${renderActivity(p)}
           <div class="project-meta-item">
             <span class="meta-label">Repos:</span>
             <span class="meta-value">${renderRepoLinks(p)}</span>
@@ -236,6 +231,64 @@ function renderCard(p: Project): string {
       </div>
     </div>
   `;
+}
+
+/** Your time, agent time and cost, code changed: what each project got. */
+function activityRows(a: ProjectActivity | undefined): [string, string, string][] {
+  if (!a) return [];
+  const rows: [string, string, string][] = [];
+  const yours = a.humanSeconds + a.supervisingSeconds;
+  if (a.sessions > 0) {
+    rows.push([
+      "Your time",
+      formatSpan(yours) +
+        (a.supervisingSeconds >= 60 ? ` · incl. ${formatSpan(a.supervisingSeconds)} supervising` : ""),
+      "Your sessions in this project: time with keyboard/mouse input, plus time supervising an AI agent",
+    ]);
+  }
+  if (a.agent.sessions > 0) {
+    rows.push([
+      "AI agents",
+      formatAgentTotals(a.agent),
+      "Claude Code / Codex sessions in this project's linked repos; cost as reported by the agent. Runs alongside your time, not on top of it.",
+    ]);
+  }
+  const code = formatCodeTotals(a.code);
+  if (code) {
+    rows.push(["Code", code, "From git at the end of your sessions: commits and lines changed, by you or an agent"]);
+  }
+  return rows;
+}
+
+function renderActivity(p: Project): string {
+  const rows = activityRows(activity.get(p.id));
+  if (rows.length === 0) return "";
+  return `<div class="project-activity">
+      <div class="project-activity-title">Last ${ACTIVITY_DAYS} days</div>
+      ${rows
+        .map(
+          ([label, value, title]) => `<div class="project-meta-item" title="${escapeHtml(title)}">
+            <span class="meta-label">${escapeHtml(label)}:</span>
+            <span class="meta-value">${escapeHtml(value)}</span>
+          </div>`,
+        )
+        .join("")}
+    </div>`;
+}
+
+/** Lines per language in the activity window, most changed first. */
+function renderLanguages(a: ProjectActivity | undefined): string {
+  const langs = Object.entries(a?.code.languages ?? {})
+    .map(([lang, n]) => ({ lang, ...n }))
+    .filter((l) => l.added + l.removed > 0)
+    .sort((x, y) => y.added + y.removed - (x.added + x.removed))
+    .slice(0, 6);
+  if (langs.length === 0) return "";
+  return `<ul class="project-activity-languages">${langs
+    .map(
+      (l) => `<li><span>${escapeHtml(l.lang)}</span><span>+${l.added.toLocaleString()} −${l.removed.toLocaleString()}</span></li>`,
+    )
+    .join("")}</ul>`;
 }
 
 function renderRepoLinks(p: Project): string {
@@ -508,6 +561,22 @@ async function showStatsModal(project: Project) {
             : ""
         }
       </div>
+      ${
+        activityRows(activity.get(project.id)).length
+          ? `<div class="project-activity">
+               <div class="project-activity-title">Your last ${ACTIVITY_DAYS} days</div>
+               ${activityRows(activity.get(project.id))
+                 .map(
+                   ([label, value]) => `<div class="project-meta-item">
+                     <span class="meta-label">${escapeHtml(label)}:</span>
+                     <span class="meta-value">${escapeHtml(value)}</span>
+                   </div>`,
+                 )
+                 .join("")}
+               ${renderLanguages(activity.get(project.id))}
+             </div>`
+          : ""
+      }
       ${
         stats.last_activity
           ? `<div class="stats-timeline"><div class="timeline-item"><strong>Last activity:</strong> ${new Date(stats.last_activity).toLocaleDateString()}</div></div>`
