@@ -44,6 +44,7 @@ export const INVOKE_CHANNELS = [
   "get-all-tags",
   "get-all-users",
   "get-billable-sessions",
+  "get-browser-usage",
   "get-claude-hooks-status",
   "get-current-month-earnings",
   "get-current-user-id",

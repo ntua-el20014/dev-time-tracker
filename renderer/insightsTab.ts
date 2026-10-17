@@ -1,8 +1,8 @@
 /**
  * Sessions → Insights: what got built (C2: lines changed per language and
  * repo, from git, over the sessions of the last 30 days), where attention
- * went (foreground-window samples: editor and language breakdowns), and
- * the daily goal history.
+ * went (foreground-window samples: editor and language breakdowns, and
+ * what browser time was for, C5), and the daily goal history.
  */
 import { escapeHtml } from "./utils/domUtils";
 import { getLocalDateString } from "../src/utils/timeFormat";
@@ -13,6 +13,8 @@ import {
 } from "../shared/codeStats";
 import type { SessionRow } from "../shared/types";
 import { renderPercentBar, renderPieChartJS } from "./components";
+import { browserCategoryLabel } from "../shared/browserCategories";
+import { formatTimeSpent } from "../src/utils/timeFormat";
 import { prettyDate, safeIpcInvoke, withLoading } from "./utils";
 
 let rerenderPieChart: (() => void) | null = null;
@@ -30,6 +32,7 @@ export async function renderInsights() {
     </p>
     <section id="insights-editors" class="insights-section"></section>
     <section id="insights-languages" class="insights-section"></section>
+    <section id="insights-browser" class="insights-section"></section>
     <section id="insights-goals" class="insights-section"></section>
   `;
 
@@ -37,6 +40,7 @@ export async function renderInsights() {
     ["insights-code", renderCodeChanged],
     ["insights-editors", renderEditorUsage],
     ["insights-languages", renderLanguageUsage],
+    ["insights-browser", renderBrowserUsage],
     ["insights-goals", renderDailyGoalHistory],
   ];
   await Promise.all(
@@ -119,6 +123,47 @@ async function renderCodeChanged(container: HTMLElement) {
       </ul>
     </div>
     <p class="info-note">Commits you made during sessions, plus changes still uncommitted when you stopped, in the repos you or an AI agent worked in. Lock files aren't counted.</p>
+  `;
+}
+
+/** What browser time was for (C5), last CODE_DAYS days. */
+async function renderBrowserUsage(container: HTMLElement) {
+  const end = new Date();
+  const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (CODE_DAYS - 1));
+  const usage = await safeIpcInvoke<{ category: string | null; seconds: number }[]>(
+    "get-browser-usage",
+    [{ startDate: getLocalDateString(start), endDate: getLocalDateString(end) }],
+    { fallback: [], showNotification: false },
+  );
+  const total = (usage ?? []).reduce((sum, c) => sum + c.seconds, 0);
+  if (!total) {
+    container.innerHTML = `<h2>Browser time</h2><p>No browser time in the last ${CODE_DAYS} days yet. While you record, time in a browser is sorted into code review, docs, AI chat and so on, from the page title (or address).</p>`;
+    return;
+  }
+  // Unclassified time last, in grey
+  const rows = [...usage].sort((a, b) => Number(a.category === null) - Number(b.category === null) || b.seconds - a.seconds);
+  let color = 0;
+  const colorOf = (c: string | null) => (c === null ? "#8a8f98" : CODE_COLORS[color++ % CODE_COLORS.length]);
+  const items = rows.map((c) => ({
+    label: browserCategoryLabel(c.category),
+    percent: (c.seconds / total) * 100,
+    color: colorOf(c.category),
+    seconds: c.seconds,
+  }));
+  container.innerHTML = `
+    <h2>Browser time <span class="insights-sub">last ${CODE_DAYS} days</span></h2>
+    ${renderPercentBar(items)}
+    <ul class="editor-usage-list">
+      ${items
+        .map(
+          (i) => `<li class="editor-usage-item">
+            <span class="editor-usage-app" style="color:${i.color};">${escapeHtml(i.label)}</span>
+            <span class="editor-usage-time">${escapeHtml(formatTimeSpent(i.seconds))}</span>
+          </li>`,
+        )
+        .join("")}
+    </ul>
+    <p class="info-note">Sorted on this computer from the page title, or the address when the title says nothing. Only the category is saved, never the address.</p>
   `;
 }
 

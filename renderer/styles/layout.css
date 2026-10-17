@@ -183,6 +183,13 @@
   margin-bottom: 12px;
 }
 
+/* What a browser's time was for (C5), under its name */
+.log-categories {
+  margin-top: 2px;
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
 /* Summary filter container styles */
 .summary-filter-container {
   margin: 24px 0 8px 0;

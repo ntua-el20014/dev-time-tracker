@@ -43,6 +43,8 @@ export interface QueuedUsageLog {
     intervalSeconds: number;
     /** The original log timestamp (NOT the queue time) */
     logTimestamp: string;
+    /** Browser category (C5); absent in items queued by older versions */
+    category?: string | null;
   };
 }
 
@@ -184,6 +186,7 @@ export function enqueueUsageLog(
   iconUrl: string | null,
   intervalSeconds: number,
   logTimestamp?: string,
+  category?: string | null,
 ): void {
   const ts = logTimestamp || new Date().toISOString();
   const key = `usage_log:${userId}:${ts}`;
@@ -202,6 +205,7 @@ export function enqueueUsageLog(
       iconUrl,
       intervalSeconds,
       logTimestamp: ts,
+      category: category ?? null,
     },
   };
 
@@ -305,6 +309,7 @@ export async function flush(): Promise<number> {
           d.iconUrl,
           d.intervalSeconds,
           d.logTimestamp,
+          d.category ?? null,
         );
       } else if (item.type === "session") {
         const d = item.data;

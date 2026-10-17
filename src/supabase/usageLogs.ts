@@ -24,6 +24,7 @@ export async function logUsage(
   iconUrl?: string | null,
   intervalSeconds: number = 1,
   timestamp?: string,
+  category?: string | null,
 ) {
   const logTime = timestamp || new Date().toISOString();
   const date = toLocalDateString(logTime); // user's local calendar day
@@ -34,6 +35,7 @@ export async function logUsage(
     window_title: windowTitle,
     language: language || null,
     language_extension: languageExtension || null,
+    category: category || null,
     timestamp: logTime,
   };
 
@@ -59,6 +61,7 @@ export async function logUsage(
       p_language_extension: languageExtension || null,
       p_icon_url: iconUrl || null,
       p_time_spent_seconds: intervalSeconds,
+      p_category: category || null,
     },
   );
 
@@ -81,6 +84,7 @@ export async function insertUsageLogs(
     windowTitle: string;
     language: string | null;
     languageExtension: string | null;
+    category?: string | null;
     timestamp: string;
   }>,
 ) {
@@ -91,6 +95,7 @@ export async function insertUsageLogs(
     window_title: r.windowTitle,
     language: r.language || null,
     language_extension: r.languageExtension || null,
+    category: r.category || null,
     timestamp: r.timestamp,
   }));
 
@@ -110,6 +115,7 @@ export async function addUsageToDailySummary(increment: {
   appName: string;
   language: string | null;
   languageExtension: string | null;
+  category?: string | null;
   icon: string | null;
   seconds: number;
 }) {
@@ -121,6 +127,7 @@ export async function addUsageToDailySummary(increment: {
     p_language_extension: increment.languageExtension || null,
     p_icon_url: increment.icon || null,
     p_time_spent_seconds: increment.seconds,
+    p_category: increment.category || null,
   });
   if (error) {
     throw error;
@@ -153,6 +160,11 @@ function aggregateSummaryRows(rows: any[], keyFn: (row: any) => string): any[] {
     const key = keyFn(row);
     if (map.has(key)) {
       const existing = map.get(key)!;
+      // The icon is stored on one of an app's rows only (sent once per run)
+      if (!existing.icon && row.icon) {
+        existing.icon = row.icon;
+        existing.icon_url = row.icon_url;
+      }
       existing.time_spent += row.time_spent;
       existing.total_time += row.total_time;
       existing.time_spent_seconds =
@@ -164,14 +176,34 @@ function aggregateSummaryRows(rows: any[], keyFn: (row: any) => string): any[] {
   return Array.from(map.values());
 }
 
+export interface CategoryTime {
+  /** Browser category (C5); null = unclassified */
+  category: string | null;
+  seconds: number;
+}
+
+/** Seconds per category, most first. */
+function sumByCategory(rows: { category?: string | null; seconds: number }[]): CategoryTime[] {
+  const by = new Map<string | null, number>();
+  for (const r of rows) {
+    const key = r.category ?? null;
+    by.set(key, (by.get(key) ?? 0) + (r.seconds || 0));
+  }
+  return [...by]
+    .map(([category, seconds]) => ({ category, seconds }))
+    .filter((c) => c.seconds > 0)
+    .sort((a, b) => b.seconds - a.seconds);
+}
+
 /**
- * Get usage summary for a specific date
+ * Get usage summary for a specific date. Apps with categorised time
+ * (browsers, C5) also get `categories`: seconds per category.
  */
 export async function getUsageSummary(userId: string, date: string) {
   const { data, error } = await supabase
     .from("daily_usage_summary")
     .select(
-      "date, app_name, icon_url, language, language_extension, time_spent_seconds",
+      "date, app_name, icon_url, language, language_extension, category, time_spent_seconds",
     )
     .eq("user_id", userId)
     .eq("date", date)
@@ -182,8 +214,40 @@ export async function getUsageSummary(userId: string, date: string) {
   }
   const mapped = (data || []).map(mapSummaryRow);
   // Aggregate by app so multiple languages don't create duplicate rows
-  return aggregateSummaryRows(mapped, (r) => r.app).sort(
-    (a: any, b: any) => b.time_spent - a.time_spent,
+  const apps = aggregateSummaryRows(mapped, (r) => r.app);
+  for (const app of apps) {
+    const rows = mapped.filter((r: any) => r.app === app.app);
+    if (rows.some((r: any) => r.category)) {
+      app.categories = sumByCategory(
+        rows.map((r: any) => ({ category: r.category, seconds: r.time_spent })),
+      );
+    }
+    delete app.category;
+  }
+  return apps.sort((a: any, b: any) => b.time_spent - a.time_spent);
+}
+
+/**
+ * Browser time per category within local days [startDate, endDate] (C5):
+ * rows of the given browser apps; their unclassified time has category null.
+ */
+export async function getBrowserUsage(
+  userId: string,
+  startDate: string,
+  endDate: string,
+  browserNames: string[],
+): Promise<CategoryTime[]> {
+  if (browserNames.length === 0) return [];
+  const { data, error } = await supabase
+    .from("daily_usage_summary")
+    .select("category, time_spent_seconds")
+    .eq("user_id", userId)
+    .in("app_name", browserNames)
+    .gte("date", startDate)
+    .lte("date", endDate);
+  if (error) throw error;
+  return sumByCategory(
+    (data || []).map((r: any) => ({ category: r.category, seconds: r.time_spent_seconds })),
   );
 }
 

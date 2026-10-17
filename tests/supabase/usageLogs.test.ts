@@ -23,6 +23,9 @@ import {
   getLanguageSummaryByDateRange,
   getUserEditors,
   getUserLangExts,
+  getBrowserUsage,
+  insertUsageLogs,
+  addUsageToDailySummary,
 } from "../../src/supabase/usageLogs";
 
 describe("usageLogs", () => {
@@ -152,6 +155,69 @@ describe("usageLogs", () => {
       mockResult({ data: null, error: null });
       const result = await getUsageSummary("user-1", "2025-01-15");
       expect(result).toEqual([]);
+    });
+
+    it("breaks a browser's time down by category and keeps its icon (C5)", async () => {
+      mockResult({
+        data: [
+          { app_name: "Chrome", icon_url: null, category: "docs", time_spent_seconds: 600 },
+          { app_name: "Chrome", icon_url: "chrome.png", category: null, time_spent_seconds: 300 },
+          { app_name: "Chrome", icon_url: null, category: "code-review", time_spent_seconds: 1200 },
+          { app_name: "VS Code", icon_url: "code.png", category: null, time_spent_seconds: 100 },
+        ],
+        error: null,
+      });
+
+      const [chrome, code] = await getUsageSummary("user-1", "2025-01-15");
+
+      expect(chrome).toMatchObject({ app: "Chrome", icon: "chrome.png", time_spent: 2100 });
+      expect(chrome.categories).toEqual([
+        { category: "code-review", seconds: 1200 },
+        { category: "docs", seconds: 600 },
+        { category: null, seconds: 300 },
+      ]);
+      expect(code.categories).toBeUndefined();
+    });
+  });
+
+  describe("getBrowserUsage", () => {
+    it("sums the browsers' time per category over a range", async () => {
+      mockResult({
+        data: [
+          { category: "ai-chat", time_spent_seconds: 60 },
+          { category: "ai-chat", time_spent_seconds: 60 },
+          { category: null, time_spent_seconds: 30 },
+        ],
+        error: null,
+      });
+
+      const result = await getBrowserUsage("user-1", "2025-01-01", "2025-01-30", ["Chrome", "Opera"]);
+
+      expect(result).toEqual([
+        { category: "ai-chat", seconds: 120 },
+        { category: null, seconds: 30 },
+      ]);
+      expect(getCallsFor("in")[0].args).toEqual(["app_name", ["Chrome", "Opera"]]);
+    });
+
+    it("asks nothing without browsers", async () => {
+      expect(await getBrowserUsage("user-1", "2025-01-01", "2025-01-30", [])).toEqual([]);
+      expect(getCallsFor("from")).toHaveLength(0);
+    });
+  });
+
+  describe("category writes (C5)", () => {
+    it("stores the category on the log row and in the summary", async () => {
+      mockResult({ data: null, error: null });
+      await insertUsageLogs([
+        { userId: "u", appName: "Chrome", windowTitle: "t", language: null, languageExtension: null, category: "docs", timestamp: "2025-01-15T10:00:00Z" },
+      ]);
+      expect(getCallsFor("insert")[0].args[0][0]).toMatchObject({ category: "docs" });
+
+      await addUsageToDailySummary({
+        userId: "u", date: "2025-01-15", appName: "Chrome", language: null, languageExtension: null, category: "docs", icon: null, seconds: 10,
+      });
+      expect(getCallsFor("rpc").at(-1)?.args[1]).toMatchObject({ p_category: "docs" });
     });
   });
 

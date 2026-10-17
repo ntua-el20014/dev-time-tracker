@@ -1,6 +1,7 @@
 /**
  * Buffers usage ticks and writes them in batches: one INSERT for all buffered
- * usage_logs rows, plus one summary upsert per (day, app, language) group.
+ * usage_logs rows, plus one summary upsert per (day, app, language, browser
+ * category) group.
  * Replaces two requests per tick with a handful per flush.
  *
  * Failure handling mirrors the per-tick path it replaces:
@@ -19,6 +20,8 @@ export interface UsageRecord {
   languageExtension: string | null;
   /** App icon data URL ("" if unavailable) */
   icon: string;
+  /** Browsers: what the page was for (C5) */
+  category?: string | null;
   intervalSeconds: number;
   /** ISO timestamp of the tick */
   timestamp: string;
@@ -31,6 +34,7 @@ export interface SummaryIncrement {
   appName: string;
   language: string | null;
   languageExtension: string | null;
+  category: string | null;
   /** Only sent once per summary row per run; null keeps the stored icon */
   icon: string | null;
   seconds: number;
@@ -85,7 +89,7 @@ export class UsageBatcher {
   }
 
   private summaryKey(r: UsageRecord, date: string): string {
-    return `${r.userId}|${date}|${r.appName}|${r.language ?? ""}`;
+    return `${r.userId}|${date}|${r.appName}|${r.language ?? ""}|${r.category ?? ""}`;
   }
 
   /** Icon for this group if it hasn't been sent yet, else null. */
@@ -126,6 +130,7 @@ export class UsageBatcher {
           appName: r.appName,
           language: r.language,
           languageExtension: r.languageExtension,
+          category: r.category ?? null,
           icon: this.iconSentKeys.has(key) ? null : r.icon || null,
           seconds: r.intervalSeconds,
         });

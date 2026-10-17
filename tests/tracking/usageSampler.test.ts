@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   createUsageSampler,
+  URL_GIVE_UP_AFTER,
   type ForegroundWindow,
 } from "../../src/tracking/usageSampler";
 
@@ -34,6 +35,7 @@ describe("usageSampler", () => {
       language: "TypeScript",
       languageExtension: ".ts",
       icon: "data:icon",
+      category: null,
     });
   });
 
@@ -62,5 +64,41 @@ describe("usageSampler", () => {
     expect(sample("u1")?.icon).toBe("");
     sample("u1");
     expect(getIcon).toHaveBeenCalledTimes(1);
+  });
+
+  it("classifies browser pages, from the title before the URL", () => {
+    const getUrl = vi.fn(() => "https://claude.ai/chat/1");
+    const pr = { execName: "chrome.exe", title: "Fix · Pull Request #1 · o/r · GitHub - Google Chrome", getIconData: () => "", getUrl };
+    expect(setup(pr).sample("u1")?.category).toBe("code-review");
+    expect(getUrl).not.toHaveBeenCalled();
+    const chat = { ...pr, title: "Untitled - Google Chrome" };
+    expect(setup(chat).sample("u1")?.category).toBe("ai-chat");
+    expect(getUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("never classifies or reads URLs for non-browsers", () => {
+    const getUrl = vi.fn(() => "https://claude.ai/");
+    expect(setup({ ...vscode("Claude"), getUrl }).sample("u1")?.category).toBeNull();
+    expect(getUrl).not.toHaveBeenCalled();
+  });
+
+  it("stops asking a browser whose URL never comes back", () => {
+    const getUrl = vi.fn(() => "");
+    const { sample } = setup({ execName: "chrome.exe", title: "Untitled - Google Chrome", getIconData: () => "", getUrl });
+    for (let i = 0; i < URL_GIVE_UP_AFTER + 3; i++) expect(sample("u1")?.category).toBeNull();
+    expect(getUrl).toHaveBeenCalledTimes(URL_GIVE_UP_AFTER);
+  });
+
+  it("keeps asking a browser whose URL worked once, and survives errors", () => {
+    let n = 0;
+    const getUrl = vi.fn(() => {
+      n++;
+      if (n === 1) return "https://github.com/o/r";
+      throw new Error("UIA failed");
+    });
+    const { sample } = setup({ execName: "chrome.exe", title: "Untitled - Google Chrome", getIconData: () => "", getUrl });
+    expect(sample("u1")?.category).toBe("code");
+    for (let i = 0; i < URL_GIVE_UP_AFTER + 3; i++) expect(sample("u1")?.category).toBeNull();
+    expect(getUrl).toHaveBeenCalledTimes(URL_GIVE_UP_AFTER + 4);
   });
 });

@@ -151,6 +151,15 @@ export function matchApp(execName: string, userId?: string): AppMatch | null {
   return lookup.get(execName.toLowerCase()) || null;
 }
 
+/** Display names of the browsers (built-in and the user's custom ones). */
+export function getBrowserNames(userId?: string): string[] {
+  const names = new Set<string>();
+  for (const m of buildExecLookup(userId).values()) {
+    if (m.category === "browser") names.add(m.name);
+  }
+  return [...names];
+}
+
 /**
  * Reset cached data — useful if the user edits known_editors.json at runtime
  * or when custom apps change.

@@ -471,6 +471,57 @@ try {
   const todayTab = (await u1.invoke("get-logs", today)).v || [];
   check("Today data includes the usage row", todayTab.some((r) => r.app === "E2E Browser"));
 
+  // ── C5: browser time by category (what the batcher writes for a browser) ──
+  const browserRows = [["code-review", 10], ["code-review", 10], ["docs", 10], [null, 10]];
+  for (const [category, seconds] of browserRows) {
+    await rawApi(u1, "POST", "rpc/update_daily_usage_summary", {
+      p_user_id: p1.id, p_date: today, p_app_name: "Chrome", p_language: null,
+      p_language_extension: null, p_icon_url: null, p_time_spent_seconds: seconds, p_category: category,
+    });
+  }
+  const catRows = await rawApi(u1, "GET", `daily_usage_summary?app_name=eq.Chrome&date=eq.${today}&select=category,time_spent_seconds&order=category.asc.nullslast`);
+  check(
+    "one summary row per browser category, NULL category upserts too",
+    catRows.status === 200 &&
+      JSON.stringify(JSON.parse(catRows.body)) ===
+        JSON.stringify([
+          { category: "code-review", time_spent_seconds: 20 },
+          { category: "docs", time_spent_seconds: 10 },
+          { category: null, time_spent_seconds: 10 },
+        ]),
+    catRows.body,
+  );
+  const chromeToday = ((await u1.invoke("get-logs", today)).v || []).find((r) => r.app === "Chrome");
+  check(
+    "Today's Chrome row breaks down by category",
+    JSON.stringify(chromeToday?.categories) === JSON.stringify([{ category: "code-review", seconds: 20 }, { category: "docs", seconds: 10 }, { category: null, seconds: 10 }]),
+    JSON.stringify(chromeToday?.categories),
+  );
+  const browserUsage = (await u1.invoke("get-browser-usage", { startDate: today, endDate: today })).v || [];
+  check("browser usage per category for a range", browserUsage[0]?.category === "code-review" && browserUsage[0]?.seconds === 20, JSON.stringify(browserUsage));
+  await u1.ev(`localStorage.removeItem("cached_today_logs")`);
+  await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
+  await u1.ev(`document.getElementById("appActivity").open = true`);
+  check(
+    "App activity shows the browser categories",
+    await u1.waitFor(`(document.querySelector("#logTable")?.innerText || "").includes("Code review 20s")`, 10000),
+    await u1.ev(`(document.querySelector("#logTable")?.innerText || "").slice(0, 300)`),
+  );
+  await u1.ev(`document.getElementById("appActivity").scrollIntoView()`);
+  await u1.shot("u1-app-activity-browser.png");
+  await u1.ev(`document.getElementById("appActivity").open = false`);
+  await u1.ev(`window.markTabsDirty("insights")`);
+  await u1.ev(`document.querySelector('.nav-item[data-view="sessions"]').click()`);
+  await u1.ev(`document.querySelector('#view-sessions .subnav-btn[data-sub="insights"]').click()`);
+  check(
+    "Insights shows browser time by category",
+    await u1.waitFor(`(() => { const t = document.getElementById("insights-browser")?.innerText || ""; return /Browser time/.test(t) && t.includes("Code review") && t.includes("Other browsing"); })()`, 10000),
+  );
+  await u1.ev(`document.getElementById("insights-browser").scrollIntoView()`);
+  await u1.shot("u1-insights-browser.png");
+  await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
+  await rawApi(u1, "DELETE", `daily_usage_summary?app_name=eq.Chrome&date=eq.${today}`);
+
   // Invite code
   const inv = await u1.invoke("org:generate-invite-code", { max_uses: 1, expires_in_days: 1 });
   check("admin generates an invite code", inv.ok && /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(inv.v?.code ?? ""), inv.e);

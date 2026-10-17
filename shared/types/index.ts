@@ -38,6 +38,8 @@ export interface LogEntry {
   language: string;
   lang_ext?: string;
   time_spent: number;
+  /** Browsers (C5): seconds per page category, null = unclassified */
+  categories?: { category: string | null; seconds: number }[];
 }
 
 export interface Tag {

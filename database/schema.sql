@@ -130,7 +130,7 @@ CREATE TABLE usage_logs (
     language TEXT,
     language_extension TEXT,
     -- What a browser tab was for (C5: "code-review", "docs", "ai-chat", …),
-    -- classified on the device from its URL; the URL itself is never stored
+    -- classified on the device from its title or URL; the URL is never stored
     category TEXT CHECK (category IS NULL OR length(category) <= 40),
     timestamp TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()

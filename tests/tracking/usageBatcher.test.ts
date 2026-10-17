@@ -44,6 +44,23 @@ function setup(overrides: Partial<BatcherDeps["writer"]> = {}) {
 }
 
 describe("UsageBatcher", () => {
+  it("keeps browser categories apart in the summary (C5)", async () => {
+    const { batcher, writer } = setup();
+    const chrome = { appName: "Chrome", language: null, languageExtension: null };
+    batcher.add(record({ ...chrome, category: "code-review" }));
+    batcher.add(record({ ...chrome, category: "code-review" }));
+    batcher.add(record({ ...chrome, category: "docs" }));
+    batcher.add(record({ ...chrome, category: null }));
+    await batcher.flush();
+
+    const increments = writer.addToSummary.mock.calls.map((c) => c[0]);
+    expect(increments).toHaveLength(3);
+    expect(increments).toContainEqual(expect.objectContaining({ category: "code-review", seconds: 20 }));
+    expect(increments).toContainEqual(expect.objectContaining({ category: "docs", seconds: 10 }));
+    expect(increments).toContainEqual(expect.objectContaining({ category: null, seconds: 10 }));
+    expect(writer.insertLogs.mock.calls[0][0].map((r) => r.category)).toEqual(["code-review", "code-review", "docs", null]);
+  });
+
   it("writes all buffered logs in one insert", async () => {
     const { batcher, writer } = setup();
     batcher.add(record());

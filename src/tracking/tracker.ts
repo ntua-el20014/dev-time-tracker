@@ -276,6 +276,7 @@ const sampleUsage = createUsageSampler({
       execName: win.info?.execName ?? "",
       title: win.title ?? "",
       getIconData: () => win.getIcon().data,
+      getUrl: () => win.url,
     };
   },
   matchApp,
@@ -302,6 +303,7 @@ const batcher = new UsageBatcher({
       icon,
       r.intervalSeconds,
       r.timestamp,
+      r.category,
     ),
   logError,
 });

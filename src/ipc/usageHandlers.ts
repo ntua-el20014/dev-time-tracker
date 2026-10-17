@@ -4,6 +4,9 @@ import { getCurrentUser } from "../supabase/api";
 import type { DailySummaryFilters } from "../../shared/types";
 import { logError } from "../utils/errorHandler";
 import { getLocalDateString } from "../utils/timeFormat";
+import { getBrowserNames } from "../utils/editors";
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Get usage logs/summary for a specific date
@@ -23,6 +26,31 @@ ipcMain.handle("get-logs", async (_event, date?: string) => {
     return [];
   }
 });
+
+/**
+ * Browser time per category (C5) within local days [startDate, endDate]
+ */
+ipcMain.handle(
+  "get-browser-usage",
+  async (_event, range: { startDate?: unknown; endDate?: unknown }) => {
+    try {
+      const { startDate, endDate } = range ?? {};
+      if (typeof startDate !== "string" || !DATE.test(startDate)) return [];
+      if (typeof endDate !== "string" || !DATE.test(endDate)) return [];
+      const user = await getCurrentUser();
+      if (!user) return [];
+      return await usageLogs.getBrowserUsage(
+        user.id,
+        startDate,
+        endDate,
+        getBrowserNames(user.id),
+      );
+    } catch (err) {
+      logError("get-browser-usage", err);
+      return [];
+    }
+  },
+);
 
 /**
  * Get all days with logged usage for a specific month
