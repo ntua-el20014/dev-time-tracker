@@ -342,7 +342,8 @@ In priority order (cheapest and highest value first):
   - Placed in Projects and Billing (Part 5), not on Home.
   - Fixed on the way: the invoice modal put project names into innerHTML and attributes unescaped, and read session counts back out of its own label text.
   - Verified: unit tests (activity sums, agent cost in earnings, invoice line and PDF text, handler), e2e (an agent session with a cost in the e2e project → project activity, the Projects card, the Billing agent cost, the invoice option and summary).
-  - Not done: a Home widget; team analytics still count full duration with no agent data; agent cost is USD only, with no markup option.
+  - Not done: a Home widget; team analytics still count full duration with no agent data; agent cost is USD only (fine for now; other currencies before release, see below), with no markup option.
+  - Owner (2026-10-17): agent cost on invoices stays off by default; showing Claude Code's API-price cost unadjusted is fine for now.
 
 **Phase U — UI restructure (Part 5); interleave with Phase C**
 - [x] U1 Sidebar shell; Settings split out of My Profile; Team item shown only when there is a team — done on `ui-u1-sidebar` (2026-10-15). Also: Insights view (editor/language charts, goal history) in Sessions; Today table folded into Home as collapsible "App activity"; daily-goal set/delete moved to Home's goal box; rail timer shows active time (`activeSeconds` added to `TrackingState`); Integrations chapter holds custom-apps/lang.json. Verified by unit tests (`tests/renderer/teamVisibility.test.ts`), smoke test and e2e (walks every view/sub-view, checks Team hidden for solo and shown after a member joins, rail timer counts).
@@ -365,6 +366,9 @@ In priority order (cheapest and highest value first):
 **Phase D — later / optional**
 - [ ] Always-on auto-segmentation with the review inbox
 - [ ] Privacy: title-upload toggle, local-only mode
+
+**Before release**
+- [ ] Currencies other than USD (owner, 2026-10-17). Rates, Billing and invoices all assume `$`; agent costs are reported in USD and would need converting or labelling.
 
 ## Owner decisions for Phase C (answered 2026-10-15)
 1. **Primary user: solo freelancer, billing-first.** Prioritize C6: per-project human/agent time, agent cost, and agent cost as an invoice line item. Team views come later.
