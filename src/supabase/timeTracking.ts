@@ -4,6 +4,7 @@ import { setSessionTagsByNames } from "./tags";
 import { localDayStartISO, localDayEndISO } from "../utils/timeFormat";
 import type { RepoCodeStats } from "../../shared/codeStats";
 import type { AppUsageEntry } from "../../shared/appUsage";
+import type { DraftRow, MergedDraft } from "../../shared/drafts";
 
 type SessionInsert =
   Database["public"]["Tables"]["time_tracking_sessions"]["Insert"];
@@ -360,4 +361,106 @@ export async function saveDraftSession(
     throw error;
   }
   return "saved";
+}
+
+const DRAFT_COLUMNS =
+  "id, client_id, title, start_time, end_time, duration, project_id, supervising_seconds, supervising_spans, code_stats, app_usage";
+
+/** The user's drafts (the review inbox), newest first. */
+export async function getDraftSessions(userId: string): Promise<DraftRow[]> {
+  const { data, error } = await supabase
+    .from("time_tracking_sessions")
+    .select(DRAFT_COLUMNS)
+    .eq("user_id", userId)
+    .eq("status", "draft")
+    .order("start_time", { ascending: false });
+  if (error) throw error;
+  return (data as DraftRow[] | null) || [];
+}
+
+/** Some of the user's drafts, by id (others' rows and confirmed ones are left out). */
+export async function getDraftSessionsByIds(
+  userId: string,
+  ids: string[],
+): Promise<DraftRow[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("time_tracking_sessions")
+    .select(DRAFT_COLUMNS)
+    .eq("user_id", userId)
+    .eq("status", "draft")
+    .in("id", ids);
+  if (error) throw error;
+  return (data as DraftRow[] | null) || [];
+}
+
+export async function countDraftSessions(userId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("time_tracking_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "draft");
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/**
+ * Turn a draft into a confirmed session. Returns false if it isn't (any
+ * more) one of the user's drafts.
+ */
+export async function confirmDraftSession(
+  userId: string,
+  id: string,
+  details: {
+    title: string;
+    description: string | null;
+    projectId: string | null;
+    isBillable: boolean;
+  },
+): Promise<boolean> {
+  const { data, error } = await (supabase as any)
+    .from("time_tracking_sessions")
+    .update({
+      status: "confirmed",
+      title: details.title,
+      description: details.description,
+      project_id: details.projectId,
+      is_billable: details.isBillable,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .eq("status", "draft")
+    .select("id");
+  if (error) throw error;
+  return Array.isArray(data) && data.length > 0;
+}
+
+/** Overwrite a draft's contents (merging). Confirmed rows are left alone. */
+export async function updateDraftSession(
+  userId: string,
+  id: string,
+  fields: MergedDraft["fields"],
+): Promise<boolean> {
+  const { data, error } = await (supabase as any)
+    .from("time_tracking_sessions")
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .eq("status", "draft")
+    .select("id");
+  if (error) throw error;
+  return Array.isArray(data) && data.length > 0;
+}
+
+/** Delete some of the user's drafts. Confirmed sessions are never deleted here. */
+export async function deleteDraftSessions(userId: string, ids: string[]) {
+  if (ids.length === 0) return;
+  const { error } = await supabase
+    .from("time_tracking_sessions")
+    .delete()
+    .eq("user_id", userId)
+    .eq("status", "draft")
+    .in("id", ids);
+  if (error) throw error;
 }

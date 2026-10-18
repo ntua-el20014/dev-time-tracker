@@ -12,7 +12,7 @@ import { toLocalDateString } from "../utils/timeFormat";
  * - tags (from session_tags join)
  * - project_name / project_color (from cloud_projects)
  */
-async function enrichSessions(rawSessions: any[]): Promise<any[]> {
+export async function enrichSessions(rawSessions: any[]): Promise<any[]> {
   if (rawSessions.length === 0) return [];
 
   const sessionIds = rawSessions.map((s) => s.id);

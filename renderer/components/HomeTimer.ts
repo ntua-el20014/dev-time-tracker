@@ -24,7 +24,8 @@ import {
 } from "../trackingControls";
 import { currentSeconds, formatClock, onClockTick } from "../liveClock";
 import { chooseProject, clearStaleProject } from "../sessionProject";
-import { markTabsDirty } from "../navigation";
+import { markTabsDirty, navigateTo } from "../navigation";
+import { draftsLabel, getDraftCount, onDraftCount } from "../draftCount";
 import { DEFAULT_CURRENCY, formatRate } from "../../shared/currency";
 
 interface PickerProject {
@@ -154,6 +155,15 @@ function sync(state: TrackingState) {
 }
 
 onTrackingState(sync);
+
+/** "3 drafts to review →" (always-on), linking to the inbox. */
+function showDraftCount(n: number) {
+  const btn = document.getElementById("homeDrafts");
+  if (!btn) return;
+  btn.textContent = `📥 ${draftsLabel(n)} →`;
+  btn.hidden = n === 0;
+}
+onDraftCount(showDraftCount);
 // Keep the agents' "for 5m" fresh between state broadcasts
 setInterval(() => {
   const state = getTrackingState();
@@ -209,6 +219,7 @@ export async function renderHomeTimer(container: HTMLElement) {
       </div>
       <div id="homeRepoHint" class="home-repo-hint" aria-live="polite" hidden></div>
       <div id="homeAgents" class="home-agents" aria-live="polite" hidden></div>
+      <button type="button" id="homeDrafts" class="home-drafts" hidden></button>
       ${
         projects.length === 0
           ? `<p class="home-timer-hint">Create a project on the Projects page to bill your time per project.</p>`
@@ -227,6 +238,11 @@ export async function renderHomeTimer(container: HTMLElement) {
         showInAppNotification("Could not change the project.", 3500, "error");
       }
     });
+
+  container
+    .querySelector("#homeDrafts")
+    ?.addEventListener("click", () => navigateTo("sessions", "list"));
+  showDraftCount(getDraftCount());
 
   container.querySelector("#homeRepoHint")?.addEventListener("click", async (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".home-repo-action");

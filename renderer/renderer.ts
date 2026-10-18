@@ -87,6 +87,8 @@ import "./styles/standup.css";
 import "./styles/incognito.css";
 import "./styles/team-analytics.css";
 import "./styles/notification-sidebar.css";
+import "./styles/drafts.css";
+import { refreshDraftCount } from "./draftCount";
 import {
   initNotificationSidebar,
   addSidebarNotification,
@@ -735,6 +737,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Main may already be recording (e.g. after a window reload)
       void refreshTrackingState().then(restoreLastProject);
       void updateTeamVisibility();
+      void refreshDraftCount();
     }
     if (landing) landing.style.display = "none";
 

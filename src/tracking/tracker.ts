@@ -36,9 +36,11 @@ import {
 } from "../supabase/userPreferences";
 import { logError, classifyError, withRetry } from "../utils/errorHandler";
 import {
+  dropQueuedDraftSession,
   enqueueDraftSession,
   enqueueSession,
   enqueueUsageSummary,
+  flush as flushOfflineQueue,
   hasQueuedDraftSession,
 } from "../utils/offlineQueue";
 import {
@@ -1123,9 +1125,13 @@ interface OpenDraft {
   saved: boolean;
   /** Saves of one draft run one after another (update-or-insert isn't atomic) */
   chain: Promise<void>;
+  /** Discarded in the inbox: saves still waiting must not recreate it */
+  forgotten: boolean;
 }
 
 let openDraft: OpenDraft | null = null;
+/** The open draft and closed ones whose last save hasn't finished, by client id */
+const liveDrafts = new Map<string, OpenDraft>();
 /** Saves not finished yet; quit waits for them */
 const draftSaves = new Set<Promise<void>>();
 /** Repo names by key, for draft titles */
@@ -1141,7 +1147,9 @@ function handleDraft(event: SegmentEvent, userId: string) {
       code: createCodeStats(codeStatsDeps),
       saved: false,
       chain: Promise.resolve(),
+      forgotten: false,
     };
+    liveDrafts.set(event.clientId, openDraft);
     const repo = attribution.currentRepo();
     if (repo && !isIncognito) openDraft.code.noteRepo(repo);
     return;
@@ -1149,7 +1157,10 @@ function handleDraft(event: SegmentEvent, userId: string) {
   const draft = openDraft;
   if (!draft || draft.clientId !== event.segment.clientId) return;
   openDraft = null;
-  if (event.segment.duration < MIN_SEGMENT_SECONDS && !draft.saved) return;
+  if (event.segment.duration < MIN_SEGMENT_SECONDS && !draft.saved) {
+    liveDrafts.delete(draft.clientId);
+    return;
+  }
   // Taken now: links and names may be gone (sign-out) by the time git is done
   const data = draftData(draft, event.segment);
   const segment = event.segment;
@@ -1158,6 +1169,41 @@ function handleDraft(event: SegmentEvent, userId: string) {
     ...data,
     codeStats: await collectCodeStats(segment, limit, draft.code),
   }));
+  void draft.chain.then(() => liveDrafts.delete(draft.clientId));
+}
+
+/** The draft of the segment being recorded now, if it has one. */
+export function openDraftClientId(): string | null {
+  return openDraft?.clientId ?? null;
+}
+
+/**
+ * Before the inbox changes a draft: if it is the open segment's, end the
+ * segment (the next input starts a new one), and wait for saves in flight.
+ * "keep" saves it a last time (and sends a version queued offline, if it
+ * can); "forget" drops everything not yet written, so nothing recreates it.
+ */
+export async function settleDraft(
+  userId: string,
+  clientId: string,
+  mode: "keep" | "forget",
+) {
+  const draft = liveDrafts.get(clientId);
+  if (draft) {
+    if (mode === "forget") draft.forgotten = true;
+    if (openDraft === draft) {
+      if (mode === "forget") {
+        openDraft = null;
+        liveDrafts.delete(clientId);
+      }
+      dispatchSegmentEvents(segmenter.end(new Date()));
+    }
+    await draft.chain;
+  }
+  if (mode === "forget") dropQueuedDraftSession(userId, clientId);
+  else if (hasQueuedDraftSession(userId, clientId)) {
+    await flushOfflineQueue().catch(() => 0);
+  }
 }
 
 function draftData(draft: OpenDraft, segment: SegmentSnapshot): DraftSessionData {
@@ -1191,7 +1237,9 @@ function queueDraftSave(
 ) {
   draft.saved = true;
   const save = draft.chain.then(async () => {
+    if (draft.forgotten) return;
     const data = await build();
+    if (draft.forgotten) return; // discarded while git ran
     await writeDraft(draft.userId, data, quitting);
   });
   draft.chain = save.catch(() => undefined);
@@ -1212,6 +1260,7 @@ async function writeDraft(
   }
   try {
     await saveDraftSession(userId, data);
+    send("drafts-changed");
   } catch (err) {
     const kind = classifyError(err);
     // "auth": e.g. the segment ended because the user signed out

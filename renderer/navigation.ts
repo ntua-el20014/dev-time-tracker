@@ -130,6 +130,13 @@ function syncDom() {
   });
 }
 
+const navigateListeners = new Set<(view: ViewId) => void>();
+
+/** Called after every navigation (also to the view already shown). */
+export function onNavigate(listener: (view: ViewId) => void) {
+  navigateListeners.add(listener);
+}
+
 /** Show a view (and optionally one of its sub-views), rendering as needed. */
 export function navigateTo(view: ViewId, sub?: string) {
   if (sub && VIEW_PAGES[view][sub]) activeSub[view] = sub;
@@ -137,6 +144,7 @@ export function navigateTo(view: ViewId, sub?: string) {
   syncDom();
   for (const id of visiblePages()) renderIfNeeded(id);
   document.querySelector(".app-main")?.scrollTo({ top: 0 });
+  for (const listener of navigateListeners) listener(view);
 }
 
 /**

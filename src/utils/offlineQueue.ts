@@ -176,6 +176,16 @@ function saveToDisk(): void {
 
 // ── Notify renderer ──────────────────────────────────────────────────
 
+function notifyWindows(channel: string, payload?: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    try {
+      win.webContents.send(channel, payload);
+    } catch {
+      // window may have been destroyed
+    }
+  }
+}
+
 function broadcastSyncStatus(): void {
   const status = getSyncStatus();
   for (const win of BrowserWindow.getAllWindows()) {
@@ -319,6 +329,16 @@ export function hasQueuedDraftSession(userId: string, clientId: string): boolean
   return keySet.has(draftKey(userId, clientId));
 }
 
+/** The draft was discarded: a queued version must not recreate it. */
+export function dropQueuedDraftSession(userId: string, clientId: string): void {
+  const key = draftKey(userId, clientId);
+  if (!keySet.has(key)) return;
+  const item = queue.find((q) => q.key === key);
+  if (item) removeItem(item);
+  saveToDisk();
+  broadcastSyncStatus();
+}
+
 /**
  * Take a processed item out of the queue. A draft may have been replaced
  * by a newer version meanwhile: that one stays (and is sent next).
@@ -411,6 +431,7 @@ export async function flush(): Promise<number> {
       } else if (item.type === "draft_session") {
         const { userId, ...draft } = item.data;
         await saveDraftSession(userId, draft);
+        notifyWindows("drafts-changed");
       }
 
       // Success — remove from queue

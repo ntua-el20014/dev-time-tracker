@@ -11,6 +11,7 @@ import {
 } from "./summary/utils/chartUtils";
 import { renderByDateView } from "./summary/summaryByDateView";
 import { renderBySessionView } from "./summary/summaryBySessionView";
+import { renderDraftInbox } from "./components/DraftInbox";
 import {
   createSummaryState,
   resetSummaryState,
@@ -40,6 +41,12 @@ export async function renderSummary() {
   });
 
   summaryDiv.innerHTML = "";
+
+  // Always-on drafts waiting for review come first
+  const draftInbox = document.createElement("div");
+  draftInbox.hidden = true;
+  summaryDiv.appendChild(draftInbox);
+  void renderDraftInbox(draftInbox);
 
   // No app usage yet doesn't mean no sessions: render the views anyway
   summaryState.allDailyData ||= [];

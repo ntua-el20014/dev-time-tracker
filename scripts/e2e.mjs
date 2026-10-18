@@ -619,6 +619,111 @@ try {
   const restore = await u2.invoke("org:create-personal", "E2E Test Org");
   check("user 2 creates a personal org again", restore.ok && !!restore.v);
 
+  // ── Phase D: always-on, drafts and the review inbox ─────────────
+  // Segments open on real OS input, which this script can't produce, so the
+  // drafts are inserted the way the tracker saves them (draft, auto, client_id)
+  const onRes = await u1.invoke("set-always-on", true);
+  check("always-on can be turned on", onRes.v === true && (await u1.invoke("get-always-on")).v === true);
+  check("tracking state reports always-on", (await u1.invoke("get-tracking-state")).v?.alwaysOn === true);
+  const ago = (min) => new Date(Date.now() - min * 60_000).toISOString();
+  const draftSpec = [
+    { from: 180, to: 150, project_id: proj?.id ?? null, app_usage: [{ app: "VS Code", language: "TypeScript", category: null, seconds: 1500 }] },
+    { from: 140, to: 120, project_id: proj?.id ?? null, app_usage: [{ app: "VS Code", language: "TypeScript", category: null, seconds: 900 }] },
+    { from: 100, to: 90, project_id: null, app_usage: [] },
+  ].map((d) => ({
+    user_id: p1.id, status: "draft", source: "auto", is_billable: false,
+    client_id: crypto.randomUUID(), title: "dtt-e2e-repo",
+    start_time: ago(d.from), end_time: ago(d.to), duration: (d.from - d.to) * 60,
+    project_id: d.project_id, app_usage: d.app_usage,
+  }));
+  const draftIds = [];
+  for (const row of draftSpec) {
+    const r = await rawApi(u1, "POST", "time_tracking_sessions?select=id", row);
+    try { draftIds.push(JSON.parse(r.body)[0].id); } catch { console.log(`draft insert: HTTP ${r.status} ${r.body}`); }
+  }
+  check("drafts saved as the tracker saves them", draftIds.length === 3);
+  const billableDraft = await rawApi(u1, "POST", "time_tracking_sessions?select=id", { ...draftSpec[2], client_id: crypto.randomUUID(), is_billable: true });
+  check("a billable draft is rejected (DB CHECK)", billableDraft.status >= 400, `HTTP ${billableDraft.status}`);
+  const listed1 = (await u1.invoke("get-sessions")).v || [];
+  check("drafts are not in the session list", !listed1.some((s) => draftIds.includes(s.id)));
+  check("draft count", (await u1.invoke("get-draft-count")).v === 3);
+
+  await u1.ev(`document.querySelector('.nav-item[data-view="sessions"]').click()`);
+  await u1.ev(`document.querySelector('#view-sessions .subnav-btn[data-sub="list"]').click()`);
+  check("inbox lists the drafts", await u1.waitFor(`document.querySelectorAll(".draft-item").length === 3`, 10000));
+  check("Sessions rail item shows the count", await u1.waitFor(`(() => {
+    const b = document.querySelector('.nav-item[data-view="sessions"] .nav-badge');
+    return b && !b.hidden && b.textContent === "3";
+  })()`, 8000));
+  await u1.shot("u1-draft-inbox.png");
+
+  // Merge the two older ones through the UI
+  await u1.ev(`(() => {
+    for (const id of ${JSON.stringify(draftIds.slice(0, 2))}) {
+      const box = document.querySelector('.draft-check[data-id="' + id + '"]');
+      if (!box) continue;
+      box.checked = true;
+      box.dispatchEvent(new Event("change"));
+    }
+    document.getElementById("draftMergeBtn")?.click();
+  })()`);
+  await u1.waitFor(`!!document.getElementById("confirmModalOkBtn")`, 5000);
+  await sleep(300);
+  await u1.ev(`document.getElementById("confirmModalOkBtn")?.click()`);
+  check("merge leaves two drafts", await u1.waitFor(`document.querySelectorAll(".draft-item").length === 2`, 10000));
+  const afterMerge = ((await u1.invoke("get-draft-sessions")).v || []).find((d) => d.id === draftIds[0]);
+  check(
+    "merged draft keeps the earliest, adds up the time and app usage",
+    afterMerge?.duration === 3000 && afterMerge?.start_time && Date.parse(afterMerge.end_time) === Date.parse(draftSpec[1].end_time) && afterMerge?.app_usage?.[0]?.seconds === 2400,
+    JSON.stringify(afterMerge && { d: afterMerge.duration, usage: afterMerge.app_usage }),
+  );
+
+  // Confirm it through the UI: the project has a rate, so Billable is preselected
+  await u1.ev(`document.querySelector('.draft-confirm-btn[data-id="${draftIds[0]}"]')?.click()`);
+  check("confirm form opens with the draft's project", await u1.waitFor(`document.getElementById("draftProject")?.value === ${JSON.stringify(proj?.id ?? "")}`, 8000));
+  check("Billable preselected for a project with a rate", await u1.ev(`document.getElementById("draftBillable")?.checked === true`));
+  const draftTitle = `E2E confirmed draft ${new Date().toISOString().slice(11, 19)}`;
+  await u1.ev(`(() => {
+    const t = document.getElementById("draftTitle");
+    if (!t) return;
+    t.value = ${JSON.stringify(draftTitle)};
+    document.getElementById("customModalForm").requestSubmit();
+  })()`);
+  check("confirming removes it from the inbox", await u1.waitFor(`document.querySelectorAll(".draft-item").length === 1`, 10000));
+  const confirmed = ((await u1.invoke("get-sessions")).v || []).find((s) => s.id === draftIds[0]);
+  check(
+    "confirmed draft is a billable session in the project",
+    confirmed?.title === draftTitle && confirmed?.is_billable === true && confirmed?.project_id === proj?.id && confirmed?.duration === 3000,
+    JSON.stringify(confirmed && { t: confirmed.title, b: confirmed.is_billable, p: confirmed.project_id, d: confirmed.duration }),
+  );
+  check("the merged-away draft is gone", (await rawApi(u1, "GET", `time_tracking_sessions?id=eq.${draftIds[1]}&select=id`)).body === "[]");
+  // What saveDraftSession relies on: a confirmed row is never updated as a
+  // draft, and inserting its client_id again is a unique violation
+  const staleUpdate = await rawApi(u1, "PATCH", `time_tracking_sessions?client_id=eq.${draftSpec[0].client_id}&status=eq.draft&select=id`, { duration: 1 });
+  check("a late draft save doesn't touch a confirmed session", staleUpdate.status === 200 && staleUpdate.body === "[]", `HTTP ${staleUpdate.status} ${staleUpdate.body}`);
+  const staleInsert = await rawApi(u1, "POST", "time_tracking_sessions?select=id", { ...draftSpec[0], duration: 1 });
+  check("re-inserting a confirmed draft's client_id conflicts (23505)", staleInsert.status === 409 && staleInsert.body.includes("23505"), `HTTP ${staleInsert.status}`);
+
+  // Discard the last one through the UI
+  await u1.ev(`(() => {
+    const box = document.querySelector('.draft-check[data-id="${draftIds[2]}"]');
+    if (!box) return;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    document.getElementById("draftDiscardBtn")?.click();
+  })()`);
+  await u1.waitFor(`!!document.getElementById("confirmModalOkBtn")`, 5000);
+  await sleep(300);
+  await u1.ev(`document.getElementById("confirmModalOkBtn")?.click()`);
+  check("discarding empties the inbox", await u1.waitFor(`document.querySelectorAll(".draft-item").length === 0`, 10000));
+  check("discarded draft deleted", (await rawApi(u1, "GET", `time_tracking_sessions?id=eq.${draftIds[2]}&select=id`)).body === "[]");
+  check("rail badge hidden with no drafts", await u1.waitFor(`document.querySelector('.nav-item[data-view="sessions"] .nav-badge')?.hidden === true`, 8000));
+  await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
+  check("Home has no drafts line", await u1.waitFor(`document.getElementById("homeDrafts")?.hidden === true`, 8000));
+  check("always-on can be turned off", (await u1.invoke("set-always-on", false)).v === false);
+  // Whatever is left of this block's rows, even after a failed check
+  for (const id of draftIds) await rawApi(u1, "DELETE", `time_tracking_sessions?id=eq.${id}`);
+
   const delAgents = await rawApi(u1, "DELETE", "agent_sessions?external_id=like.e2e-*");
   check("delete the e2e agent session", delAgents.status === 200, `HTTP ${delAgents.status}`);
   if (proj?.id) {

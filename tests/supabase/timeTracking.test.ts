@@ -26,6 +26,10 @@ import {
   addSession,
   getSessionsInDateRange,
   saveDraftSession,
+  confirmDraftSession,
+  countDraftSessions,
+  deleteDraftSessions,
+  getDraftSessions,
 } from "../../src/supabase/timeTracking";
 
 describe("timeTracking", () => {
@@ -485,6 +489,74 @@ describe("timeTracking", () => {
       await expect(saveDraftSession("u1", draft)).rejects.toMatchObject({
         message: "fetch failed",
       });
+    });
+  });
+
+  // ───────────── review inbox (Phase D3) ─────────────
+  describe("review inbox", () => {
+    const eqArgs = () => getCallsFor("eq").map((c) => c.args);
+
+    it("lists only the user's drafts", async () => {
+      mockResult({ data: [{ id: "d1" }], error: null });
+      expect(await getDraftSessions("u1")).toEqual([{ id: "d1" }]);
+      expect(eqArgs()).toEqual([
+        ["user_id", "u1"],
+        ["status", "draft"],
+      ]);
+    });
+
+    it("counts drafts without fetching them", async () => {
+      mockResult({ data: null, error: null, count: 4 });
+      expect(await countDraftSessions("u1")).toBe(4);
+      expect(getCallsFor("select")[0].args).toEqual([
+        "id",
+        { count: "exact", head: true },
+      ]);
+    });
+
+    it("confirms only a draft of the user", async () => {
+      mockResult({ data: [{ id: "d1" }], error: null });
+      const ok = await confirmDraftSession("u1", "d1", {
+        title: "Checkout",
+        description: null,
+        projectId: "p1",
+        isBillable: true,
+      });
+      expect(ok).toBe(true);
+      expect(getCallsFor("update")[0].args[0]).toMatchObject({
+        status: "confirmed",
+        title: "Checkout",
+        project_id: "p1",
+        is_billable: true,
+      });
+      expect(eqArgs()).toEqual([
+        ["id", "d1"],
+        ["user_id", "u1"],
+        ["status", "draft"],
+      ]);
+
+      mockResult({ data: [], error: null }); // already confirmed, or not ours
+      expect(
+        await confirmDraftSession("u1", "d1", {
+          title: "x",
+          description: null,
+          projectId: null,
+          isBillable: false,
+        }),
+      ).toBe(false);
+    });
+
+    it("deletes drafts only, never confirmed sessions", async () => {
+      mockResult({ data: null, error: null });
+      await deleteDraftSessions("u1", ["d1", "d2"]);
+      expect(eqArgs()).toEqual([
+        ["user_id", "u1"],
+        ["status", "draft"],
+      ]);
+      expect(getCallsFor("in")[0].args).toEqual(["id", ["d1", "d2"]]);
+
+      await deleteDraftSessions("u1", []);
+      expect(getCallsFor("delete")).toHaveLength(1);
     });
   });
 });

@@ -211,6 +211,18 @@ describe("offlineQueue.flush", () => {
       expect(q.getPendingCount()).toBe(0);
     });
 
+    it("drops a discarded draft's queued version", async () => {
+      const q = await freshQueue();
+      signedInAs(null);
+      q.enqueueDraftSession("user-A", draft(600));
+      q.enqueueSession("user-A", "2026-10-18T08:00:00.000Z", 600, "Work");
+      q.dropQueuedDraftSession("user-A", "seg-1");
+      expect(q.hasQueuedDraftSession("user-A", "seg-1")).toBe(false);
+      expect(q.getPendingCount()).toBe(1);
+      q.dropQueuedDraftSession("user-A", "seg-1"); // nothing queued: no-op
+      expect(q.getPendingCount()).toBe(1);
+    });
+
     it("keeps a draft on network errors", async () => {
       const q = await freshQueue();
       signedInAs("user-A");

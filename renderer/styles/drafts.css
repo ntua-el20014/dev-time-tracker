@@ -1,0 +1,202 @@
+/* Phase D3: always-on drafts — review inbox, rail badge, Home line */
+
+.nav-item {
+  position: relative;
+}
+
+.nav-badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.nav-item.active .nav-badge {
+  background: var(--accent-text);
+  color: var(--accent);
+}
+
+.nav-badge[hidden] {
+  display: none;
+}
+
+/* Icon-only rail: the badge sits on the icon */
+@media (max-width: 900px) {
+  .nav-badge {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    min-width: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    line-height: 16px;
+  }
+}
+
+.home-drafts {
+  display: block;
+  margin-top: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.home-drafts:hover {
+  background: var(--row-hover);
+}
+
+.home-drafts[hidden] {
+  display: none;
+}
+
+.draft-inbox {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+}
+
+.draft-inbox-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px 16px;
+}
+
+.draft-inbox-header h3 {
+  margin: 0;
+}
+
+.draft-inbox-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.draft-inbox-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.draft-action-btn,
+.draft-confirm-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.draft-action-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.draft-action-btn.danger:not(:disabled) {
+  border-color: #d9534f;
+  color: #d9534f;
+}
+
+.draft-confirm-btn {
+  border-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.draft-confirm-btn:hover,
+.draft-action-btn:not(:disabled):hover {
+  background: var(--row-hover);
+}
+
+.draft-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.draft-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.draft-item + .draft-item {
+  border-top: 1px solid var(--border);
+}
+
+.draft-item:hover {
+  background: var(--row-hover);
+}
+
+.draft-item.selected {
+  background: var(--row-odd);
+}
+
+.draft-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.draft-title {
+  font-weight: 600;
+}
+
+.draft-when,
+.draft-meta {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.draft-live {
+  margin-left: 6px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.draft-confirm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 320px;
+}
+
+.draft-confirm-form input[type="text"],
+.draft-confirm-form select,
+.draft-confirm-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.draft-confirm-when,
+.draft-confirm-note {
+  margin: 0 0 6px;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.draft-billable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}

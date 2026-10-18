@@ -44,6 +44,7 @@ import {
   shutdownClaudeHooks,
 } from "./tracking/claudeHooks";
 import "./ipc/sessionHandlers";
+import "./ipc/draftHandlers";
 import "./ipc/usageHandlers";
 import "./ipc/tagHandlers";
 import "./ipc/goalHandlers";
