@@ -37,7 +37,7 @@ Rules that go beyond plain policies:
   - **You** can edit your username, avatar and email, and you can leave your organization (`org_id` → NULL, `role` → employee). You can't join an organization or change your role directly.
   - **An admin** can change a non-admin member's role, nothing else. Removing a member goes through `remove_org_member()`.
   - **Joining** an organization goes through `join_organization_with_code()` or `approve_join_request()`.
-- **Org attribution is server-side.** `set_org_id_from_user()` fills `org_id` on sessions, usage logs and the daily summary from the user's profile at insert, and keeps it fixed afterwards.
+- **Org attribution is server-side.** `set_org_id_from_user()` fills `org_id` on sessions, the daily usage summary and agent sessions from the user's profile at insert, and keeps it fixed afterwards.
 - **Lookup functions are scoped.** `get_user_profile_by_id()`, `get_organization_by_user_id()` and `get_organization_members_by_org_id()` only return data for yourself or your own organization.
 - **Team analytics** (`get_org_*`) are for admins and managers of that organization only.
 
@@ -51,6 +51,6 @@ Rules that go beyond plain policies:
 | `project_members` | members of projects you can see | project manager |
 | `project_repositories` | owner | owner, and only to projects they can see |
 | `agent_sessions` | owner; admins/managers of the org | owner, project only if visible; `org_id` set by the server |
-| `time_tracking_sessions`, `usage_logs` | owner; admins/managers of the org | owner |
+| `time_tracking_sessions` | owner; admins/managers of the org | owner; a draft can't be billable |
 | `daily_usage_summary` | owner; admins/managers of the org | owner (via `update_daily_usage_summary()`) |
 | `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_*`, `user_preferences` | owner (admins can also read the team's goals) | owner; tags only on your own sessions with your own tags |

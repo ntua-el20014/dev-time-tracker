@@ -18,9 +18,9 @@ const getSession = vi.fn();
 vi.mock("../../src/supabase/config", () => ({
   supabase: { auth: { getSession: () => getSession() } },
 }));
-const logUsage = vi.fn();
+const addUsageToDailySummary = vi.fn();
 vi.mock("../../src/supabase/usageLogs", () => ({
-  logUsage: (...args: unknown[]) => logUsage(...args),
+  addUsageToDailySummary: (...args: unknown[]) => addUsageToDailySummary(...args),
 }));
 const addSession = vi.fn();
 vi.mock("../../src/supabase/timeTracking", () => ({
@@ -36,6 +36,18 @@ const signedInAs = (id: string | null) =>
     data: { session: id ? { user: { id } } : null },
   });
 
+const increment = (overrides = {}) => ({
+  userId: "user-A",
+  date: "2026-10-14",
+  appName: "VS Code",
+  language: null,
+  languageExtension: null,
+  category: null,
+  iconUrl: null,
+  seconds: 10,
+  ...overrides,
+});
+
 async function freshQueue() {
   vi.resetModules();
   return await import("../../src/utils/offlineQueue");
@@ -44,7 +56,7 @@ async function freshQueue() {
 describe("offlineQueue.flush", () => {
   beforeEach(() => {
     getSession.mockReset();
-    logUsage.mockReset().mockResolvedValue({});
+    addUsageToDailySummary.mockReset().mockResolvedValue(undefined);
     addSession.mockReset().mockResolvedValue({});
   });
 
@@ -91,12 +103,12 @@ describe("offlineQueue.flush", () => {
   it("keeps items and stops on network or auth errors", async () => {
     const q = await freshQueue();
     signedInAs("user-A");
-    q.enqueueUsageLog("user-A", "VS Code", "a.ts", null, null, null, 10, "2026-10-14T10:00:00.000Z");
-    logUsage.mockRejectedValueOnce(new Error("fetch failed"));
+    q.enqueueUsageSummary(increment());
+    addUsageToDailySummary.mockRejectedValueOnce(new Error("fetch failed"));
     expect(await q.flush()).toBe(0);
     expect(q.getPendingCount()).toBe(1);
 
-    logUsage.mockRejectedValueOnce(new Error("JWT expired"));
+    addUsageToDailySummary.mockRejectedValueOnce(new Error("JWT expired"));
     expect(await q.flush()).toBe(0);
     expect(q.getPendingCount()).toBe(1);
   });
@@ -104,11 +116,33 @@ describe("offlineQueue.flush", () => {
   it("discards items that fail permanently so they don't block the queue", async () => {
     const q = await freshQueue();
     signedInAs("user-A");
-    q.enqueueUsageLog("user-A", "VS Code", "a.ts", null, null, null, 10, "2026-10-14T10:00:00.000Z");
-    q.enqueueUsageLog("user-A", "VS Code", "b.ts", null, null, null, 10, "2026-10-14T10:00:10.000Z");
-    logUsage.mockRejectedValueOnce(new Error("duplicate key value"));
+    q.enqueueUsageSummary(increment());
+    q.enqueueUsageSummary(increment({ appName: "Chrome" }));
+    addUsageToDailySummary.mockRejectedValueOnce(new Error("duplicate key value"));
 
     expect(await q.flush()).toBe(2);
     expect(q.getPendingCount()).toBe(0);
+  });
+
+  it("replays summary increments with their icon", async () => {
+    const q = await freshQueue();
+    signedInAs("user-A");
+    q.enqueueUsageSummary(increment({ iconUrl: "data:icon", seconds: 40 }));
+    expect(await q.flush()).toBe(1);
+    expect(addUsageToDailySummary).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-A", date: "2026-10-14", seconds: 40, icon: "data:icon" }),
+    );
+  });
+
+  it("passes app usage through when replaying sessions", async () => {
+    const q = await freshQueue();
+    signedInAs("user-A");
+    const appUsage = [{ app: "VS Code", language: "TypeScript", category: null, seconds: 600 }];
+    q.enqueueSession(
+      "user-A", "2026-10-14T10:00:00.000Z", 600, "Work",
+      undefined, undefined, undefined, false, undefined, undefined, undefined, appUsage,
+    );
+    await q.flush();
+    expect(addSession.mock.calls[0][11]).toEqual(appUsage);
   });
 });

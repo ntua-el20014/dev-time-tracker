@@ -29,6 +29,8 @@ import { resetOrgWizardDismissed, showOrgSetupWizard } from "./components";
 import { getLangIconUrl } from "../src/utils/langIconUrl";
 import { isNavItemVisible, navigateTo, pinNavItem } from "./navigation";
 import type { Tag, UpdaterState } from "../shared/types";
+import { DEFAULT_CURRENCY } from "../shared/currency";
+import { currencyOptionsHtml } from "./utils/currencyOptions";
 
 
 type NotificationSettings = {
@@ -87,6 +89,10 @@ async function renderSettings(container: HTMLElement) {
   });
   if (!trackingInterval || typeof trackingInterval !== "number")
     trackingInterval = 10;
+
+  const defaultCurrency = await safeIpcInvoke<string>("get-default-currency", [], {
+    fallback: DEFAULT_CURRENCY,
+  });
 
   // Get current theme
   const currentTheme = document.body.classList.contains("light")
@@ -147,6 +153,13 @@ async function renderSettings(container: HTMLElement) {
       <label for="trackingIntervalRange" class="settings-label">Tracking Interval:</label>
       <input type="range" id="trackingIntervalRange" min="5" max="30" step="5" value="${trackingInterval}" class="settings-range">
       <span id="trackingIntervalValue" class="settings-range-value">${trackingInterval}s</span>
+    </div>
+    <div class="settings-row">
+      <label for="defaultCurrencySelect" class="settings-label">Currency:</label>
+      <select id="defaultCurrencySelect" class="settings-select" title="Used for new projects; each project can have its own">
+        ${currencyOptionsHtml(defaultCurrency)}
+      </select>
+      <span class="settings-range-value">for new projects</span>
     </div>
     <div class="settings-row">
       <label class="settings-label">Theme:</label>
@@ -434,6 +447,16 @@ async function renderSettings(container: HTMLElement) {
       });
     });
   }
+
+  const currencySelect = container.querySelector<HTMLSelectElement>(
+    "#defaultCurrencySelect",
+  );
+  currencySelect?.addEventListener("change", async () => {
+    const ok = await safeIpcInvoke("set-default-currency", [currencySelect.value], {
+      fallback: false,
+    });
+    if (!ok) showNotification("Couldn't save the currency", 3000);
+  });
 
   // --- Notification preferences wiring ---
   (async () => {

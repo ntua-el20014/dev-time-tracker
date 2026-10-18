@@ -48,7 +48,7 @@ describe("getUserEarningsSummary", () => {
     // Totals count unassigned time but not money
     expect(s.totalBillableHours).toBe(2.25);
     expect(s.totalBillableSessions).toBe(4);
-    expect(s.totalEarnings).toBe(150);
+    expect(s.earningsByCurrency).toEqual([{ currency: "USD", amount: 150 }]);
   });
 
   it("returns an empty unassigned bucket when every session has a project", async () => {
@@ -86,7 +86,7 @@ describe("getUserEarningsSummary", () => {
     const by = Object.fromEntries(s.byProject.map((p) => [p.projectId, p]));
     expect(by.billed).toMatchObject({ billableSeconds: 3600, earnings: 100, supervisingSeconds: 1800, billSupervising: true });
     expect(by.unbilled).toMatchObject({ billableSeconds: 1800, earnings: 50, supervisingSeconds: 1800, billSupervising: false });
-    expect(s.totalEarnings).toBe(150);
+    expect(s.earningsByCurrency).toEqual([{ currency: "USD", amount: 150 }]);
   });
 
   it("adds reported AI agent cost per project, apart from earnings", async () => {
@@ -117,7 +117,48 @@ describe("getUserEarningsSummary", () => {
     expect(by.p2).toMatchObject({ billableSessions: 0, earnings: 0, agentCostUsd: 0.5, agentSessions: 1 });
     expect(by.gone).toBeUndefined();
     expect(s.totalAgentCostUsd).toBe(1.75);
-    expect(s.totalEarnings).toBe(100);
+    expect(s.earningsByCurrency).toEqual([{ currency: "USD", amount: 100 }]);
     expect(s.totalBillableSessions).toBe(1);
+  });
+
+  it("keeps earnings per currency and never adds them up", async () => {
+    mockResults([
+      {
+        data: [
+          { id: "s1", project_id: "eur", duration: 3600, is_billable: true },
+          { id: "s2", project_id: "usd", duration: 7200, is_billable: true },
+          { id: "s3", project_id: "eur2", duration: 1800, is_billable: true },
+        ],
+        error: null,
+      },
+      {
+        data: [
+          { id: "eur", name: "EU client", color: "#000", hourly_rate: 80, currency: "EUR" },
+          { id: "eur2", name: "EU client 2", color: "#000", hourly_rate: 100, currency: "EUR" },
+          { id: "usd", name: "US client", color: "#000", hourly_rate: 50, currency: "USD" },
+        ],
+        error: null,
+      },
+    ]);
+
+    const s = await getUserEarningsSummary("u1", "2026-10-01", "2026-10-31");
+
+    const by = Object.fromEntries(s.byProject.map((p) => [p.projectId, p]));
+    expect(by.eur).toMatchObject({ currency: "EUR", earnings: 80 });
+    expect(by.usd).toMatchObject({ currency: "USD", earnings: 100 });
+    expect(s.earningsByCurrency).toEqual([
+      { currency: "EUR", amount: 130 },
+      { currency: "USD", amount: 100 },
+    ]);
+  });
+
+  it("treats a project without a valid currency as USD", async () => {
+    mockResults([
+      { data: [{ id: "s1", project_id: "p1", duration: 3600, is_billable: true }], error: null },
+      { data: [{ id: "p1", name: "A", color: "#000", hourly_rate: 10, currency: null }], error: null },
+    ]);
+
+    const s = await getUserEarningsSummary("u1", "2026-10-01", "2026-10-31");
+    expect(s.byProject[0].currency).toBe("USD");
   });
 });

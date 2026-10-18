@@ -4,12 +4,20 @@ import { showInAppNotification } from "./Notifications";
 import { showInvoiceGenerationModal } from "./InvoiceModal";
 import { escapeHtml } from "../utils/domUtils";
 import { navigateTo } from "../navigation";
+import {
+  formatMoney,
+  formatRate,
+  formatTotals,
+  type MoneyAmount,
+} from "../../shared/currency";
 
 interface BillableHoursSummary {
   projectId: string;
   projectName: string;
   projectColor: string;
   hourlyRate: number | null;
+  /** Currency of the rate and earnings */
+  currency: string;
   billableHours: number;
   billableSeconds: number;
   billableSessions: number;
@@ -23,11 +31,11 @@ interface BillableHoursSummary {
   agentSessions?: number;
 }
 
-/** "$12.30", "$12.30+" (some sessions reported no cost), or "—". */
+/** "$12.30", "$12.30+" (some sessions reported no cost), or "—". Always USD. */
 function agentCostCell(p: BillableHoursSummary): string {
   if (!p.agentSessions) return "—";
   if (!p.agentCostUsd && p.agentCostIncomplete) return "unknown";
-  return `$${(p.agentCostUsd ?? 0).toFixed(2)}${p.agentCostIncomplete ? "+" : ""}`;
+  return `${formatMoney(p.agentCostUsd ?? 0, "USD")}${p.agentCostIncomplete ? "+" : ""}`;
 }
 
 /** "incl. 25m supervising" or "+ 25m supervising, not billed" under the hours. */
@@ -45,7 +53,8 @@ function supervisingNote(p: BillableHoursSummary): string {
 }
 
 interface EarningsSummary {
-  totalEarnings: number;
+  /** Per currency; amounts in different currencies are never added */
+  earningsByCurrency: MoneyAmount[];
   /** Reported AI agent cost (absent in older fallbacks) */
   totalAgentCostUsd?: number;
   totalBillableHours: number;
@@ -82,7 +91,7 @@ async function loadMonthlyEarnings(date: Date): Promise<EarningsSummary> {
 
   return safeIpcInvoke("get-earnings-for-range", [startDate, endDate], {
     fallback: {
-      totalEarnings: 0,
+      earningsByCurrency: [],
       totalBillableHours: 0,
       totalBillableSessions: 0,
       byProject: [],
@@ -125,8 +134,8 @@ function renderBillableHoursMarkup(
       
       <div class="billable-totals">
         <div class="billable-total-card">
-          <div class="billable-total-value">$${summary.totalEarnings.toFixed(2)}</div>
-          <div class="billable-total-label">Total Earnings</div>
+          <div class="billable-total-value">${escapeHtml(formatTotals(summary.earningsByCurrency))}</div>
+          <div class="billable-total-label">Total Earnings${summary.earningsByCurrency.length > 1 ? " (per currency)" : ""}</div>
         </div>
         <div class="billable-total-card">
           <div class="billable-total-value">${summary.totalBillableHours.toFixed(1)}h</div>
@@ -139,8 +148,8 @@ function renderBillableHoursMarkup(
         ${
           showAgents
             ? `<div class="billable-total-card" title="Cost reported by Claude Code / Codex for sessions in your projects' linked repos. Not part of earnings; you can add it to an invoice as a line item.">
-          <div class="billable-total-value">$${(summary.totalAgentCostUsd ?? 0).toFixed(2)}</div>
-          <div class="billable-total-label">AI Agent Cost</div>
+          <div class="billable-total-value">${escapeHtml(formatMoney(summary.totalAgentCostUsd ?? 0, "USD"))}</div>
+          <div class="billable-total-label">AI Agent Cost (USD)</div>
         </div>`
             : ""
         }
@@ -160,7 +169,7 @@ function renderBillableHoursMarkup(
                 <th>Hours</th>
                 <th>Sessions</th>
                 <th>Earnings</th>
-                ${showAgents ? `<th title="Reported by the agents; not part of earnings">AI agent cost</th>` : ""}
+                ${showAgents ? `<th title="Reported by the agents in USD; not part of earnings">AI agent cost (USD)</th>` : ""}
                 <th><span class="visually-hidden">Actions</span></th>
               </tr>
             </thead>
@@ -176,11 +185,11 @@ function renderBillableHoursMarkup(
                     </div>
                   </td>
                   <td>
-                    ${project.hourlyRate != null ? `$${project.hourlyRate.toFixed(2)}/h` : "No rate"}
+                    ${project.hourlyRate != null ? escapeHtml(formatRate(project.hourlyRate, project.currency)) : "No rate"}
                   </td>
                   <td>${project.billableHours.toFixed(1)}h${supervisingNote(project)}</td>
                   <td>${project.billableSessions}</td>
-                  <td class="earnings-value">$${project.earnings.toFixed(2)}</td>
+                  <td class="earnings-value">${escapeHtml(formatMoney(project.earnings, project.currency))}</td>
                   ${showAgents ? `<td class="agent-cost-value">${escapeHtml(agentCostCell(project))}</td>` : ""}
                   <td>
                     <button type="button" class="billable-invoice-btn" data-project-id="${escapeHtml(project.projectId)}" title="Create an invoice for ${escapeHtml(project.projectName)}">📄 Invoice</button>
@@ -291,7 +300,7 @@ export async function renderEarningsWidget(): Promise<HTMLElement> {
   try {
     const summary = await safeIpcInvoke("get-current-month-earnings", [], {
       fallback: {
-        totalEarnings: 0,
+        earningsByCurrency: [],
         totalBillableHours: 0,
         totalBillableSessions: 0,
         byProject: [],
@@ -307,7 +316,7 @@ export async function renderEarningsWidget(): Promise<HTMLElement> {
         </div>
         <div class="earnings-widget-stats">
           <div class="earnings-stat">
-            <div class="earnings-stat-value">$${summary.totalEarnings.toFixed(2)}</div>
+            <div class="earnings-stat-value">${escapeHtml(formatTotals(summary.earningsByCurrency ?? []))}</div>
             <div class="earnings-stat-label">Total Earnings</div>
           </div>
           <div class="earnings-stat">

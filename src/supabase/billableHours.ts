@@ -3,6 +3,12 @@ import { billableSecondsOf } from "../../shared/billing";
 import { roundUsd } from "../../shared/projectActivity";
 import { getAgentTotalsByProject } from "./projectActivity";
 import {
+  normalizeCurrency,
+  roundMoney,
+  totalsByCurrency,
+  type MoneyAmount,
+} from "../../shared/currency";
+import {
   getLocalDateString,
   localDayStartISO,
   localDayEndISO,
@@ -13,6 +19,8 @@ export interface BillableHoursSummary {
   projectName: string;
   projectColor: string;
   hourlyRate: number | null;
+  /** Currency of hourlyRate and earnings (ISO 4217) */
+  currency: string;
   billableHours: number; // in hours (seconds / 3600)
   billableSeconds: number;
   billableSessions: number;
@@ -35,7 +43,8 @@ export interface UnassignedBillable {
 }
 
 export interface EarningsSummary {
-  totalEarnings: number;
+  /** Earnings per currency (never added across currencies), largest first */
+  earningsByCurrency: MoneyAmount[];
   /** Reported AI agent cost on the listed projects (not part of earnings) */
   totalAgentCostUsd: number;
   /** Includes unassigned billable time */
@@ -57,7 +66,7 @@ export async function getProjectBillableHours(
   // Get project details
   const { data: projectData, error: projectError } = await supabase
     .from("cloud_projects")
-    .select("id, name, color, hourly_rate, bill_supervising")
+    .select("id, name, color, hourly_rate, currency, bill_supervising")
     .eq("id", projectId)
     .single();
 
@@ -87,6 +96,7 @@ export async function getProjectBillableHours(
   );
   const billableHours = billableSeconds / 3600;
   const hourlyRate = (projectData as any).hourly_rate || null;
+  const currency = normalizeCurrency((projectData as any).currency);
   const earnings = hourlyRate ? hourlyRate * billableHours : 0;
 
   return {
@@ -97,10 +107,11 @@ export async function getProjectBillableHours(
     projectName: (projectData as any).name,
     projectColor: (projectData as any).color,
     hourlyRate,
+    currency,
     billableHours: Math.round(billableHours * 100) / 100, // 2 decimal places
     billableSeconds,
     billableSessions: sessions?.length || 0,
-    earnings: Math.round(earnings * 100) / 100, // 2 decimal places
+    earnings: roundMoney(earnings, currency),
     supervisingSeconds,
     billSupervising,
   };
@@ -143,7 +154,7 @@ export async function getUserEarningsSummary(
   // Get all projects with hourly rates
   const { data: projects, error: projectsError } = await supabase
     .from("cloud_projects")
-    .select("id, name, color, hourly_rate, bill_supervising");
+    .select("id, name, color, hourly_rate, currency, bill_supervising");
 
   if (projectsError) {
     throw projectsError;
@@ -164,6 +175,7 @@ export async function getUserEarningsSummary(
       projectName: project.name,
       projectColor: project.color,
       hourlyRate: project.hourly_rate || null,
+      currency: normalizeCurrency(project.currency),
       billableHours: 0,
       billableSeconds: 0,
       billableSessions: 0,
@@ -215,7 +227,7 @@ export async function getUserEarningsSummary(
     summary.billableHours =
       Math.round((summary.billableSeconds / 3600) * 100) / 100;
     summary.earnings = summary.hourlyRate
-      ? Math.round(summary.hourlyRate * summary.billableHours * 100) / 100
+      ? roundMoney(summary.hourlyRate * summary.billableHours, summary.currency)
       : 0;
     return summary;
   });
@@ -229,11 +241,10 @@ export async function getUserEarningsSummary(
     unassigned.billableSeconds;
   const totalBillableHours =
     Math.round((totalBillableSeconds / 3600) * 100) / 100;
-  const totalEarnings =
-    Math.round(summaries.reduce((sum, s) => sum + s.earnings, 0) * 100) / 100;
-
   return {
-    totalEarnings,
+    earningsByCurrency: totalsByCurrency(
+      summaries.map((s) => ({ currency: s.currency, amount: s.earnings })),
+    ),
     totalAgentCostUsd: roundUsd(
       summaries.reduce((sum, s) => sum + s.agentCostUsd, 0),
     ),

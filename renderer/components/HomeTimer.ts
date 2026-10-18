@@ -25,12 +25,14 @@ import {
 import { currentSeconds, formatClock, onClockTick } from "../liveClock";
 import { chooseProject, clearStaleProject } from "../sessionProject";
 import { markTabsDirty } from "../navigation";
+import { DEFAULT_CURRENCY, formatRate } from "../../shared/currency";
 
 interface PickerProject {
   id: string;
   name: string;
   color?: string | null;
   hourly_rate?: number | null;
+  currency?: string;
   scope?: string;
 }
 
@@ -176,7 +178,9 @@ export async function renderHomeTimer(container: HTMLElement) {
               .map(
                 (p) =>
                   `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${
-                    p.hourly_rate != null ? ` · $${Number(p.hourly_rate).toFixed(0)}/h` : ""
+                    p.hourly_rate != null
+                      ? escapeHtml(` · ${formatRate(Number(p.hourly_rate), p.currency ?? DEFAULT_CURRENCY)}`)
+                      : ""
                   }</option>`,
               )
               .join("")}

@@ -3,6 +3,7 @@ import type { Database } from "../types/database.types";
 import { setSessionTagsByNames } from "./tags";
 import { localDayStartISO, localDayEndISO } from "../utils/timeFormat";
 import type { RepoCodeStats } from "../../shared/codeStats";
+import type { AppUsageEntry } from "../../shared/appUsage";
 
 type SessionInsert =
   Database["public"]["Tables"]["time_tracking_sessions"]["Insert"];
@@ -228,6 +229,7 @@ export async function addSession(
   endTime?: string,
   supervising?: SupervisingTime,
   codeStats?: RepoCodeStats[],
+  appUsage?: AppUsageEntry[],
 ) {
   const sessionData: SessionInsert = {
     user_id: userId,
@@ -241,6 +243,7 @@ export async function addSession(
     supervising_seconds: supervising?.seconds ?? 0,
     supervising_spans: supervising?.spans ?? [],
     code_stats: codeStats ?? [],
+    app_usage: appUsage ?? [],
   };
 
   const { data, error } = await supabase

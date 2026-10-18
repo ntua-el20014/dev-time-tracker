@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import { savePdf } from "./saveFile";
 import type { SessionRow as Session } from "../../shared/types";
+import { formatMoney, normalizeCurrency } from "../../shared/currency";
 
 /** Main sets billed_seconds (supervising time may be unbilled). */
 const billedSeconds = (s: Session) => s.billed_seconds ?? s.duration;
@@ -54,6 +55,8 @@ export interface InvoiceData {
     startDate: Date;
     endDate: Date;
   };
+  /** One currency per invoice (ISO 4217) */
+  currency: string;
   customization: InvoiceCustomization;
   template: InvoiceTemplate;
 }
@@ -65,6 +68,8 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
   let yPosition = margin;
+  const money = (amount: number) =>
+    formatMoney(amount, invoiceData.currency, { pdf: true });
 
   // Helper function to check if we need a new page
   const checkNewPage = (minSpace: number) => {
@@ -125,6 +130,8 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
     margin,
     yPosition,
   );
+  yPosition += 6;
+  doc.text(`Currency: ${invoiceData.currency}`, margin, yPosition);
   yPosition += 10;
 
   // Projects and sessions table
@@ -194,7 +201,7 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
 
       const startDate = new Date(session.start_time).toLocaleDateString();
       const duration = (billedSeconds(session) / 3600).toFixed(2);
-      const amount = (parseFloat(duration) * project.hourlyRate).toFixed(2);
+      const amount = parseFloat(duration) * project.hourlyRate;
 
       doc.text(startDate, colStartX.date, yPosition);
       doc.text(
@@ -204,8 +211,8 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
         { maxWidth: colWidths.description - 2 },
       );
       doc.text(duration, colStartX.duration, yPosition);
-      doc.text(`$${project.hourlyRate.toFixed(2)}`, colStartX.rate, yPosition);
-      doc.text(`$${amount}`, colStartX.amount, yPosition);
+      doc.text(money(project.hourlyRate), colStartX.rate, yPosition);
+      doc.text(money(amount), colStartX.amount, yPosition);
 
       yPosition += 5;
     }
@@ -219,7 +226,7 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
         yPosition,
         { maxWidth: colWidths.description + colWidths.duration },
       );
-      doc.text(`$${project.agentCost.toFixed(2)}`, colStartX.amount, yPosition);
+      doc.text(money(project.agentCost), colStartX.amount, yPosition);
       yPosition += 5;
     }
 
@@ -228,7 +235,7 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
     doc.setFontSize(template.fontSize.heading);
     yPosition += 2;
     doc.text(
-      `Project Total: $${project.subtotal.toFixed(2)}`,
+      `Project Total: ${money(project.subtotal)}`,
       colStartX.amount - 20,
       yPosition,
     );
@@ -246,7 +253,7 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
   doc.setTextColor(...template.headerBgColor);
   yPosition += 3;
   doc.text(
-    `TOTAL: $${grandTotal.toFixed(2)}`,
+    `TOTAL: ${money(grandTotal)}`,
     colStartX.amount - 15,
     yPosition,
   );
@@ -299,6 +306,8 @@ export function calculateInvoiceData(
     projectId: string;
     projectName: string;
     hourlyRate: number;
+    /** Currency of hourlyRate; every project on an invoice must share it */
+    currency?: string;
     billableSessions: Session[];
     /** Reported AI agent cost in the period, and its number of sessions */
     agentCostUsd?: number;
@@ -307,16 +316,22 @@ export function calculateInvoiceData(
   dateRange: { startDate: Date; endDate: Date },
   customization: InvoiceCustomization,
   template: InvoiceTemplate = DEFAULT_TEMPLATE,
-  /** Add each project's AI agent cost as a line item, at cost */
+  /** Add each project's AI agent cost as a line item, at cost (USD invoices only) */
   includeAgentCost = false,
 ): InvoiceData {
+  const currency = normalizeCurrency(projects[0]?.currency);
+  if (projects.some((p) => normalizeCurrency(p.currency) !== currency)) {
+    throw new Error("An invoice can only contain projects in one currency");
+  }
+  // Agent costs are reported in USD; they aren't converted
+  const withAgentCost = includeAgentCost && currency === "USD";
   const projectsData = projects.map((p) => {
     const totalSeconds = p.billableSessions.reduce(
       (sum, s) => sum + billedSeconds(s),
       0,
     );
     const totalHours = totalSeconds / 3600;
-    const agentCost = includeAgentCost ? Math.max(0, p.agentCostUsd ?? 0) : 0;
+    const agentCost = withAgentCost ? Math.max(0, p.agentCostUsd ?? 0) : 0;
     const subtotal = totalHours * p.hourlyRate + agentCost;
 
     return {
@@ -334,6 +349,7 @@ export function calculateInvoiceData(
   return {
     projects: projectsData,
     dateRange,
+    currency,
     customization,
     template,
   };

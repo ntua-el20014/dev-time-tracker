@@ -6,6 +6,7 @@ import {
   updateTrackingInterval,
 } from "../tracking/tracker";
 import { logError } from "../utils/errorHandler";
+import { DEFAULT_CURRENCY, isCurrencyCode } from "../../shared/currency";
 
 /**
  * Get all user preferences
@@ -291,6 +292,39 @@ ipcMain.handle("set-tracking-interval", async (_event, seconds: number) => {
     return true;
   } catch (err) {
     logError("set-tracking-interval", err);
+    return false;
+  }
+});
+
+/**
+ * Default currency for new projects (ISO 4217)
+ */
+ipcMain.handle("get-default-currency", async (_event) => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    return await userPreferences.getDefaultCurrency(user.id);
+  } catch (err) {
+    logError("get-default-currency", err);
+    return DEFAULT_CURRENCY;
+  }
+});
+
+ipcMain.handle("set-default-currency", async (_event, currency: unknown) => {
+  try {
+    if (!isCurrencyCode(currency)) return false;
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    await userPreferences.setDefaultCurrency(user.id, currency);
+    return true;
+  } catch (err) {
+    logError("set-default-currency", err);
     return false;
   }
 });

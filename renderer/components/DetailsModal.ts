@@ -6,6 +6,35 @@ import {
   formatCodeTotals,
   type RepoCodeStats,
 } from "../../shared/codeStats";
+import { groupAppUsage } from "../../shared/appUsage";
+import { browserCategoryLabel } from "../../shared/browserCategories";
+
+interface UsagePart {
+  language: string | null;
+  category: string | null;
+  seconds: number;
+}
+
+/** "TypeScript", "Code review", "Other browsing" or "No language" */
+function partLabel(part: UsagePart, isBrowser: boolean): string {
+  if (part.language) return part.language;
+  if (part.category || isBrowser) return browserCategoryLabel(part.category);
+  return "No language";
+}
+
+/** Rows of "label | time", most first; the label column says what they are. */
+function usageRows(parts: UsagePart[]): string {
+  const isBrowser = parts.some((p) => p.category);
+  return parts
+    .filter((p) => p.seconds > 0)
+    .map(
+      (p) => `<tr>
+        <td>${escapeHtml(partLabel(p, isBrowser))}</td>
+        <td>${escapeHtml(formatTimeSpent(p.seconds))}</td>
+      </tr>`,
+    )
+    .join("");
+}
 
 export interface DetailsModalConfig {
   type: "app-date" | "session";
@@ -145,76 +174,29 @@ async function loadDetailsData(
 
 function renderAppDateDetails(
   container: HTMLElement,
-  data: any[],
+  data: UsagePart[],
   app: string,
   date: string,
 ) {
-  if (!data || data.length === 0) {
-    container.innerHTML = `<p>No activity recorded for ${app} on ${prettyDate(
-      date,
+  const total = data.reduce((sum, p) => sum + (p.seconds || 0), 0);
+  if (total === 0) {
+    container.innerHTML = `<p>No activity recorded for ${escapeHtml(app)} on ${escapeHtml(
+      prettyDate(date),
     )}.</p>`;
     return;
   }
 
-  // Group by language
-  const grouped: { [language: string]: any[] } = {};
-  data.forEach((entry) => {
-    const lang = entry.language || "Unknown";
-    if (!grouped[lang]) grouped[lang] = [];
-    grouped[lang].push(entry);
-  });
-
-  const content = document.createElement("div");
-
-  // Summary info
-  const summary = document.createElement("div");
-  summary.className = "details-summary";
-  summary.innerHTML = `
-    <p><strong>Total activities:</strong> ${data.length}</p>
-    <p><strong>Languages used:</strong> ${Object.keys(grouped).join(", ")}</p>
-    <p><strong>Time range:</strong> ${data[0]?.time} - ${
-      data[data.length - 1]?.time
-    }</p>
-  `;
-  content.appendChild(summary);
-
-  // Detailed timeline
-  const timeline = document.createElement("div");
-  timeline.className = "details-timeline";
-
-  const timelineTitle = document.createElement("h3");
-  timelineTitle.textContent = "Activity Timeline";
-  timeline.appendChild(timelineTitle);
-
-  const table = document.createElement("table");
-  table.className = "details-table";
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>Time</th>
-        <th>Language</th>
-        <th>File/Title</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  `;
-
-  const tbody = table.querySelector("tbody");
-  if (tbody) {
-    data.forEach((entry) => {
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${entry.time}</td>
-        <td>${escapeHtml(entry.language || "Unknown")}</td>
-        <td>${escapeHtml(entry.title)}</td>
-      `;
-      tbody.appendChild(row);
-    });
-  }
-
-  timeline.appendChild(table);
-  content.appendChild(timeline);
-  container.appendChild(content);
+  container.innerHTML = `
+    <div class="details-summary">
+      <p><strong>Total time:</strong> ${escapeHtml(formatTimeSpent(total))}</p>
+    </div>
+    <div class="details-usage">
+      <h3>Time by language or page type</h3>
+      <table class="details-table">
+        <thead><tr><th>Language / page type</th><th>Time</th></tr></thead>
+        <tbody>${usageRows(data)}</tbody>
+      </table>
+    </div>`;
 }
 
 /** "Code" (C2): what the session produced per repo, from git. */
@@ -252,7 +234,7 @@ function renderSessionDetails(container: HTMLElement, data: any) {
     return;
   }
 
-  const { session, usage } = data;
+  const { session } = data;
 
   const content = document.createElement("div");
 
@@ -281,65 +263,36 @@ function renderSessionDetails(container: HTMLElement, data: any) {
   const code = codeSection(session.code_stats);
   if (code) content.appendChild(code);
 
-  // Usage during session
-  if (usage && usage.length > 0) {
+  // Foreground apps during the session (sampled while recording)
+  const apps = groupAppUsage(session.app_usage);
+  if (apps.length > 0) {
     const usageSection = document.createElement("div");
     usageSection.className = "details-usage";
-
-    const usageTitle = document.createElement("h3");
-    usageTitle.textContent = "Activity During Session";
-    usageSection.appendChild(usageTitle);
-
-    // Group by app
-    const grouped: { [app: string]: any[] } = {};
-    usage.forEach((entry: any) => {
-      if (!grouped[entry.app]) grouped[entry.app] = [];
-      grouped[entry.app].push(entry);
-    });
-
-    const summary = document.createElement("div");
-    summary.className = "details-summary";
-    summary.innerHTML = `
-      <p><strong>Total activities:</strong> ${usage.length}</p>
-      <p><strong>Applications used:</strong> ${escapeHtml(
-        Object.keys(grouped).join(", "),
-      )}</p>
-    `;
-    usageSection.appendChild(summary);
-
-    const table = document.createElement("table");
-    table.className = "details-table";
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th>Time</th>
-          <th>Application</th>
-          <th>Language</th>
-          <th>File/Title</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    `;
-
-    const tbody = table.querySelector("tbody");
-    if (tbody) {
-      usage.forEach((entry: any) => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${entry.time}</td>
-          <td>${escapeHtml(entry.app)}</td>
-          <td>${escapeHtml(entry.language || "Unknown")}</td>
-          <td>${escapeHtml(entry.title)}</td>
-        `;
-        tbody.appendChild(row);
-      });
-    }
-
-    usageSection.appendChild(table);
+    const rows = apps
+      .map((a) => {
+        const isBrowser = a.parts.some((p) => p.category);
+        const parts = a.parts
+          .filter((p) => p.language || p.category || isBrowser)
+          .slice(0, 4)
+          .map((p) => `${partLabel(p, isBrowser)} ${formatTimeSpent(p.seconds)}`)
+          .join(", ");
+        return `<tr>
+          <td>${escapeHtml(a.app)}</td>
+          <td>${escapeHtml(formatTimeSpent(a.seconds))}</td>
+          <td>${escapeHtml(parts || "—")}</td>
+        </tr>`;
+      })
+      .join("");
+    usageSection.innerHTML = `
+      <h3>Apps During Session</h3>
+      <table class="details-table">
+        <thead><tr><th>Application</th><th>Time</th><th>Languages / page types</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
     content.appendChild(usageSection);
   } else {
     const noUsage = document.createElement("p");
-    noUsage.textContent = "No activity recorded during this session.";
+    noUsage.textContent = "No app activity recorded during this session.";
     content.appendChild(noUsage);
   }
 

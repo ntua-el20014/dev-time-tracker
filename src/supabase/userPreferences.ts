@@ -1,5 +1,6 @@
 import { supabase } from "./config";
 import { Database } from "../types/database.types";
+import { normalizeCurrency } from "../../shared/currency";
 
 type UserPreferencesRow =
   Database["public"]["Tables"]["user_preferences"]["Row"];
@@ -31,6 +32,8 @@ export interface UserPreferences {
   notification_settings: NotificationSettings;
   idle_timeout_seconds: number;
   tracking_interval_seconds: number;
+  /** Default currency for new projects (ISO 4217) */
+  currency: string;
 }
 
 /**
@@ -85,6 +88,9 @@ export async function updateUserPreferences(
   if (preferences.tracking_interval_seconds !== undefined) {
     updateData.tracking_interval_seconds =
       preferences.tracking_interval_seconds;
+  }
+  if (preferences.currency !== undefined) {
+    updateData.currency = normalizeCurrency(preferences.currency);
   }
 
   const { data, error } = await (supabase as any)
@@ -230,6 +236,21 @@ export async function setTrackingInterval(userId: string, seconds: number) {
 }
 
 /**
+ * Default currency for new projects.
+ */
+export async function getDefaultCurrency(userId: string): Promise<string> {
+  const prefs = await getUserPreferences(userId);
+  return prefs.currency;
+}
+
+/**
+ * Set the default currency for new projects (an ISO 4217 code).
+ */
+export async function setDefaultCurrency(userId: string, currency: string) {
+  await updateUserPreferences(userId, { currency });
+}
+
+/**
  * Helper: Create default preferences for a new user.
  */
 async function createDefaultPreferences(
@@ -283,5 +304,6 @@ function parsePreferences(data: UserPreferencesRow): UserPreferences {
     },
     idle_timeout_seconds: data.idle_timeout_seconds || 300,
     tracking_interval_seconds: data.tracking_interval_seconds || 10,
+    currency: normalizeCurrency(data.currency),
   };
 }

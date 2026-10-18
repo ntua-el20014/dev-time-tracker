@@ -1,4 +1,5 @@
 import type { RepoCodeStats } from "../../shared/codeStats";
+import type { AppUsageEntry } from "../../shared/appUsage";
 
 export type Json =
   | string
@@ -133,6 +134,8 @@ export interface Database {
           description: string | null;
           color: string;
           hourly_rate: number | null;
+          /** ISO 4217 code of hourly_rate */
+          currency: string;
           bill_supervising: boolean;
           scope: "personal" | "organization";
           is_active: boolean;
@@ -147,6 +150,7 @@ export interface Database {
           description?: string | null;
           color?: string;
           hourly_rate?: number | null;
+          currency?: string;
           bill_supervising?: boolean;
           scope?: "personal" | "organization";
           is_active?: boolean;
@@ -160,6 +164,7 @@ export interface Database {
           description?: string | null;
           color?: string;
           hourly_rate?: number | null;
+          currency?: string;
           bill_supervising?: boolean;
           scope?: "personal" | "organization";
           is_active?: boolean;
@@ -361,6 +366,11 @@ export interface Database {
           supervising_seconds: number;
           supervising_spans: [string, string][];
           code_stats: RepoCodeStats[];
+          app_usage: AppUsageEntry[];
+          /** Phase D: automatic segments are drafts until confirmed */
+          status: "draft" | "confirmed";
+          source: "manual" | "auto";
+          client_id: string | null;
           created_at: TimestampString;
           updated_at: TimestampString;
         };
@@ -378,6 +388,10 @@ export interface Database {
           supervising_seconds?: number;
           supervising_spans?: [string, string][];
           code_stats?: RepoCodeStats[];
+          app_usage?: AppUsageEntry[];
+          status?: "draft" | "confirmed";
+          source?: "manual" | "auto";
+          client_id?: string | null;
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
@@ -392,6 +406,9 @@ export interface Database {
           is_billable?: boolean;
           supervising_seconds?: number;
           supervising_spans?: [string, string][];
+          code_stats?: RepoCodeStats[];
+          app_usage?: AppUsageEntry[];
+          status?: "draft" | "confirmed";
           updated_at?: TimestampString;
         };
         Relationships: [
@@ -411,64 +428,6 @@ export interface Database {
             foreignKeyName: "time_tracking_sessions_project_id_fkey";
             columns: ["project_id"];
             referencedRelation: "cloud_projects";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      usage_logs: {
-        Row: {
-          id: string;
-          user_id: string;
-          org_id: string | null;
-          session_id: string | null;
-          app_name: string;
-          window_title: string | null;
-          language: string | null;
-          language_extension: string | null;
-          category: string | null;
-          timestamp: TimestampString;
-          created_at: TimestampString;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          org_id?: string | null;
-          session_id?: string | null;
-          app_name: string;
-          window_title?: string | null;
-          language?: string | null;
-          language_extension?: string | null;
-          category?: string | null;
-          timestamp: TimestampString;
-          created_at?: TimestampString;
-        };
-        Update: {
-          org_id?: string | null;
-          session_id?: string | null;
-          app_name?: string;
-          window_title?: string | null;
-          language?: string | null;
-          language_extension?: string | null;
-          category?: string | null;
-          timestamp?: TimestampString;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "usage_logs_user_id_fkey";
-            columns: ["user_id"];
-            referencedRelation: "user_profiles";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "usage_logs_org_id_fkey";
-            columns: ["org_id"];
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "usage_logs_session_id_fkey";
-            columns: ["session_id"];
-            referencedRelation: "time_tracking_sessions";
             referencedColumns: ["id"];
           },
         ];
@@ -753,6 +712,8 @@ export interface Database {
           notification_settings: Json;
           idle_timeout_seconds: number;
           tracking_interval_seconds: number;
+          /** Default currency for new projects (ISO 4217) */
+          currency: string;
           created_at: TimestampString;
           updated_at: TimestampString;
         };
@@ -765,6 +726,7 @@ export interface Database {
           notification_settings?: Json;
           idle_timeout_seconds?: number;
           tracking_interval_seconds?: number;
+          currency?: string;
           created_at?: TimestampString;
           updated_at?: TimestampString;
         };
@@ -775,6 +737,7 @@ export interface Database {
           notification_settings?: Json;
           idle_timeout_seconds?: number;
           tracking_interval_seconds?: number;
+          currency?: string;
           updated_at?: TimestampString;
         };
         Relationships: [

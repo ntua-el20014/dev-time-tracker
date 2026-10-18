@@ -369,19 +369,17 @@ Gets sessions within a date range.
 
 ---
 
-## Usage Logs (usageLogs.ts)
+## Usage (usageLogs.ts)
 
-### `logUsage(userId: string, appName: string, windowTitle: string, language?: string | null, languageExtension?: string | null, iconUrl?: string | null, intervalSeconds: number = 1, timestamp?: string)`
+Foreground-app time is only stored as daily totals (`daily_usage_summary`) and per session (`time_tracking_sessions.app_usage`). Nothing per tick is uploaded, and window titles never are.
 
-Logs usage activity for an application. Inserts usage log and updates daily summary using database function.
+### `addUsageToDailySummary(increment: { userId, date, appName, language, languageExtension, category?, icon, seconds })`
+
+Adds time to one summary row (local day, app, language, browser category) through `update_daily_usage_summary()`. Throws on error.
 
 ### `getUsageSummary(userId: string, date: string)`
 
 Gets usage summary for a specific date, ordered by time spent descending.
-
-### `getUsageLogs(userId: string, date: string, filters?: { app?: string; language?: string; limit?: number; offset?: number })`
-
-Gets raw usage logs for a specific date with optional filters.
 
 ### `getDailySummary(userId: string, filters?: { startDate?: string; endDate?: string; app?: string; language?: string })`
 
@@ -397,11 +395,11 @@ Gets language usage statistics aggregated across all apps. Returns aggregated da
 
 ### `getUsageDetailsForAppDate(userId: string, app: string, date: string)`
 
-Gets detailed usage for a specific app on a specific date.
+One app's time on a day, per language and browser category.
 
 ### `getUsageDetailsForSession(userId: string, sessionId: string)`
 
-Gets detailed usage for a specific session. Returns usage logs within session time range.
+Returns `{ session }`, the session with its `app_usage` (time per app/language/category) and `code_stats`.
 
 ### `getLoggedDaysOfMonth(userId: string, year: number, month: number)`
 

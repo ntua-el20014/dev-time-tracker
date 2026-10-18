@@ -385,6 +385,12 @@ try {
   check("code_stats stored in the database (JSONB query)", rawStats.status === 200 && rawStats.body.includes(String(saved?.id)), `HTTP ${rawStats.status} ${rawStats.body}`);
   const badStats = await rawApi(u1, "PATCH", `time_tracking_sessions?id=eq.${saved?.id}`, { code_stats: { not: "an array" } });
   check("database rejects code_stats that isn't an array", badStats.status >= 400, `HTTP ${badStats.status}`);
+  // App usage travels with the session; nothing per tick is uploaded
+  const details = (await u1.invoke("get-usage-details-for-session", saved?.id)).v;
+  check("session details carry app_usage", Array.isArray(details?.session?.app_usage), JSON.stringify(details?.session?.app_usage));
+  check("session is a confirmed manual one", saved?.status === undefined || saved?.status === "confirmed");
+  const noLogs = await rawApi(u1, "GET", "usage_logs?select=id&limit=1");
+  check("there is no usage_logs table", noLogs.status === 404, `HTTP ${noLogs.status}`);
   await u1.ev(`document.querySelector('.nav-item[data-view="sessions"]').click()`);
   await u1.ev(`document.querySelector('#view-sessions .subnav-btn[data-sub="list"]').click()`);
   await u1.waitFor(`[...document.querySelectorAll(".summary-filter-btn")].some(b => b.textContent === "Summary by Session")`, 8000);

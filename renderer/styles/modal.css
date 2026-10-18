@@ -1136,3 +1136,24 @@ select#tag-select option {
   font-size: 11px;
   color: var(--dimmed);
 }
+
+/* Hourly rate and its currency side by side */
+#projectForm .project-rate-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+#projectForm .project-rate-row input,
+#projectForm .project-rate-row select {
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  font-size: 1em;
+  background: var(--row-odd);
+  color: var(--fg);
+}
+
+#projectForm .project-rate-row input {
+  width: 9em;
+}

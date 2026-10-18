@@ -29,6 +29,11 @@ const cp = {
 };
 vi.mock("../../src/supabase/cloudProjects", () => cp);
 
+const getDefaultCurrency = vi.fn();
+vi.mock("../../src/supabase/userPreferences", () => ({
+  getDefaultCurrency: (...args: unknown[]) => getDefaultCurrency(...args),
+}));
+
 const getProjectActivity = vi.fn();
 vi.mock("../../src/supabase/projectActivity", () => ({
   getProjectActivity: (...args: unknown[]) => getProjectActivity(...args),
@@ -41,6 +46,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   getCurrentUser.mockResolvedValue({ id: "u1" });
+  getDefaultCurrency.mockResolvedValue("EUR");
 });
 
 const call = (channel: string, ...args: unknown[]) =>
@@ -74,6 +80,26 @@ describe("create-project", () => {
     const result = await call("create-project", "X", "", "#fff", null, "organization");
     expect(result).toBeNull();
     expect(cp.createCloudProject).not.toHaveBeenCalled();
+  });
+
+  it("uses the user's default currency unless the form chose one", async () => {
+    cp.createCloudProject.mockResolvedValue({ id: "p4" });
+    await call("create-project", "X", "", "#fff", 50);
+    expect(cp.createCloudProject.mock.calls[0][0].currency).toBe("EUR");
+
+    await call("create-project", "Y", "", "#fff", 50, "personal", true, "GBP");
+    expect(cp.createCloudProject.mock.calls[1][0].currency).toBe("GBP");
+
+    // Not a currency code: the default again
+    await call("create-project", "Z", "", "#fff", 50, "personal", true, "<b>");
+    expect(cp.createCloudProject.mock.calls[2][0].currency).toBe("EUR");
+  });
+
+  it("falls back to USD when the default can't be read", async () => {
+    cp.createCloudProject.mockResolvedValue({ id: "p5" });
+    getDefaultCurrency.mockRejectedValue(new Error("offline"));
+    await call("create-project", "X", "", "#fff", 50);
+    expect(cp.createCloudProject.mock.calls[0][0].currency).toBe("USD");
   });
 
   it("treats an unknown scope as personal", async () => {

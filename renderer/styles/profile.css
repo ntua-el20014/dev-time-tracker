@@ -726,3 +726,10 @@
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
 }
+.settings-select {
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  background: var(--row-odd);
+  color: var(--fg);
+}

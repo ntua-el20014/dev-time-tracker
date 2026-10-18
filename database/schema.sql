@@ -72,6 +72,9 @@ CREATE TABLE cloud_projects (
     description TEXT,
     color TEXT DEFAULT '#3b82f6',
     hourly_rate NUMERIC(10,2) CHECK (hourly_rate IS NULL OR hourly_rate >= 0),
+    -- ISO 4217 code of hourly_rate (and of what the project earns/invoices).
+    -- The app fills it from the creator's default currency.
+    currency TEXT NOT NULL DEFAULT 'USD' CHECK (currency ~ '^[A-Z]{3}$'),
     -- Bill time spent supervising an AI agent (part of session duration)
     bill_supervising BOOLEAN NOT NULL DEFAULT true,
     scope TEXT NOT NULL DEFAULT 'organization' CHECK (scope IN ('personal', 'organization')),
@@ -99,6 +102,12 @@ CREATE TABLE project_members (
 -- code_stats: what the session produced, from git, one entry per repo:
 -- {repo_key, repo_name, commits, files_changed, lines_added, lines_removed,
 -- languages: {<language>: {added, removed}}}. Counts only, never paths.
+-- app_usage: foreground time during the session, one entry per
+-- {app, language, category, seconds}. Never window titles.
+-- status/source/client_id are for always-on mode (Phase D): it saves
+-- automatic segments (source 'auto') as drafts the user confirms later. A
+-- draft is never billable. client_id is chosen on the device so a segment
+-- that keeps growing (or an offline-queue replay) upserts one row.
 CREATE TABLE time_tracking_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
@@ -115,25 +124,16 @@ CREATE TABLE time_tracking_sessions (
         CHECK (jsonb_typeof(supervising_spans) = 'array'),
     code_stats JSONB NOT NULL DEFAULT '[]'
         CHECK (jsonb_typeof(code_stats) = 'array' AND pg_column_size(code_stats) <= 65536),
+    app_usage JSONB NOT NULL DEFAULT '[]'
+        CHECK (jsonb_typeof(app_usage) = 'array' AND pg_column_size(app_usage) <= 65536),
+    status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('draft', 'confirmed')),
+    source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'auto')),
+    client_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- One row per tracking sample (foreground app while recording)
-CREATE TABLE usage_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
-    org_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
-    session_id UUID REFERENCES time_tracking_sessions(id) ON DELETE SET NULL,
-    app_name TEXT NOT NULL,
-    window_title TEXT,
-    language TEXT,
-    language_extension TEXT,
-    -- What a browser tab was for (C5: "code-review", "docs", "ai-chat", …),
-    -- classified on the device from its title or URL; the URL is never stored
-    category TEXT CHECK (category IS NULL OR length(category) <= 40),
-    timestamp TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT time_tracking_sessions_draft_not_billable
+        CHECK (status = 'confirmed' OR NOT is_billable),
+    CONSTRAINT time_tracking_sessions_client_id UNIQUE (user_id, client_id)
 );
 
 -- Usage time per user, local calendar day, app, language and category
@@ -272,6 +272,8 @@ CREATE TABLE user_preferences (
     notification_settings JSONB DEFAULT '{"daily_goals": true, "scheduled_sessions": true}',
     idle_timeout_seconds INTEGER DEFAULT 300,
     tracking_interval_seconds INTEGER DEFAULT 10,
+    -- Default currency for new projects (ISO 4217)
+    currency TEXT NOT NULL DEFAULT 'USD' CHECK (currency ~ '^[A-Z]{3}$'),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -898,7 +900,7 @@ BEGIN
         COUNT(DISTINCT pm.user_id)::INTEGER,
         MAX(tts.start_time)
     FROM cloud_projects cp
-    LEFT JOIN time_tracking_sessions tts ON tts.project_id = cp.id
+    LEFT JOIN time_tracking_sessions tts ON tts.project_id = cp.id AND tts.status = 'confirmed'
     LEFT JOIN project_members pm ON pm.project_id = cp.id
     WHERE cp.id = p_project_id
     GROUP BY cp.id;
@@ -939,7 +941,7 @@ $$;
 
 -- ── Team analytics (admins/managers of the org) ─────
 -- Sessions are bucketed by the viewer's local day (p_time_zone, an IANA
--- name sent by the app). With p_billable_only, hours are what is billed:
+-- name sent by the app). Draft sessions (Phase D) are left out. With p_billable_only, hours are what is billed:
 -- supervising time is left out where the project doesn't bill it.
 
 -- Seconds of a session that count as billed
@@ -994,6 +996,7 @@ BEGIN
     FROM time_tracking_sessions tts
     LEFT JOIN cloud_projects cp ON cp.id = tts.project_id
     WHERE tts.org_id = p_org_id
+      AND tts.status = 'confirmed'
       AND (tts.start_time AT TIME ZONE COALESCE(NULLIF(p_time_zone, ''), 'UTC'))::DATE
           BETWEEN p_start_date AND p_end_date
       AND (NOT p_billable_only OR tts.is_billable);
@@ -1041,6 +1044,7 @@ BEGIN
     FROM cloud_projects cp
     JOIN time_tracking_sessions tts ON tts.project_id = cp.id
     WHERE cp.org_id = p_org_id
+      AND tts.status = 'confirmed'
       AND (tts.start_time AT TIME ZONE COALESCE(NULLIF(p_time_zone, ''), 'UTC'))::DATE
           BETWEEN p_start_date AND p_end_date
       AND (p_project_ids IS NULL OR cp.id = ANY(p_project_ids))
@@ -1145,6 +1149,7 @@ BEGIN
         FROM time_tracking_sessions tts
         LEFT JOIN cloud_projects cp ON cp.id = tts.project_id
         WHERE tts.org_id = p_org_id
+          AND tts.status = 'confirmed'
           AND (tts.start_time AT TIME ZONE COALESCE(NULLIF(p_time_zone, ''), 'UTC'))::DATE
               BETWEEN p_start_date AND p_end_date
           AND (p_project_ids IS NULL OR tts.project_id = ANY(p_project_ids))
@@ -1203,10 +1208,6 @@ CREATE TRIGGER set_org_id_time_tracking_sessions
 BEFORE INSERT OR UPDATE ON time_tracking_sessions
 FOR EACH ROW EXECUTE FUNCTION set_org_id_from_user();
 
-CREATE TRIGGER set_org_id_usage_logs
-BEFORE INSERT OR UPDATE ON usage_logs
-FOR EACH ROW EXECUTE FUNCTION set_org_id_from_user();
-
 CREATE TRIGGER set_org_id_daily_usage_summary
 BEFORE INSERT OR UPDATE ON daily_usage_summary
 FOR EACH ROW EXECUTE FUNCTION set_org_id_from_user();
@@ -1259,7 +1260,6 @@ ALTER TABLE org_invite_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cloud_projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE project_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE time_tracking_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE usage_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_usage_summary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE project_repositories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_sessions ENABLE ROW LEVEL SECURITY;
@@ -1443,24 +1443,6 @@ CREATE POLICY "Users can delete their own sessions"
 ON time_tracking_sessions FOR DELETE
 USING (user_id = auth.uid());
 
--- ── Usage logs ──
-
-CREATE POLICY "Users can view their own usage logs"
-ON usage_logs FOR SELECT
-USING (user_id = auth.uid());
-
-CREATE POLICY "Admins/managers can view org usage logs"
-ON usage_logs FOR SELECT
-USING (org_id = get_current_user_org_id() AND is_user_admin_or_manager());
-
-CREATE POLICY "Users can insert their own usage logs"
-ON usage_logs FOR INSERT
-WITH CHECK (user_id = auth.uid());
-
-CREATE POLICY "Users can delete their own usage logs"
-ON usage_logs FOR DELETE
-USING (user_id = auth.uid());
-
 -- ── Daily usage summary ──
 
 CREATE POLICY "Users can manage their own usage summary"
@@ -1545,9 +1527,9 @@ CREATE INDEX idx_agent_sessions_org_started ON agent_sessions(org_id, started_at
 CREATE INDEX idx_sessions_user_start ON time_tracking_sessions(user_id, start_time DESC);
 CREATE INDEX idx_sessions_org_start ON time_tracking_sessions(org_id, start_time);
 CREATE INDEX idx_sessions_project_id ON time_tracking_sessions(project_id);
+-- The review inbox (Phase D): a user's drafts
+CREATE INDEX idx_sessions_user_drafts ON time_tracking_sessions(user_id, start_time) WHERE status = 'draft';
 
-CREATE INDEX idx_usage_logs_user_timestamp ON usage_logs(user_id, timestamp DESC);
-CREATE INDEX idx_usage_logs_org_id ON usage_logs(org_id);
 
 CREATE INDEX idx_daily_summary_org_date ON daily_usage_summary(org_id, date);
 

@@ -45,3 +45,32 @@ describe("invoice AI agent cost line (C6)", () => {
     expect(text).toContain("TOTAL: $12.50");
   });
 });
+
+describe("invoice currency", () => {
+  const eur = { ...project, currency: "EUR" };
+
+  it("prices the invoice in the projects' currency", () => {
+    const data = calculateInvoiceData([eur], range, { companyName: "Me" });
+    expect(data.currency).toBe("EUR");
+    const text = generateInvoicePDF(data).output() as string;
+    expect(text).toContain("Currency: EUR");
+    expect(text).toContain("100.00");
+    expect(text).not.toContain("$100.00");
+  });
+
+  it("writes the code where the PDF fonts have no symbol", () => {
+    const data = calculateInvoiceData([{ ...project, currency: "INR" }], range, { companyName: "Me" });
+    expect(generateInvoicePDF(data).output() as string).toContain("TOTAL: INR 100.00");
+  });
+
+  it("refuses projects in different currencies", () => {
+    expect(() =>
+      calculateInvoiceData([eur, { ...project, projectId: "q" }], range, { companyName: "Me" }),
+    ).toThrow(/one currency/);
+  });
+
+  it("adds USD agent costs only to a USD invoice", () => {
+    const data = calculateInvoiceData([eur], range, { companyName: "Me" }, undefined, true);
+    expect(data.projects[0]).toMatchObject({ subtotal: 100, agentCost: 0 });
+  });
+});

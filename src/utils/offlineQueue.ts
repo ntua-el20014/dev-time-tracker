@@ -2,8 +2,10 @@
  * Offline Queue — persists critical writes locally when Supabase is unreachable.
  *
  * Queued item types:
- *   - usage_log  — one per tracking tick (every 10 s)
- *   - session    — one per completed tracking session
+ *   - usage_summary — time to add to one daily_usage_summary row
+ *   - session       — one per completed tracking session
+ *   - usage_log     — legacy (one per tick, queued by older versions); its
+ *                     time is replayed into the summary
  *
  * Storage: flat JSON file at  ~/.dev-time-tracker/offline-queue.json
  * Each item carries an idempotency key so duplicates are skipped on flush.
@@ -19,14 +21,35 @@ import path from "path";
 import os from "os";
 import { BrowserWindow } from "electron";
 import { CONFIG_DIR } from "../../shared/constants";
-import { logUsage } from "../supabase/usageLogs";
+import { addUsageToDailySummary } from "../supabase/usageLogs";
 import { addSession, type SupervisingTime } from "../supabase/timeTracking";
 import type { RepoCodeStats } from "../../shared/codeStats";
+import type { AppUsageEntry } from "../../shared/appUsage";
+import { toLocalDateString } from "./timeFormat";
 import { supabase } from "../supabase/config";
 import { logError, classifyError } from "./errorHandler";
 
 // ── Types ────────────────────────────────────────────────────────────
 
+export interface QueuedUsageSummary {
+  type: "usage_summary";
+  queuedAt: string;
+  /** Idempotency key: `usage_summary:<userId>:<date>|<app>|…:<queuedAt>` */
+  key: string;
+  data: {
+    userId: string;
+    /** Local calendar day, YYYY-MM-DD */
+    date: string;
+    appName: string;
+    language: string | null;
+    languageExtension: string | null;
+    category: string | null;
+    iconUrl: string | null;
+    seconds: number;
+  };
+}
+
+/** Queued by versions that uploaded every tick; replayed into the summary. */
 export interface QueuedUsageLog {
   type: "usage_log";
   /** ISO timestamp for ordering */
@@ -67,10 +90,12 @@ export interface QueuedSession {
     supervising?: SupervisingTime;
     /** What the session produced, from git (C2) */
     codeStats?: RepoCodeStats[];
+    /** Foreground time per app/language/category */
+    appUsage?: AppUsageEntry[];
   };
 }
 
-export type QueueItem = QueuedUsageLog | QueuedSession;
+export type QueueItem = QueuedUsageSummary | QueuedUsageLog | QueuedSession;
 
 export interface SyncStatus {
   pendingCount: number;
@@ -175,41 +200,15 @@ export function destroyOfflineQueue(): void {
 }
 
 /**
- * Enqueue a usage log write that failed due to a network error.
+ * Enqueue a daily-summary increment that failed due to a network error.
  */
-export function enqueueUsageLog(
-  userId: string,
-  appName: string,
-  windowTitle: string,
-  language: string | null,
-  languageExtension: string | null,
-  iconUrl: string | null,
-  intervalSeconds: number,
-  logTimestamp?: string,
-  category?: string | null,
-): void {
-  const ts = logTimestamp || new Date().toISOString();
-  const key = `usage_log:${userId}:${ts}`;
+export function enqueueUsageSummary(increment: QueuedUsageSummary["data"]): void {
+  const queuedAt = new Date().toISOString();
+  const { userId, date, appName, language, category } = increment;
+  const key = `usage_summary:${userId}:${date}|${appName}|${language ?? ""}|${category ?? ""}:${queuedAt}`;
   if (keySet.has(key)) return; // duplicate
 
-  const item: QueuedUsageLog = {
-    type: "usage_log",
-    queuedAt: new Date().toISOString(),
-    key,
-    data: {
-      userId,
-      appName,
-      windowTitle,
-      language,
-      languageExtension,
-      iconUrl,
-      intervalSeconds,
-      logTimestamp: ts,
-      category: category ?? null,
-    },
-  };
-
-  queue.push(item);
+  queue.push({ type: "usage_summary", queuedAt, key, data: { ...increment } });
   keySet.add(key);
   saveToDisk();
   broadcastSyncStatus();
@@ -230,6 +229,7 @@ export function enqueueSession(
   endTime?: string,
   supervising?: SupervisingTime,
   codeStats?: RepoCodeStats[],
+  appUsage?: AppUsageEntry[],
 ): void {
   const key = `session:${userId}:${startTime}`;
   if (keySet.has(key)) return; // duplicate
@@ -250,6 +250,7 @@ export function enqueueSession(
       endTime,
       supervising,
       codeStats,
+      appUsage,
     },
   };
 
@@ -298,19 +299,30 @@ export async function flush(): Promise<number> {
     }
 
     try {
-      if (item.type === "usage_log") {
+      if (item.type === "usage_summary") {
         const d = item.data;
-        await logUsage(
-          d.userId,
-          d.appName,
-          d.windowTitle,
-          d.language,
-          d.languageExtension,
-          d.iconUrl,
-          d.intervalSeconds,
-          d.logTimestamp,
-          d.category ?? null,
-        );
+        await addUsageToDailySummary({
+          userId: d.userId,
+          date: d.date,
+          appName: d.appName,
+          language: d.language,
+          languageExtension: d.languageExtension,
+          category: d.category,
+          icon: d.iconUrl,
+          seconds: d.seconds,
+        });
+      } else if (item.type === "usage_log") {
+        const d = item.data;
+        await addUsageToDailySummary({
+          userId: d.userId,
+          date: toLocalDateString(d.logTimestamp),
+          appName: d.appName,
+          language: d.language,
+          languageExtension: d.languageExtension,
+          category: d.category ?? null,
+          icon: d.iconUrl,
+          seconds: d.intervalSeconds,
+        });
       } else if (item.type === "session") {
         const d = item.data;
         await addSession(
@@ -325,6 +337,7 @@ export async function flush(): Promise<number> {
           d.endTime,
           d.supervising,
           d.codeStats,
+          d.appUsage,
         );
       }
 

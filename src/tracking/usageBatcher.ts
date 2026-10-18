@@ -1,21 +1,18 @@
 /**
- * Buffers usage ticks and writes them in batches: one INSERT for all buffered
- * usage_logs rows, plus one summary upsert per (day, app, language, browser
- * category) group.
- * Replaces two requests per tick with a handful per flush.
+ * Buffers usage ticks and writes them in batches: one summary upsert per
+ * (local day, app, language, browser category) group. Nothing per tick is
+ * uploaded, and window titles never are.
  *
- * Failure handling mirrors the per-tick path it replaces:
- * - network error on the insert → every record goes to the offline queue
- *   (which later replays them one by one, summary included)
- * - other insert errors → logged and dropped
- * - summary errors → logged; the logs themselves are already saved
+ * Failure handling:
+ * - network error → that group and the rest of the flush go to the offline
+ *   queue (replayed later as the same summary increments)
+ * - other errors → logged and dropped
  */
 import { toLocalDateString } from "../utils/timeFormat";
 
 export interface UsageRecord {
   userId: string;
   appName: string;
-  windowTitle: string;
   language: string | null;
   languageExtension: string | null;
   /** App icon data URL ("" if unavailable) */
@@ -41,15 +38,14 @@ export interface SummaryIncrement {
 }
 
 export interface UsageWriter {
-  insertLogs(records: UsageRecord[]): Promise<void>;
   addToSummary(increment: SummaryIncrement): Promise<void>;
 }
 
 export interface BatcherDeps {
   writer: UsageWriter;
   isNetworkError(err: unknown): boolean;
-  /** Persist a record that could not be written (offline queue) */
-  enqueueOffline(record: UsageRecord, icon: string | null): void;
+  /** Persist an increment that could not be written (offline queue) */
+  enqueueOffline(increment: SummaryIncrement): void;
   logError(context: string, err: unknown): void;
 }
 
@@ -71,7 +67,7 @@ export class UsageBatcher {
 
   /**
    * Writes everything buffered so far. Returns the number of records saved
-   * (or queued offline). Concurrent calls wait for the running flush, then
+   * (or queued offline); records of a failed, non-network write are dropped. Concurrent calls wait for the running flush, then
    * flush whatever arrived in the meantime.
    */
   async flush(): Promise<number> {
@@ -92,37 +88,19 @@ export class UsageBatcher {
     return `${r.userId}|${date}|${r.appName}|${r.language ?? ""}|${r.category ?? ""}`;
   }
 
-  /** Icon for this group if it hasn't been sent yet, else null. */
-  private takeIcon(key: string, icon: string): string | null {
-    if (!icon || this.iconSentKeys.has(key)) return null;
-    this.iconSentKeys.add(key);
-    return icon;
-  }
-
   private async write(records: UsageRecord[]): Promise<number> {
-    try {
-      await this.deps.writer.insertLogs(records);
-    } catch (err) {
-      if (!this.deps.isNetworkError(err)) {
-        this.deps.logError("usageBatcher.insertLogs", err);
-        return 0;
-      }
-      for (const r of records) {
-        const key = this.summaryKey(r, toLocalDateString(r.timestamp));
-        this.deps.enqueueOffline(r, this.takeIcon(key, r.icon));
-      }
-      return records.length;
-    }
-
     // Aggregate per summary row so each gets a single upsert
     const groups = new Map<string, SummaryIncrement>();
+    const counts = new Map<string, number>();
     for (const r of records) {
       const date = toLocalDateString(r.timestamp);
       const key = this.summaryKey(r, date);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
       const group = groups.get(key);
       if (group) {
         group.seconds += r.intervalSeconds;
         group.languageExtension ??= r.languageExtension;
+        group.icon ??= this.iconSentKeys.has(key) ? null : r.icon || null;
       } else {
         groups.set(key, {
           userId: r.userId,
@@ -137,14 +115,28 @@ export class UsageBatcher {
       }
     }
 
+    let offline = false;
+    let saved = 0;
     for (const [key, increment] of groups) {
-      try {
-        await this.deps.writer.addToSummary(increment);
-        if (increment.icon) this.iconSentKeys.add(key);
-      } catch (err) {
-        this.deps.logError("usageBatcher.addToSummary", err);
+      if (!offline) {
+        try {
+          await this.deps.writer.addToSummary(increment);
+          if (increment.icon) this.iconSentKeys.add(key);
+          saved += counts.get(key) ?? 0;
+          continue;
+        } catch (err) {
+          if (!this.deps.isNetworkError(err)) {
+            this.deps.logError("usageBatcher.addToSummary", err);
+            continue;
+          }
+          offline = true;
+        }
       }
+      this.deps.enqueueOffline(increment);
+      // The queued increment carries the icon
+      if (increment.icon) this.iconSentKeys.add(key);
+      saved += counts.get(key) ?? 0;
     }
-    return records.length;
+    return saved;
   }
 }

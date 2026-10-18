@@ -29,6 +29,8 @@ import {
   type ProjectActivity,
 } from "../shared/projectActivity";
 import { formatCodeTotals } from "../shared/codeStats";
+import { DEFAULT_CURRENCY, formatRate } from "../shared/currency";
+import { currencyOptionsHtml } from "./utils/currencyOptions";
 import type {
   CloudProjectWithManager,
   ProjectMemberWithUser,
@@ -195,7 +197,7 @@ function renderCard(p: Project): string {
             <span class="meta-label">Hourly rate:</span>
             <span class="meta-value">${
               p.hourly_rate != null
-                ? `$${Number(p.hourly_rate).toFixed(2)}`
+                ? escapeHtml(formatRate(Number(p.hourly_rate), p.currency ?? DEFAULT_CURRENCY))
                 : "Not set"
             }</span>
           </div>
@@ -317,7 +319,7 @@ function onProjectsClick(e: Event) {
   const target = e.target as HTMLElement;
 
   if (target.closest("#newProjectBtn")) {
-    showProjectForm();
+    void showProjectForm();
     return;
   }
 
@@ -333,7 +335,7 @@ function onProjectsClick(e: Event) {
   if (!actionBtn || !project) return;
   switch (actionBtn.dataset.action) {
     case "edit":
-      showProjectForm(project);
+      void showProjectForm(project);
       break;
     case "members":
       void showMembersModal(project);
@@ -396,9 +398,15 @@ function openModal(title: string, bodyHtml: string, onClose?: () => void) {
   };
 }
 
-function showProjectForm(project?: Project) {
+async function showProjectForm(project?: Project) {
   const editing = !!project;
   const offerScope = !editing && canCreateOrgProjects();
+  // New projects start in the user's default currency (Settings)
+  const currency =
+    project?.currency ??
+    (await safeIpcInvoke<string>("get-default-currency", [], {
+      fallback: DEFAULT_CURRENCY,
+    }));
   const { body, close } = openModal(
     editing ? "Edit Project" : "New Project",
     `
@@ -419,7 +427,12 @@ function showProjectForm(project?: Project) {
       </div>
       <div style="margin-bottom: 15px;">
         <label for="project-hourly-rate">Hourly rate (optional)</label><br>
-        <input id="project-hourly-rate" name="hourlyRate" type="number" min="0" step="0.01" placeholder="e.g. 75.00" value="${project?.hourly_rate ?? ""}">
+        <div class="project-rate-row">
+          <input id="project-hourly-rate" name="hourlyRate" type="number" min="0" step="0.01" placeholder="e.g. 75.00" value="${project?.hourly_rate ?? ""}">
+          <select id="project-currency" name="currency" aria-label="Currency">
+            ${currencyOptionsHtml(currency)}
+          </select>
+        </div>
       </div>
       <div style="margin-bottom: 15px;">
         <label title="Time without keyboard/mouse input while an AI agent (Claude Code, Codex) is working on your behalf">
@@ -461,11 +474,12 @@ function showProjectForm(project?: Project) {
     const description = String(data.get("description") ?? "");
     const color = String(data.get("color") ?? "#3b82f6");
     const billSupervising = data.get("billSupervising") === "on";
+    const chosenCurrency = String(data.get("currency") ?? currency);
 
     const result = editing
       ? await safeIpcInvoke(
           "update-project",
-          [project!.id, name, description, color, hourlyRate, billSupervising],
+          [project!.id, name, description, color, hourlyRate, billSupervising, chosenCurrency],
           { fallback: null },
         )
       : await safeIpcInvoke(
@@ -477,6 +491,7 @@ function showProjectForm(project?: Project) {
             hourlyRate,
             String(data.get("scope") ?? "personal"),
             billSupervising,
+            chosenCurrency,
           ],
           { fallback: null },
         );

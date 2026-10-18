@@ -24,16 +24,13 @@ import {
   loadUserLangMapFromDisk,
 } from "../utils/extractData";
 import { addSession } from "../supabase/timeTracking";
-import {
-  insertUsageLogs,
-  addUsageToDailySummary,
-} from "../supabase/usageLogs";
+import { addUsageToDailySummary } from "../supabase/usageLogs";
 import {
   getIdleTimeout,
   getTrackingInterval,
 } from "../supabase/userPreferences";
 import { logError, classifyError, withRetry } from "../utils/errorHandler";
-import { enqueueUsageLog, enqueueSession } from "../utils/offlineQueue";
+import { enqueueUsageSummary, enqueueSession } from "../utils/offlineQueue";
 import {
   DEFAULT_IDLE_TIMEOUT_SECONDS,
   DEFAULT_TRACKING_INTERVAL_SECONDS,
@@ -44,6 +41,7 @@ import { createAgentHeartbeat } from "./agentHeartbeat";
 import { LiveAgents, type HookEvent, type LiveStatus } from "./agentLive";
 import { createCodeStats } from "./codeStats";
 import type { RepoCodeStats } from "../../shared/codeStats";
+import { addAppUsage, type AppUsageEntry } from "../../shared/appUsage";
 import { createUsageSampler } from "./usageSampler";
 import { UsageBatcher } from "./usageBatcher";
 import { getWorkspaceHint } from "./workspaceHints";
@@ -285,34 +283,40 @@ const sampleUsage = createUsageSampler({
 
 const batcher = new UsageBatcher({
   writer: {
-    insertLogs: (records) =>
-      withRetry(() => insertUsageLogs(records), {
+    addToSummary: (increment) =>
+      withRetry(() => addUsageToDailySummary(increment), {
         maxAttempts: 2,
         retryOn: ["network"],
       }),
-    addToSummary: addUsageToDailySummary,
   },
   isNetworkError: (err) => classifyError(err) === "network",
-  enqueueOffline: (r, icon) =>
-    enqueueUsageLog(
-      r.userId,
-      r.appName,
-      r.windowTitle,
-      r.language,
-      r.languageExtension,
-      icon,
-      r.intervalSeconds,
-      r.timestamp,
-      r.category,
-    ),
+  enqueueOffline: (inc) =>
+    enqueueUsageSummary({
+      userId: inc.userId,
+      date: inc.date,
+      appName: inc.appName,
+      language: inc.language,
+      languageExtension: inc.languageExtension,
+      category: inc.category,
+      iconUrl: inc.icon,
+      seconds: inc.seconds,
+    }),
   logError,
 });
+
+/** Foreground time of the running session (saved with it as app_usage) */
+let sessionAppUsage: AppUsageEntry[] = [];
 
 function tick() {
   if (isIncognito || !currentUserId) return;
   try {
     const sample = sampleUsage(currentUserId);
     if (!sample) return;
+    addAppUsage(
+      sessionAppUsage,
+      { app: sample.appName, language: sample.language, category: sample.category },
+      intervalSeconds,
+    );
     batcher.add({
       userId: currentUserId,
       ...sample,
@@ -522,6 +526,7 @@ export function startTracking() {
   clock.startAt(new Date());
   attribution.resetSession();
   codeStats.startSession();
+  sessionAppUsage = [];
   const repo = attribution.currentRepo();
   if (repo && !isIncognito) codeStats.noteRepo(repo);
   startTimers();
@@ -608,6 +613,7 @@ async function saveSession(
   info: SessionInfo,
   { queueOnAnyError = false } = {},
   codeStatsOfSession: RepoCodeStats[] = [],
+  appUsage: AppUsageEntry[] = [],
 ) {
   const startTime = session.start.toISOString();
   const endTime = session.end.toISOString();
@@ -630,6 +636,7 @@ async function saveSession(
       endTime,
       supervising,
       codeStatsOfSession,
+      appUsage,
     );
     // Lets the renderer refresh session-based views
     send("session-saved");
@@ -648,11 +655,19 @@ async function saveSession(
         endTime,
         supervising,
         codeStatsOfSession,
+        appUsage,
       );
     } else {
       logError("saveSession", err);
     }
   }
+}
+
+/** The stopped session's app usage; the next session starts empty. */
+function takeSessionAppUsage(): AppUsageEntry[] {
+  const usage = sessionAppUsage;
+  sessionAppUsage = [];
+  return usage;
 }
 
 /**
@@ -661,6 +676,7 @@ async function saveSession(
  */
 export async function stopTracking() {
   const session = clock.stop(new Date());
+  const appUsage = takeSessionAppUsage();
   // git runs while the user fills in the prompt
   const code = session ? collectCodeStats(session) : Promise.resolve([]);
   const repo = attribution.dominantRepo();
@@ -686,7 +702,7 @@ export async function stopTracking() {
     const info = await askSessionInfo(projectId, attribution.describe(repo));
     // An empty title means the user chose "Discard"
     if (info.title && info.title.trim() !== "") {
-      await saveSession(uid, session, info, {}, await code);
+      await saveSession(uid, session, info, {}, await code, appUsage);
     }
     const chosen = normalizeProjectId(info.projectId);
     if (info.rememberRepo === true && repo && chosen && currentUserId === uid) {
@@ -731,6 +747,7 @@ export async function finalizeTrackingForQuit() {
 
   const session = clock.stop(new Date());
   stopTimers();
+  const appUsage = takeSessionAppUsage();
   const code = session
     ? collectCodeStats(session, QUIT_CODE_STATS_MS)
     : Promise.resolve([]);
@@ -749,6 +766,7 @@ export async function finalizeTrackingForQuit() {
         : APP_CLOSED_SESSION_INFO,
       { queueOnAnyError: true },
       await code,
+      appUsage,
     );
   }
 }

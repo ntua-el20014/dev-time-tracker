@@ -5,6 +5,7 @@ import { localDayStartISO, localDayEndISO } from "../utils/timeFormat";
 import { billableSecondsOf } from "../../shared/billing";
 import { roundUsd } from "../../shared/projectActivity";
 import { getAgentTotalsByProject } from "../supabase/projectActivity";
+import { normalizeCurrency } from "../../shared/currency";
 
 /**
  * Adds billed_seconds to each session: its duration, minus supervising time
@@ -161,7 +162,7 @@ ipcMain.handle(
 
       const { data: projects, error: projectsError } = await supabase
         .from("cloud_projects")
-        .select("id, name, hourly_rate, scope, manager_id, org_id, is_active")
+        .select("id, name, hourly_rate, currency, scope, manager_id, org_id, is_active")
         .in("id", projectIds)
         .eq("is_active", true);
 
@@ -180,6 +181,7 @@ ipcMain.handle(
           projectId: project.id,
           projectName: project.name,
           hourlyRate: project.hourly_rate || 0,
+          currency: normalizeCurrency(project.currency),
           billableSessions: sessionsByProject.get(project.id) || [],
           totalSessions: (sessionsByProject.get(project.id) || []).length,
           agentCostUsd: roundUsd(agentTotals.get(project.id)?.costUsd ?? 0),

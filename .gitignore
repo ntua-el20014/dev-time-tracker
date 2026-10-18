@@ -139,3 +139,6 @@ coverage/
 dist/
 build/
 out/
+
+# Personal notes (local only)
+TODO.txt

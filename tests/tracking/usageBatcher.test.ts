@@ -18,7 +18,6 @@ function record(overrides: Partial<UsageRecord> = {}): UsageRecord {
   return {
     userId: "u1",
     appName: "VS Code",
-    windowTitle: "main.ts",
     language: "TypeScript",
     languageExtension: ".ts",
     icon: "data:icon",
@@ -30,7 +29,6 @@ function record(overrides: Partial<UsageRecord> = {}): UsageRecord {
 
 function setup(overrides: Partial<BatcherDeps["writer"]> = {}) {
   const writer = {
-    insertLogs: vi.fn(async () => {}),
     addToSummary: vi.fn(async () => {}),
     ...overrides,
   };
@@ -58,17 +56,16 @@ describe("UsageBatcher", () => {
     expect(increments).toContainEqual(expect.objectContaining({ category: "code-review", seconds: 20 }));
     expect(increments).toContainEqual(expect.objectContaining({ category: "docs", seconds: 10 }));
     expect(increments).toContainEqual(expect.objectContaining({ category: null, seconds: 10 }));
-    expect(writer.insertLogs.mock.calls[0][0].map((r) => r.category)).toEqual(["code-review", "code-review", "docs", null]);
   });
 
-  it("writes all buffered logs in one insert", async () => {
+  it("writes only summary increments, never per-tick rows or titles", async () => {
     const { batcher, writer } = setup();
+    batcher.add({ ...record(), windowTitle: "secret.ts — client" } as UsageRecord);
     batcher.add(record());
-    batcher.add(record({ windowTitle: "other.ts" }));
 
     expect(await batcher.flush()).toBe(2);
-    expect(writer.insertLogs).toHaveBeenCalledTimes(1);
-    expect(writer.insertLogs.mock.calls[0][0]).toHaveLength(2);
+    expect(writer.addToSummary).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(writer.addToSummary.mock.calls)).not.toContain("secret");
     expect(batcher.pendingCount).toBe(0);
   });
 
@@ -105,26 +102,35 @@ describe("UsageBatcher", () => {
     expect(writer.addToSummary.mock.calls[1][0].icon).toBeNull();
   });
 
-  it("queues every record offline when the insert hits a network error", async () => {
-    const { batcher, deps, writer } = setup({
-      insertLogs: vi.fn(async () => {
-        throw new Error("offline");
-      }),
+  it("queues the increments offline once a network error happens", async () => {
+    const addToSummary = vi.fn(async () => {
+      throw new Error("offline");
     });
+    const { batcher, deps } = setup({ addToSummary });
     batcher.add(record());
     batcher.add(record());
+    batcher.add(record({ appName: "Chrome", language: null }));
 
-    expect(await batcher.flush()).toBe(2);
+    expect(await batcher.flush()).toBe(3);
+    // The rest of the flush isn't tried once the network is down
+    expect(addToSummary).toHaveBeenCalledTimes(1);
     expect(deps.enqueueOffline).toHaveBeenCalledTimes(2);
-    // icon goes with the first queued record of the row only
-    expect(deps.enqueueOffline.mock.calls[0][1]).toBe("data:icon");
-    expect(deps.enqueueOffline.mock.calls[1][1]).toBeNull();
-    expect(writer.addToSummary).not.toHaveBeenCalled();
+    expect(deps.enqueueOffline.mock.calls[0][0]).toMatchObject({
+      appName: "VS Code",
+      seconds: 20,
+      icon: "data:icon",
+    });
+
+    // The queued increment carried the icon, so it isn't sent again
+    addToSummary.mockResolvedValue(undefined);
+    batcher.add(record());
+    await batcher.flush();
+    expect(addToSummary.mock.calls.at(-1)?.[0].icon).toBeNull();
   });
 
-  it("logs and drops records on non-network insert errors", async () => {
+  it("logs and drops records on non-network errors", async () => {
     const { batcher, deps } = setup({
-      insertLogs: vi.fn(async () => {
+      addToSummary: vi.fn(async () => {
         throw new Error("constraint violation");
       }),
     });
@@ -151,26 +157,26 @@ describe("UsageBatcher", () => {
 
   it("serialises concurrent flushes without losing records", async () => {
     let release: () => void = () => {};
-    const insertLogs = vi
+    const addToSummary = vi
       .fn()
       .mockImplementationOnce(() => new Promise<void>((r) => (release = r)))
       .mockResolvedValue(undefined);
-    const { batcher } = setup({ insertLogs });
+    const { batcher } = setup({ addToSummary });
 
     batcher.add(record());
     const first = batcher.flush();
-    batcher.add(record({ windowTitle: "later.ts" }));
+    batcher.add(record({ appName: "Chrome" }));
     const second = batcher.flush();
     release();
 
     expect(await first).toBe(1);
     expect(await second).toBe(1);
-    expect(insertLogs).toHaveBeenCalledTimes(2);
+    expect(addToSummary).toHaveBeenCalledTimes(2);
   });
 
   it("does nothing when the buffer is empty", async () => {
     const { batcher, writer } = setup();
     expect(await batcher.flush()).toBe(0);
-    expect(writer.insertLogs).not.toHaveBeenCalled();
+    expect(writer.addToSummary).not.toHaveBeenCalled();
   });
 });

@@ -9,6 +9,7 @@ import { getLocalDateString } from "../../src/utils/timeFormat";
 import { showConfirmationModal } from "./Modals";
 import { showInAppNotification } from "./Notifications";
 import { renderClaudeHooks } from "./ClaudeHooks";
+import { formatMoney } from "../../shared/currency";
 
 interface Status {
   enabled: boolean;
@@ -82,7 +83,7 @@ function sessionsTable(sessions: AgentSession[], projects: Map<string, string>):
         <td>${s.prompts}</td>
         <td>${s.files_changed}</td>
         <td title="${tokens.toLocaleString()} tokens">${compact(tokens)}</td>
-        <td>${s.cost_usd != null ? `$${Number(s.cost_usd).toFixed(2)}` : "—"}</td>
+        <td>${s.cost_usd != null ? escapeHtml(formatMoney(Number(s.cost_usd), "USD")) : "—"}</td>
       </tr>`;
     })
     .join("");

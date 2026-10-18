@@ -53,6 +53,8 @@ export interface CloudProject {
   description?: string | null;
   color: string;
   hourly_rate?: number | null;
+  /** ISO 4217 code of hourly_rate */
+  currency?: string;
   /** Bill time spent supervising an AI agent (default true) */
   bill_supervising?: boolean;
   scope: "personal" | "organization";
@@ -98,6 +100,8 @@ export interface CreateCloudProjectData {
   description?: string | null;
   color?: string;
   hourly_rate?: number | null;
+  /** ISO 4217; defaults to USD in the database */
+  currency?: string;
   bill_supervising?: boolean;
   scope?: "personal" | "organization";
   manager_id?: string;
@@ -109,6 +113,7 @@ export interface UpdateCloudProjectData {
   description?: string | null;
   color?: string;
   hourly_rate?: number | null;
+  currency?: string;
   bill_supervising?: boolean;
   scope?: "personal" | "organization";
   is_active?: boolean;

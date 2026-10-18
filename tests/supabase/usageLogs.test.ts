@@ -11,9 +11,7 @@ vi.mock("../../src/supabase/config", async () => {
 });
 
 import {
-  logUsage,
   getUsageSummary,
-  getUsageLogs,
   getDailySummary,
   getEditorUsage,
   getLanguageUsage,
@@ -24,7 +22,6 @@ import {
   getUserEditors,
   getUserLangExts,
   getBrowserUsage,
-  insertUsageLogs,
   addUsageToDailySummary,
 } from "../../src/supabase/usageLogs";
 
@@ -32,92 +29,6 @@ describe("usageLogs", () => {
   beforeEach(() => {
     resetMockState();
     vi.clearAllMocks();
-  });
-
-  // ───────────── logUsage ─────────────
-  describe("logUsage", () => {
-    it("inserts usage log and calls update_daily_usage_summary RPC", async () => {
-      const logEntry = {
-        id: "log-1",
-        user_id: "user-1",
-        app_name: "VS Code",
-        window_title: "main.ts",
-      };
-      // Insert log
-      mockResult({ data: logEntry, error: null });
-      // RPC call for summary update (don't throw on RPC error)
-
-      const result = await logUsage(
-        "user-1",
-        "VS Code",
-        "main.ts",
-        "TypeScript",
-        ".ts",
-        "vscode-icon",
-        5,
-      );
-
-      expect(result).toEqual(logEntry);
-      const fromCalls = getCallsFor("from");
-      expect(fromCalls[0].args[0]).toBe("usage_logs");
-      // RPC was called
-      const rpcCalls = getCallsFor("rpc");
-      expect(rpcCalls[0].args[0]).toBe("update_daily_usage_summary");
-    });
-
-    it("keeps the icon off the per-tick row and sends it to the summary", async () => {
-      mockResult({ data: { id: "log-1" }, error: null });
-
-      await logUsage("user-1", "VS Code", "main.ts", null, null, "data:icon");
-
-      const insertArg = getCallsFor("insert")[0].args[0];
-      expect(insertArg).not.toHaveProperty("icon_url");
-      const rpcArgs = getCallsFor("rpc")[0].args[1];
-      expect(rpcArgs.p_icon_url).toBe("data:icon");
-    });
-
-    it("files the summary under the local day, not the UTC day", async () => {
-      const originalTZ = process.env.TZ;
-      process.env.TZ = "Europe/Athens"; // UTC+3 in October
-      try {
-        mockResult({ data: { id: "log-1" }, error: null });
-
-        // 00:30 local on Oct 14 = 21:30 UTC on Oct 13
-        await logUsage(
-          "user-1",
-          "VS Code",
-          "main.ts",
-          null,
-          null,
-          null,
-          10,
-          "2026-10-13T21:30:00.000Z",
-        );
-
-        const rpcArgs = getCallsFor("rpc")[0].args[1];
-        expect(rpcArgs.p_date).toBe("2026-10-14");
-      } finally {
-        process.env.TZ = originalTZ;
-      }
-    });
-
-    it("throws if insert fails", async () => {
-      mockResult({ data: null, error: { message: "Insert failed" } });
-
-      await expect(logUsage("user-1", "VS Code", "main.ts")).rejects.toEqual({
-        message: "Insert failed",
-      });
-    });
-
-    it("does NOT throw if RPC summary update fails", async () => {
-      // Insert succeeds
-      mockResult({ data: { id: "log-1" }, error: null });
-
-      // The RPC can fail without affecting the result
-      // (logUsage catches RPC errors silently)
-      const result = await logUsage("user-1", "VS Code", "main.ts");
-      expect(result).toEqual({ id: "log-1" });
-    });
   });
 
   // ───────────── getUsageSummary ─────────────
@@ -206,71 +117,25 @@ describe("usageLogs", () => {
     });
   });
 
-  describe("category writes (C5)", () => {
-    it("stores the category on the log row and in the summary", async () => {
-      mockResult({ data: null, error: null });
-      await insertUsageLogs([
-        { userId: "u", appName: "Chrome", windowTitle: "t", language: null, languageExtension: null, category: "docs", timestamp: "2025-01-15T10:00:00Z" },
-      ]);
-      expect(getCallsFor("insert")[0].args[0][0]).toMatchObject({ category: "docs" });
+  describe("addUsageToDailySummary", () => {
+    it("throws when the RPC fails", async () => {
+      mockResult({ data: null, error: { message: "rpc failed" } });
+      await expect(
+        addUsageToDailySummary({
+          userId: "u", date: "2025-01-15", appName: "VS Code", language: null, languageExtension: null, icon: null, seconds: 10,
+        }),
+      ).rejects.toEqual({ message: "rpc failed" });
+    });
 
+    it("sends the local day, icon and category (C5) to the summary", async () => {
+      mockResult({ data: null, error: null });
       await addUsageToDailySummary({
         userId: "u", date: "2025-01-15", appName: "Chrome", language: null, languageExtension: null, category: "docs", icon: null, seconds: 10,
       });
-      expect(getCallsFor("rpc").at(-1)?.args[1]).toMatchObject({ p_category: "docs" });
-    });
-  });
-
-  // ───────────── getUsageLogs ─────────────
-  describe("getUsageLogs", () => {
-    it("returns mapped log entries for a date", async () => {
-      mockResult({
-        data: [
-          {
-            id: "l1",
-            app_name: "VS Code",
-            window_title: "test.ts",
-            icon_url: "icon.png",
-            language_extension: ".ts",
-            timestamp: "2025-01-15T10:00:00.000Z",
-          },
-        ],
-        error: null,
-      });
-
-      const result = await getUsageLogs("user-1", "2025-01-15");
-
-      expect(result).toHaveLength(1);
-      expect(result[0].app).toBe("VS Code");
-      expect(result[0].title).toBe("test.ts");
-      expect(result[0].lang_ext).toBe(".ts");
-    });
-
-    it("applies app and language filters", async () => {
-      mockResult({ data: [], error: null });
-
-      await getUsageLogs("user-1", "2025-01-15", {
-        app: "VS Code",
-        language: "TypeScript",
-      });
-
-      const eqCalls = getCallsFor("eq");
-      expect(eqCalls.some((c) => c.args[0] === "app_name")).toBe(true);
-      expect(eqCalls.some((c) => c.args[0] === "language")).toBe(true);
-    });
-
-    it("applies limit and offset", async () => {
-      mockResult({ data: [], error: null });
-
-      await getUsageLogs("user-1", "2025-01-15", {
-        limit: 50,
-        offset: 100,
-      });
-
-      const limitCalls = getCallsFor("limit");
-      expect(limitCalls[0].args[0]).toBe(50);
-      const rangeCalls = getCallsFor("range");
-      expect(rangeCalls[0].args).toEqual([100, 149]);
+      expect(getCallsFor("rpc").at(-1)?.args).toEqual([
+        "update_daily_usage_summary",
+        expect.objectContaining({ p_date: "2025-01-15", p_category: "docs", p_icon_url: null, p_time_spent_seconds: 10 }),
+      ]);
     });
   });
 
@@ -390,63 +255,44 @@ describe("usageLogs", () => {
 
   // ───────────── getUsageDetailsForAppDate ─────────────
   describe("getUsageDetailsForAppDate", () => {
-    it("queries usage_logs for a specific app on a date", async () => {
+    it("reads one app's summary rows for a day, per language/category", async () => {
       mockResult({
         data: [
-          {
-            id: "l1",
-            app_name: "VS Code",
-            window_title: "index.ts",
-            timestamp: "2025-01-15T10:00:00Z",
-          },
+          { language: null, language_extension: null, category: "docs", time_spent_seconds: 120 },
+          { language: null, language_extension: null, category: null, time_spent_seconds: 30 },
         ],
         error: null,
       });
 
-      const result = await getUsageDetailsForAppDate(
-        "user-1",
-        "VS Code",
-        "2025-01-15",
-      );
+      const result = await getUsageDetailsForAppDate("user-1", "Chrome", "2025-01-15");
 
-      expect(result).toHaveLength(1);
-      expect(result[0].app).toBe("VS Code");
-      const eqCalls = getCallsFor("eq");
-      expect(eqCalls.some((c) => c.args[0] === "app_name")).toBe(true);
+      expect(result).toEqual([
+        { language: null, language_extension: null, category: "docs", seconds: 120 },
+        { language: null, language_extension: null, category: null, seconds: 30 },
+      ]);
+      expect(getCallsFor("from")[0].args[0]).toBe("daily_usage_summary");
+      const eqCalls = getCallsFor("eq").map((c) => c.args);
+      expect(eqCalls).toContainEqual(["user_id", "user-1"]);
+      expect(eqCalls).toContainEqual(["app_name", "Chrome"]);
+      expect(eqCalls).toContainEqual(["date", "2025-01-15"]);
     });
   });
 
   // ───────────── getUsageDetailsForSession ─────────────
   describe("getUsageDetailsForSession", () => {
-    it("fetches session range then queries usage_logs", async () => {
-      // First: get session
+    it("returns the user's session with its app usage", async () => {
+      const appUsage = [{ app: "VS Code", language: "TypeScript", category: null, seconds: 600 }];
       mockResult({
-        data: {
-          start_time: "2025-01-15T10:00:00.000Z",
-          duration: 3600,
-        },
-        error: null,
-      });
-      // Then: get usage logs in that range
-      mockResult({
-        data: [
-          {
-            app_name: "VS Code",
-            window_title: "test.ts",
-            timestamp: "2025-01-15T10:30:00.000Z",
-          },
-        ],
+        data: { id: "session-1", start_time: "2025-01-15T10:00:00.000Z", duration: 3600, app_usage: appUsage },
         error: null,
       });
 
       const result = await getUsageDetailsForSession("user-1", "session-1");
 
-      expect(result.session).toMatchObject({ duration: 3600 });
-      expect(result.usage).toHaveLength(1);
-      expect(result.usage[0]).toMatchObject({ app: "VS Code", title: "test.ts" });
-      const fromCalls = getCallsFor("from");
-      expect(fromCalls[0].args[0]).toBe("time_tracking_sessions");
-      expect(fromCalls[1].args[0]).toBe("usage_logs");
+      expect(result.session).toMatchObject({ duration: 3600, app_usage: appUsage });
+      expect(getCallsFor("from").map((c) => c.args[0])).toEqual(["time_tracking_sessions"]);
+      expect(getCallsFor("select")[0].args[0]).toContain("app_usage");
+      expect(getCallsFor("eq").map((c) => c.args)).toContainEqual(["user_id", "user-1"]);
     });
 
     it("throws when session not found", async () => {

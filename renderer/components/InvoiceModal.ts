@@ -9,12 +9,15 @@ import {
   formatDate,
 } from "../utils/invoiceUtils";
 import type { InvoiceCustomization } from "../utils/invoiceUtils";
+import { formatMoney, formatRate, normalizeCurrency } from "../../shared/currency";
 
 /** A project with billable work in the range (get-projects-for-invoice) */
 interface InvoiceProject {
   projectId: string;
   projectName: string;
   hourlyRate: number;
+  /** Currency of the rate; an invoice holds one currency */
+  currency?: string;
   totalSessions: number;
   /** Reported AI agent cost in the range (C6) */
   agentCostUsd?: number;
@@ -224,9 +227,15 @@ export async function showInvoiceGenerationModal(
       return;
     }
 
+    // Preselect the given project, or every project in the first one's
+    // currency (an invoice holds one currency)
+    const first = initial ? projects.get(initial) : list[0];
+    const startCurrency = first ? currencyOf(first) : null;
     projectsList.innerHTML = list
       .map((p) => {
-        const checked = !initial || p.projectId === initial;
+        const checked = initial
+          ? p.projectId === initial
+          : currencyOf(p) === startCurrency;
         if (checked) selected.add(p.projectId);
         const agent =
           (p.agentCostUsd ?? 0) > 0 ? ` · ${agentCostText(p)} AI agents` : "";
@@ -235,7 +244,7 @@ export async function showInvoiceGenerationModal(
             <input type="checkbox" class="invoice-project-select" data-project-id="${escapeHtml(p.projectId)}" ${checked ? "checked" : ""} />
             <span class="invoice-project-info">
               <span class="invoice-project-name">${escapeHtml(p.projectName)}</span>
-              <span class="invoice-project-details">${escapeHtml(`${p.totalSessions} billable session(s) - $${p.hourlyRate}/hr${agent}`)}</span>
+              <span class="invoice-project-details">${escapeHtml(`${p.totalSessions} billable session(s) - ${formatRate(p.hourlyRate, currencyOf(p))}${agent}`)}</span>
             </span>
           </label>`;
       })
@@ -255,9 +264,39 @@ export async function showInvoiceGenerationModal(
     updateSummary();
   }
 
-  /** "$12.30", or "$12.30+" when some sessions reported no cost */
+  function currencyOf(p: InvoiceProject): string {
+    return normalizeCurrency(p.currency);
+  }
+
+  /** The chosen projects' currency (null when none is chosen). */
+  function invoiceCurrency(): string | null {
+    const chosen = selectedProjects();
+    return chosen.length ? currencyOf(chosen[0]) : null;
+  }
+
+  /** Projects in another currency than the chosen ones can't be added. */
+  function lockOtherCurrencies(currency: string | null) {
+    document
+      .querySelectorAll<HTMLInputElement>(".invoice-project-select")
+      .forEach((input) => {
+        const p = projects.get(input.dataset.projectId!);
+        const other = !!currency && !!p && currencyOf(p) !== currency;
+        input.disabled = other && !input.checked;
+        const label = input.closest(".invoice-project-label");
+        if (input.disabled && p) {
+          label?.setAttribute(
+            "title",
+            `In ${currencyOf(p)}: invoice it separately (this invoice is in ${currency})`,
+          );
+        } else {
+          label?.removeAttribute("title");
+        }
+      });
+  }
+
+  /** "$12.30", or "$12.30+" when some sessions reported no cost (USD) */
   function agentCostText(p: InvoiceProject): string {
-    return `$${(p.agentCostUsd ?? 0).toFixed(2)}${p.agentCostIncomplete ? "+" : ""}`;
+    return `${formatMoney(p.agentCostUsd ?? 0, "USD")}${p.agentCostIncomplete ? "+" : ""}`;
   }
 
   function selectedProjects(): InvoiceProject[] {
@@ -269,7 +308,7 @@ export async function showInvoiceGenerationModal(
     const box = document.getElementById(
       "invoice-include-agent-cost",
     ) as HTMLInputElement | null;
-    return !!row && !row.hidden && !!box?.checked;
+    return !!row && !row.hidden && !!box?.checked && !box.disabled;
   }
 
   function updateSummary() {
@@ -278,20 +317,30 @@ export async function showInvoiceGenerationModal(
       "generate-invoice-btn",
     ) as HTMLButtonElement;
     const chosen = selectedProjects();
+    const currency = invoiceCurrency();
+    lockOtherCurrencies(currency);
 
-    // The agent-cost option shows only when a chosen project has some
+    // The agent-cost option shows only when a chosen project has some;
+    // agents report USD, so it can only go on a USD invoice
     const withAgentCost = chosen.filter((p) => (p.agentCostUsd ?? 0) > 0);
     const agentRow = document.getElementById("invoice-agent-cost-row")!;
     agentRow.hidden = withAgentCost.length === 0;
+    const agentBox = document.getElementById(
+      "invoice-include-agent-cost",
+    ) as HTMLInputElement;
+    agentBox.disabled = currency !== "USD";
     const agentTotal = withAgentCost.reduce(
       (sum, p) => sum + (p.agentCostUsd ?? 0),
       0,
     );
     const incomplete = withAgentCost.some((p) => p.agentCostIncomplete);
     document.getElementById("invoice-agent-cost-note")!.textContent =
-      `$${agentTotal.toFixed(2)} reported by Claude Code / Codex in this range, billed at cost.` +
+      `${formatMoney(agentTotal, "USD")} reported by Claude Code / Codex in this range, billed at cost.` +
       (incomplete
         ? " Some sessions reported no cost; only reported costs are added."
+        : "") +
+      (agentBox.disabled
+        ? ` Agent costs are in USD, so they can only go on a USD invoice (this one is in ${currency}).`
         : "");
 
     if (chosen.length === 0) {
@@ -306,12 +355,12 @@ export async function showInvoiceGenerationModal(
       .map((p) => {
         const agent =
           withAgents && (p.agentCostUsd ?? 0) > 0
-            ? ` + $${(p.agentCostUsd ?? 0).toFixed(2)} AI agents`
+            ? ` + ${formatMoney(p.agentCostUsd ?? 0, "USD")} AI agents`
             : "";
-        return `<li>${escapeHtml(`${p.projectName} (${p.totalSessions} sessions) - $${p.hourlyRate}/hr${agent}`)}</li>`;
+        return `<li>${escapeHtml(`${p.projectName} (${p.totalSessions} sessions) - ${formatRate(p.hourlyRate, currencyOf(p))}${agent}`)}</li>`;
       })
       .join("");
-    summaryDiv.innerHTML = `<p style="margin: 0 0 8px 0; color: var(--text-primary); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Selected Projects:</p><ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 12px;">${items}</ul>`;
+    summaryDiv.innerHTML = `<p style="margin: 0 0 8px 0; color: var(--text-primary); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Selected Projects (${escapeHtml(currency ?? "")}):</p><ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 12px;">${items}</ul>`;
     generateBtn.disabled = false;
   }
 
@@ -361,6 +410,7 @@ export async function showInvoiceGenerationModal(
         projectId: project.projectId,
         projectName: project.projectName,
         hourlyRate: Number(project.hourlyRate) || 0,
+        currency: currencyOf(project),
         billableSessions: (billableSessions as any[]).filter(
           (s: any) => s.project_id === project.projectId,
         ),

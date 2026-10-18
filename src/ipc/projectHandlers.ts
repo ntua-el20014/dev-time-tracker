@@ -3,6 +3,8 @@ import * as cloudProjects from "../supabase/cloudProjects";
 import { getCurrentUser } from "../supabase/api";
 import { getCurrentOrganization } from "../supabase/organizations";
 import { getProjectActivity } from "../supabase/projectActivity";
+import { getDefaultCurrency } from "../supabase/userPreferences";
+import { DEFAULT_CURRENCY, isCurrencyCode } from "../../shared/currency";
 import type {
   CreateCloudProjectData,
   UpdateCloudProjectData,
@@ -36,6 +38,7 @@ ipcMain.handle(
     hourlyRate?: number | null,
     scope: "personal" | "organization" = "personal",
     billSupervising?: unknown,
+    currency?: unknown,
   ) => {
     try {
       const user = await getCurrentUser();
@@ -48,6 +51,10 @@ ipcMain.handle(
         description,
         color,
         hourly_rate: hourlyRate ?? null,
+        // The user's default unless the form chose one
+        currency: isCurrencyCode(currency)
+          ? currency
+          : await getDefaultCurrency(user.id).catch(() => DEFAULT_CURRENCY),
         scope: scope === "organization" ? "organization" : "personal",
       };
       if (typeof billSupervising === "boolean") {
@@ -217,6 +224,7 @@ ipcMain.handle(
     color: string,
     hourlyRate?: number | null,
     billSupervising?: unknown,
+    currency?: unknown,
   ) => {
     try {
       const projectId = String(id);
@@ -228,6 +236,9 @@ ipcMain.handle(
       };
       if (typeof billSupervising === "boolean") {
         updates.bill_supervising = billSupervising;
+      }
+      if (isCurrencyCode(currency)) {
+        updates.currency = currency;
       }
 
       return await cloudProjects.updateCloudProject(projectId, updates);

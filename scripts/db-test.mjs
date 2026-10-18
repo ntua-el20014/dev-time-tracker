@@ -141,12 +141,51 @@ async function runScenario(label) {
   );
   check("cannot insert sessions for another user", !!err, err ?? "");
 
-  // ── Usage logs & daily summary ──
-  const log = await one(
-    `INSERT INTO usage_logs (user_id, org_id, app_name, timestamp) VALUES ($1, $2, 'Chrome', NOW()) RETURNING org_id`,
-    [A, orgB],
+  // ── Sessions: app usage, drafts (Phase D) ──
+  check(
+    "there is no per-sample usage_logs table",
+    (await one(`SELECT to_regclass('public.usage_logs') AS t`)).t === null,
   );
-  check("usage log org_id comes from the user", log.org_id === orgA);
+  const withUsage = await one(
+    `INSERT INTO time_tracking_sessions (user_id, start_time, duration, app_usage)
+     VALUES ($1, NOW(), 60, '[{"app":"VS Code","language":"TypeScript","category":null,"seconds":60}]')
+     RETURNING app_usage, status, source`,
+    [A],
+  );
+  check(
+    "sessions store app usage and default to confirmed manual",
+    withUsage.app_usage[0]?.seconds === 60 && withUsage.status === "confirmed" && withUsage.source === "manual",
+  );
+  err = await fails(
+    `INSERT INTO time_tracking_sessions (user_id, start_time, duration, app_usage) VALUES ($1, NOW(), 60, '{}')`,
+    [A],
+  );
+  check("app_usage must be an array", !!err, err ?? "");
+  err = await fails(
+    `INSERT INTO time_tracking_sessions (user_id, start_time, duration, status, is_billable) VALUES ($1, NOW(), 60, 'draft', true)`,
+    [A],
+  );
+  check("a draft can't be billable", !!err, err ?? "");
+  const clientId = "00000000-0000-4000-8000-00000000d001";
+  const upsertDraft = (duration) =>
+    db.query(
+      `INSERT INTO time_tracking_sessions (user_id, start_time, duration, status, source, client_id)
+       VALUES ($1, '2026-10-14T08:00:00Z', $2, 'draft', 'auto', $3)
+       ON CONFLICT (user_id, client_id) DO UPDATE SET duration = EXCLUDED.duration`,
+      [A, duration, clientId],
+    );
+  await upsertDraft(300);
+  await upsertDraft(900);
+  const drafts = await rows(`SELECT duration FROM time_tracking_sessions WHERE client_id = $1`, [clientId]);
+  check("a growing segment upserts one row by client_id", drafts.length === 1 && drafts[0].duration === 900);
+  err = await fails(
+    `UPDATE time_tracking_sessions SET status = 'confirmed', is_billable = true WHERE client_id = $1`,
+    [clientId],
+  );
+  check("a confirmed draft can become billable", !err, err ?? "");
+  await db.query(`DELETE FROM time_tracking_sessions WHERE client_id = $1 OR app_usage <> '[]'`, [clientId]);
+
+  // ── Daily usage summary ──
   for (let i = 0; i < 3; i++) {
     await db.query(
       `SELECT update_daily_usage_summary($1, '2026-10-14', 'Chrome', NULL, NULL, $2, 10)`,
@@ -171,11 +210,6 @@ async function runScenario(label) {
     cats.length === 2 && cats[0].time_spent_seconds === 30 && cats[1].category === "code-review" && cats[1].time_spent_seconds === 20,
     JSON.stringify(cats),
   );
-  const catLog = await one(
-    `INSERT INTO usage_logs (user_id, app_name, category, timestamp) VALUES ($1, 'Chrome', 'docs', NOW()) RETURNING category`,
-    [A],
-  );
-  check("usage logs store a category", catLog.category === "docs");
   err = await fails(
     `SELECT update_daily_usage_summary($1, '2026-10-14', 'Chrome', NULL, NULL, NULL, 10)`,
     [B],
@@ -261,6 +295,14 @@ async function runScenario(label) {
     [orgA, A],
   );
   check("admin creates an org project with an hourly rate", !!proj.id);
+  check(
+    "projects default to USD",
+    (await one(`SELECT currency FROM cloud_projects WHERE id = $1`, [proj.id])).currency === "USD",
+  );
+  err = await fails(`UPDATE cloud_projects SET currency = 'eur' WHERE id = $1`, [proj.id]);
+  check("currency must be an ISO 4217 code", !!err, err ?? "");
+  err = await fails(`UPDATE user_preferences SET currency = 'EUR' WHERE user_id = $1`, [A]);
+  check("a user can set a default currency", !err, err ?? "");
   err = await fails(`UPDATE cloud_projects SET org_id = $1 WHERE id = $2`, [orgB, proj.id]);
   check("project can't be moved to another org", !!err, err ?? "");
   await as(C);
@@ -301,6 +343,12 @@ async function runScenario(label) {
   const member = await one(`SELECT * FROM get_org_member_activity($1, '2026-11-15', '2026-11-15', NULL, NULL, true, 'Europe/Athens')`, [orgA]);
   check("top projects and member activity agree", Number(top?.total_hours) === 0.5 && Number(member?.total_hours) === 0.5, JSON.stringify({ top: top?.total_hours, member: member?.total_hours }));
   await db.query(`UPDATE cloud_projects SET bill_supervising = true WHERE id = $1`, [proj.id]);
+  await db.query(
+    `INSERT INTO time_tracking_sessions (user_id, project_id, start_time, duration, status, source)
+     VALUES ($1, $2, '2026-11-15T09:00:00Z', 3600, 'draft', 'auto')`,
+    [A, proj.id],
+  );
+  check("team analytics leave out drafts", (await dayIn("Europe/Athens")) === 1);
 
   // ── Supervising time ──
   check(

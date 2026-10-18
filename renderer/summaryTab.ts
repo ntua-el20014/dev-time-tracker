@@ -41,10 +41,8 @@ export async function renderSummary() {
 
   summaryDiv.innerHTML = "";
 
-  if (!summaryState.allDailyData || summaryState.allDailyData.length === 0) {
-    summaryDiv.innerHTML = "<p>No summary data available.</p>";
-    return;
-  }
+  // No app usage yet doesn't mean no sessions: render the views anyway
+  summaryState.allDailyData ||= [];
 
   // --- Weekly Timeline Chart (always unfiltered) ---
   const weeklySummaryContainer = document.createElement("div");

@@ -1,109 +1,4 @@
 import { supabase } from "./config";
-import type { Database } from "../types/database.types";
-import {
-  toLocalDateString,
-  localDayStartISO,
-  localDayEndISO,
-} from "../utils/timeFormat";
-
-type UsageLogsInsert = Database["public"]["Tables"]["usage_logs"]["Insert"];
-
-/**
- * Log usage activity for an application.
- *
- * `iconUrl` (a data URL) is only written to the daily summary row, never to
- * the per-tick usage_logs row. Callers should pass it once per app/day and
- * null afterwards — the summary keeps the existing icon when given null.
- */
-export async function logUsage(
-  userId: string,
-  appName: string,
-  windowTitle: string,
-  language?: string | null,
-  languageExtension?: string | null,
-  iconUrl?: string | null,
-  intervalSeconds: number = 1,
-  timestamp?: string,
-  category?: string | null,
-) {
-  const logTime = timestamp || new Date().toISOString();
-  const date = toLocalDateString(logTime); // user's local calendar day
-
-  const usageData: UsageLogsInsert = {
-    user_id: userId,
-    app_name: appName,
-    window_title: windowTitle,
-    language: language || null,
-    language_extension: languageExtension || null,
-    category: category || null,
-    timestamp: logTime,
-  };
-
-  // 1. Insert usage log
-  const { data, error } = await supabase
-    .from("usage_logs")
-    .insert(usageData as any)
-    .select()
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  // 2. Update daily summary using the database function
-  const { error: summaryError } = await (supabase as any).rpc(
-    "update_daily_usage_summary",
-    {
-      p_user_id: userId,
-      p_date: date,
-      p_app_name: appName,
-      p_language: language || null,
-      p_language_extension: languageExtension || null,
-      p_icon_url: iconUrl || null,
-      p_time_spent_seconds: intervalSeconds,
-      p_category: category || null,
-    },
-  );
-
-  if (summaryError) {
-    // Don't throw - usage log was saved successfully
-    // Summary will be updated on next request or can be recalculated
-  }
-
-  return data;
-}
-
-/**
- * Insert many usage_logs rows in one request (used by the tracking batcher).
- * Icons are not stored per row; see addUsageToDailySummary.
- */
-export async function insertUsageLogs(
-  records: Array<{
-    userId: string;
-    appName: string;
-    windowTitle: string;
-    language: string | null;
-    languageExtension: string | null;
-    category?: string | null;
-    timestamp: string;
-  }>,
-) {
-  if (records.length === 0) return;
-  const rows: UsageLogsInsert[] = records.map((r) => ({
-    user_id: r.userId,
-    app_name: r.appName,
-    window_title: r.windowTitle,
-    language: r.language || null,
-    language_extension: r.languageExtension || null,
-    category: r.category || null,
-    timestamp: r.timestamp,
-  }));
-
-  const { error } = await supabase.from("usage_logs").insert(rows as any);
-  if (error) {
-    throw error;
-  }
-}
 
 /**
  * Add time to one daily_usage_summary row (upsert). Throws on error.
@@ -252,56 +147,6 @@ export async function getBrowserUsage(
 }
 
 /**
- * Get raw usage logs for a specific date with optional filters
- */
-export async function getUsageLogs(
-  userId: string,
-  date: string,
-  filters?: {
-    app?: string;
-    language?: string;
-    limit?: number;
-    offset?: number;
-  },
-) {
-  const startOfDay = localDayStartISO(date);
-  const endOfDay = localDayEndISO(date);
-
-  let query = supabase
-    .from("usage_logs")
-    .select(
-      "app_name, window_title, language, language_extension, timestamp",
-    )
-    .eq("user_id", userId)
-    .gte("timestamp", startOfDay)
-    .lte("timestamp", endOfDay)
-    .order("timestamp", { ascending: false });
-
-  if (filters?.app) {
-    query = query.eq("app_name", filters.app);
-  }
-  if (filters?.language) {
-    query = query.eq("language", filters.language);
-  }
-  if (filters?.limit) {
-    query = query.limit(filters.limit);
-  }
-  if (filters?.offset) {
-    query = query.range(
-      filters.offset,
-      filters.offset + (filters.limit || 100) - 1,
-    );
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    throw error;
-  }
-  return (data || []).map(mapUsageLogRow);
-}
-
-/**
  * Get daily summaries across date range with optional filters
  */
 export async function getDailySummary(
@@ -417,104 +262,66 @@ export async function getLanguageUsage(userId: string) {
     .sort((a, b) => b.total_time - a.total_time);
 }
 
-/**
- * Helper to map raw usage_logs rows to the shape the renderer expects.
- * DB columns: app_name, window_title, icon_url, language_extension, timestamp
- * Renderer expects: app, title, icon, lang_ext, time
- */
-function mapUsageLogRow(row: any) {
-  const ts = row.timestamp ? new Date(row.timestamp) : null;
-  return {
-    ...row,
-    app: row.app_name ?? row.app,
-    title: row.window_title ?? row.title,
-    icon: row.icon_url ?? row.icon,
-    lang_ext: row.language_extension ?? row.lang_ext,
-    time: ts
-      ? ts.toLocaleTimeString(undefined, {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        })
-      : "",
-  };
+export interface AppDayUsage {
+  language: string | null;
+  language_extension: string | null;
+  /** Browser category (C5); null = unclassified */
+  category: string | null;
+  seconds: number;
 }
 
 /**
- * Get detailed usage for a specific app on a specific date
+ * One app's time on a local day, per language and browser category, most
+ * first (from daily_usage_summary).
  */
 export async function getUsageDetailsForAppDate(
   userId: string,
   app: string,
   date: string,
-) {
-  const startOfDay = localDayStartISO(date);
-  const endOfDay = localDayEndISO(date);
-
+): Promise<AppDayUsage[]> {
   const { data, error } = await supabase
-    .from("usage_logs")
-    .select(
-      "app_name, window_title, language, language_extension, timestamp",
-    )
+    .from("daily_usage_summary")
+    .select("language, language_extension, category, time_spent_seconds")
     .eq("user_id", userId)
     .eq("app_name", app)
-    .gte("timestamp", startOfDay)
-    .lte("timestamp", endOfDay)
-    .order("timestamp", { ascending: false });
+    .eq("date", date)
+    .order("time_spent_seconds", { ascending: false });
 
   if (error) {
     throw error;
   }
-  return (data || []).map(mapUsageLogRow);
+  return (data || []).map((r: any) => ({
+    language: r.language ?? null,
+    language_extension: r.language_extension ?? null,
+    category: r.category ?? null,
+    seconds: r.time_spent_seconds || 0,
+  }));
 }
 
 /**
- * A session and the usage logged during it: { session, usage }. Usage is
- * found by the session's time range (usage_logs.session_id isn't written).
+ * A session with what it was spent on: { session }, where session.app_usage
+ * is the foreground time per app/language/category.
  */
 export async function getUsageDetailsForSession(
   userId: string,
   sessionId: string,
 ) {
-  // First get the session time range
-  const { data: session, error: sessionError } = await supabase
+  const { data: session, error } = await supabase
     .from("time_tracking_sessions")
     .select(
-      "id, title, description, start_time, end_time, duration, supervising_seconds, code_stats",
+      "id, title, description, start_time, end_time, duration, supervising_seconds, code_stats, app_usage",
     )
     .eq("id", sessionId)
     .eq("user_id", userId)
     .single();
 
-  if (sessionError) {
-    throw sessionError;
+  if (error) {
+    throw error;
   }
   if (!session) {
     throw new Error("Session not found");
   }
-
-  const startTime = (session as any).start_time;
-  const duration = (session as any).duration || 0;
-  // end_time is the wall-clock end (includes pauses); older sessions lack it,
-  // so fall back to start + active duration.
-  const endTime =
-    (session as any).end_time ||
-    new Date(new Date(startTime).getTime() + duration * 1000).toISOString();
-
-  const { data, error } = await supabase
-    .from("usage_logs")
-    .select(
-      "app_name, window_title, language, language_extension, timestamp",
-    )
-    .eq("user_id", userId)
-    .gte("timestamp", startTime)
-    .lte("timestamp", endTime)
-    .order("timestamp", { ascending: false });
-
-  if (error) {
-    throw error;
-  }
-  return { session, usage: (data || []).map(mapUsageLogRow) };
+  return { session };
 }
 
 /**

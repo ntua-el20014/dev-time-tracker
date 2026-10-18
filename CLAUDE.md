@@ -1,19 +1,19 @@
 # CLAUDE.md — Dev Time Tracker
 
 Guide for working in this repo: how the code is laid out, the conventions to follow, known problems, and the roadmap we agreed to work from.
-Written 2026-10-14 after a full read-through. Phase A (Part 4) has since been implemented; Part 2 describes the code as it was *before* Phase A. Line numbers will drift, so search by function name.
+Written 2026-10-14 after a full read-through, kept current since (last: 2026-10-18, before Phase D). Part 2 lists what that read-through found and where each item stands. Line numbers will drift, so search by function name.
 
 ---
 
 ## Part 1 — How the codebase works
 
 ### What it is
-An Electron 28 desktop app, written in TypeScript and bundled with webpack via Electron Forge. It records **sessions** (Start/Stop timer with pause) and, while a session is running, takes a sample of the **foreground window** every N seconds (default 10). Each sample stores app, window title, and a language guessed from the file extension in the title. All data lives in **Supabase** (Postgres + Auth + RLS); there is no local database. Built on top of that: goals, scheduled sessions, tags, projects, organizations with roles, billable hours, PDF invoices, standup summaries, team analytics, an offline queue, Sentry, and an auto-updater.
+An Electron 28 desktop app, written in TypeScript and bundled with webpack via Electron Forge. It records **sessions** (Start/Stop timer with pause) and, while a session is running, takes a sample of the **foreground window** every N seconds (default 10). Each sample yields app, language (guessed from the file extension in the window title) and, for browsers, a page type; only time totals per app/language/page type are uploaded (per local day and per session), never titles or URLs. All data lives in **Supabase** (Postgres + Auth + RLS); there is no local database. Built on top of that: goals, scheduled sessions, tags, projects, organizations with roles, billable hours, PDF invoices, standup summaries, team analytics, an offline queue, Sentry, an auto-updater, and per-project currencies.
 
 ### Commands
 ```
 npm start                 # dev (electron-forge start, webpack HMR)
-npm test                  # vitest (~300 tests, mocked Supabase — ~10s)
+npm test                  # vitest (~600 tests, mocked Supabase — ~15s)
 npm run type-check        # main + renderer tsconfigs
 npm run lint              # eslint
 npm run make              # installers
@@ -21,7 +21,7 @@ npm run test:db           # database/schema.sql + reset.sql in PGlite (no Supaba
 npm run test:smoke        # packaged app, isolated profile, over CDP (run `npm run package` first)
 npm run test:e2e          # packaged app vs real Supabase, 2 test accounts from .env.local
 ```
-Baseline as of 2026-10-14: tests, type-check and lint are all green. Keep them green.
+Baseline as of 2026-10-18: tests, type-check, lint and test:db are all green. Keep them green.
 
 ### Processes and the boundary between them
 ```
@@ -58,7 +58,7 @@ Supabase (RLS enforces per-user / per-org access)
 | `usageSampler.ts` | Foreground window (x-win) → `{appName, windowTitle, language, languageExtension, icon, category}` (`category`: browsers only, C5 below). Matches `execName` against `assets/known_editors.json` plus per-user `custom-apps-<uid>.json`; **unknown apps are dropped**. Language comes from `getLanguageDataFromTitle()` (`src/utils/extractData.ts`). |
 | `workspaceHints.ts` / `repoResolver.ts` / `projectAttribution.ts` | C1, see "Project detection" below. |
 | `codeStats.ts` | C2, see "Code stats" below. |
-| `usageBatcher.ts` | Buffers ticks; every 60s (and on pause/stop/sign-out/quit) does **one INSERT** into `usage_logs` plus one `update_daily_usage_summary` RPC per (local day, app, language). Network failure → offline queue. Icons are sent once per summary row. The Today tab refreshes on each flush (`window-tracked`). |
+| `usageBatcher.ts` | Buffers ticks; every 60s (and on pause/stop/sign-out/quit) does one `update_daily_usage_summary` RPC per (local day, app, language, page type). Nothing per tick is uploaded. A network failure queues that increment and the rest of the flush offline (`usage_summary` items). Icons are sent once per summary row. The Today tab refreshes on each flush (`window-tracked`). The tracker also adds every sample to the running session's `app_usage` (`shared/appUsage.ts`, ≤ 200 entries), saved with the session. |
 
 **Project detection (C1)** runs every 5 s in main, also outside sessions (not in incognito), and nothing leaves the machine except the links the user creates:
 - `workspaceHints.ts` (pure): foreground title → hint. VS Code/Cursor/Windsurf/VSCodium: folder or `(Workspace)` name, last title segment first, then the one before it (profiles). JetBrains: project name before the en dash. Anything else that isn't a browser: an absolute path in the title (PowerShell, Git Bash, `~/…`).
@@ -89,7 +89,7 @@ Supabase (RLS enforces per-user / per-org access)
 **Browser categories (C5)** — `shared/browserCategories.ts` (pure): what a browser page was for: `code-review`, `code`, `issues`, `ci-deploy`, `docs`, `ai-chat`, `q-and-a`, `local-dev`, `communication`, or null ("Other browsing").
 - **Title first:** the browser's suffix is stripped (Edge: also its profile name and "and N more pages"), then ordered patterns (GitHub/GitLab PR and issue titles, "· GitHub", "- Claude", "| MDN", "- Stack Overflow", "localhost:3000/…", …). Google Docs/Sheets/Slides and Office never count as docs.
 - **URL only when the title says nothing** (host + path rules: forges by path, AI chat, Q&A, issue trackers, CI/cloud consoles, docs hosts or `/docs` paths, private/local hosts). x-win's `url` blocks for 20–90 ms per read and doesn't work for every browser (this machine's Opera reports "Opera Internet Browser" and always gets ""), so the sampler stops asking a browser after 5 empty reads that never once worked (`URL_GIVE_UP_AFTER`). Not on Linux.
-- Stored as `category` on `usage_logs` and as part of the `daily_usage_summary` key (`p_category`), also through the offline queue. Only the category; never the URL. The window title is still uploaded raw (problem #13).
+- Stored as part of the `daily_usage_summary` key (`p_category`) and in the session's `app_usage`, also through the offline queue. Only the category; never the URL or the title.
 - UI: App activity shows "Code review 40m · Docs 30m · Other browsing 1h" under each browser; Insights has "Browser time" (30 days, `get-browser-usage`; browsers by name from the known/custom app lists, `getBrowserNames()`).
 
 **Code stats (C2)** — `codeStats.ts` (git through an injected runner; `tracker.ts` uses `execFile("git")`, 15 s per command, the whole collection gives up after 60 s, 5 s on quit):
@@ -100,43 +100,44 @@ Supabase (RLS enforces per-user / per-org access)
 
 **Project activity (C6)** — `shared/projectActivity.ts` (pure) sums, per project, the user's own sessions (time with input = duration − supervising, supervising time, code from `code_stats`) and their agent sessions (active time, reported `cost_usd`; a session without a cost makes the total a lower bound, shown as "$12.30+"). Agent time overlaps the user's time, so the two are shown side by side, never added. `src/supabase/projectActivity.ts` queries it (`get-project-activity`, local days) and gives agent totals per project to Billing and invoices. Only the user's own work, also on org projects.
 - Projects: each card has "Last 30 days": Your time (incl. supervising), AI agents (time · cost · sessions), Code (+/− · files · commits); the Statistics modal adds lines per language.
-- Billing: an "AI Agent Cost" total card and column when there is any (`agentCostUsd`/`agentCostIncomplete`/`agentSessions` per project, `totalAgentCostUsd`); a pass-through expense, **not** part of earnings. Projects where only agents worked get a row.
+- Billing: earnings in each project's currency, totals per currency; an "AI Agent Cost (USD)" total card and column when there is any (`agentCostUsd`/`agentCostIncomplete`/`agentSessions` per project, `totalAgentCostUsd`); a pass-through expense, **not** part of earnings. Projects where only agents worked get a row.
 - Invoices: `get-projects-for-invoice` returns each project's agent cost (and lists agent-only projects with a cost). The modal offers "Add AI agent costs as a line item" (off by default, shown only when a chosen project has a cost); the PDF then gets "AI coding agent usage (N sessions, at cost)" per project, in its subtotal. Only reported costs are added. Claude Code reports API-price cost, which isn't what a subscription user pays.
 
 Flows:
-- **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` with `{projectId}` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" with the chosen project + `session-info-timeout`), then saves with `end_time` and `code_stats` (collected while the prompt is open). The dialog preselects the project and, if it has an hourly rate, Billable.
+- **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` with `{projectId}` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" with the chosen project + `session-info-timeout`), then saves with `end_time`, `code_stats` (collected while the prompt is open) and `app_usage`. The dialog preselects the project and, if it has an hourly rate, Billable.
 - **Quit:** `hasUnsavedTrackingWork()` / `finalizeTrackingForQuit()` settle an open prompt, save a running or paused session, and flush usage.
 - **Tray:** calls the tracker directly.
-- **Batching tradeoff:** a crash loses at most ~60s of usage samples, never the session.
+- **Batching tradeoff:** a crash loses at most ~60s of usage totals, and the running session's `app_usage` with the session itself (it is only saved at Stop/quit).
 
 `daily_usage_summary` is keyed by `(user_id, date, app_name, language)` with NULLs not distinct; `date` is the user's **local** day.
 
 **Session time and usage time are two separate measurements and nothing reconciles them.**
 - Session `duration` is active time: wall-clock time between Start and Stop, minus pauses. `end_time` is the wall-clock end (set since Phase A; older rows have NULL).
-- Usage time is (number of samples where a *known* app was focused) × interval.
-- `usage_logs.session_id` exists in the schema but is never written. Session details are found by time range instead (`getUsageDetailsForSession`, which returns `{ session, usage }`).
+- Usage time is (number of samples where a *known* app was focused) × interval: per day in `daily_usage_summary`, per session in `time_tracking_sessions.app_usage` (`getUsageDetailsForSession` returns `{ session }` with it).
+- There is no per-sample table (`usage_logs` was dropped 2026-10-18). Details popups show totals: an app on a day per language/page type, a session per app.
 - Daily goals, dashboard "time today" and the language/editor charts read `daily_usage_summary` (usage time). Billing, invoices, standups and project stats read sessions.
 
 ### Data model (`database/schema.sql` — the whole database in one file; `database/README.md` explains setup, reset and the security model)
 Tables:
 - `organizations`, `user_profiles` (role: admin/manager/employee), `org_join_requests`, `org_invite_codes`
-- `cloud_projects` (scope personal|organization, `hourly_rate`), `project_members`, `project_repositories` (per-user repo → project links, C1), `agent_sessions` (C3)
-- `time_tracking_sessions` (`is_billable` NOT NULL; the trigger derives `duration` from `end_time` only when `duration` is NULL; `supervising_seconds`/`supervising_spans`, C4; `code_stats`, C2)
-- `usage_logs`, `daily_usage_summary` (both have `category`, C5; it is part of the summary's unique key and an optional last `p_category` of `update_daily_usage_summary`)
+- `cloud_projects` (scope personal|organization, `hourly_rate` + `currency`), `project_members`, `project_repositories` (per-user repo → project links, C1), `agent_sessions` (C3)
+- `time_tracking_sessions` (`is_billable` NOT NULL; the trigger derives `duration` from `end_time` only when `duration` is NULL; `supervising_seconds`/`supervising_spans`, C4; `code_stats`, C2; `app_usage`; Phase D: `status` draft|confirmed, `source` manual|auto, `client_id` with `UNIQUE(user_id, client_id)`, CHECK a draft is never billable)
+- `daily_usage_summary` (`category`, C5, is part of its unique key and an optional last `p_category` of `update_daily_usage_summary`). No per-sample table.
 - `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_work_sessions`, `scheduled_session_tags`
-- `user_preferences` (theme, accent JSON, editor_colors, notification_settings, idle_timeout_seconds, tracking interval)
+- `user_preferences` (theme, accent JSON, editor_colors, notification_settings, idle_timeout_seconds, tracking interval, default `currency`)
 
 A new user signup fires a trigger that creates a profile (unique username, suffixed if taken), a personal org, and preferences. Role helpers (`get_current_user_org_id`, `is_user_admin_or_manager`, …) are `SECURITY DEFINER` so RLS doesn't recurse.
 
 Server-side rules the app relies on:
 - `guard_user_profile_change()`: no self-promotion and no joining orgs by direct update; admins may only change non-admins' roles.
 - Removing a member is `remove_org_member()`; a direct UPDATE fails RLS once `org_id` becomes NULL.
-- `org_id` on sessions, usage logs and summaries is set by trigger from the profile and can't be chosen or changed by clients.
+- `org_id` on sessions, usage summaries and agent sessions is set by trigger from the profile and can't be chosen or changed by clients.
+- Team analytics (`get_org_*`) and `get_project_stats` count confirmed sessions only (drafts are Phase D's unconfirmed segments).
 - Lookup RPCs (`get_user_profile_by_id` etc.) only return yourself or your org.
 
 Local files:
 - `~/.dev-time-tracker/config.json`: legacy settings, no longer read by anything (safe to delete)
-- `~/.dev-time-tracker/offline-queue.json`: flushed only while signed in, and only the signed-in user's items
+- `~/.dev-time-tracker/offline-queue.json`: flushed only while signed in, and only the signed-in user's items. Item types: `session`, `usage_summary`, and legacy `usage_log` (older versions; replayed into the summary)
 - `userData/custom-apps-<uid>.json`
 - `userData/lang-<uid>.json`
 - `userData/auth-session.bin`: the Supabase session, encrypted with `safeStorage` (OS keychain / DPAPI). Chromium saves the encryption key in "Local State" about 10 s after the first launch on a machine; force-killing the app before that means one extra sign-in, nothing worse.
@@ -165,6 +166,7 @@ Local files:
 - **Strings into innerHTML:** always escape with `escapeHtml` from `renderer/utils/domUtils.ts`, in element content *and* attributes. Don't add another copy. `showConfirmationModal` and the notification sidebar escape their inputs themselves; pass plain text.
 - **Smoke-test a packaged build without touching the real install:** set `DTT_USER_DATA_DIR=<dir>` (separate profile, no protocol registration) and `SENTRY_DSN=` (an empty value disables Sentry), and point `USERPROFILE` at a scratch dir (offline queue).
 - **Data changes:** after mutating data, call `markTabsDirty(...)` for the tabs it affects and invalidate the relevant cache.
+- **Money has a currency.** Never hardcode `$`: format with `formatMoney` / `formatRate` from `shared/currency.ts` (`{ pdf: true }` in jsPDF, whose fonts lack ₹ ₩ ₪…), and keep totals per currency (`totalsByCurrency`; `EarningsSummary.earningsByCurrency`). A project's currency is `cloud_projects.currency` (new projects get the user's default from Settings). An invoice holds one currency (`calculateInvoiceData` throws otherwise). AI agent costs are USD as reported and only go on USD invoices.
 - **Days are local calendar days.** Use `toLocalDateString` / `localDayStartISO` / `localDayEndISO` from `src/utils/timeFormat.ts`, never `split("T")[0]` on a timestamp.
 - **Config that must work in shipped builds:** read it with `getEnv()` (`src/buildEnv.ts`) and add the key to the allowlist in `webpack.plugins.ts`. Never allowlist secrets, because the values ship inside the app.
 - Main-process code may use `console`; renderer code should not (lint warns).
@@ -172,53 +174,36 @@ Local files:
 
 ---
 
-## Part 2 — Problems found (verified by reading the code)
+## Part 2 — Problems found in the 2026-10-14 read-through, and where they stand
 
-Ordered by impact. Each item says what is wrong and where. Nothing has been fixed yet.
+All 24 are fixed or decided (status checked 2026-10-18). Kept as a record; new problems go in Part 4.
 
-### Data correctness
-1. **Timezone bug: "today" is UTC on the server and local in the UI.**
-   - `logUsage` sets `date = logTime.split("T")[0]`, which is the UTC date.
-   - `getUsageLogs` / `getUsageDetailsForAppDate` use the bounds `${date}T00:00:00Z`..`T23:59:59Z`.
-   - The renderer passes local dates (`toLocaleDateString("en-CA")`). `enrichSessions` also derives `date` from the UTC `start_time`.
-   - In Greece (UTC+2/+3), work done between 00:00 and 03:00 lands on the wrong day, and the Today tab is empty right after midnight.
-   - **Fix:** the client should send its local date (or tz offset) with each log, and queries should take local-day bounds.
-2. **`daily_usage_summary` gets a new row on every tick for apps with no language** (browsers, terminals, dev tools). The upsert is `ON CONFLICT (user_id, date, app_name, language)`, but `language` is NULL for these apps and Postgres treats NULLs as distinct, so the conflict never fires. JS aggregation (`aggregateSummaryRows`) hides this in the UI, but the table grows by about 360 rows per hour.
-   - **Fix:** `UNIQUE NULLS NOT DISTINCT` (PG15+) or `COALESCE(language,'')`, plus a one-off dedupe migration.
-3. **`usage_logs.org_id` is always NULL.** The function `set_usage_log_org_id()` exists, but no `CREATE TRIGGER` uses it. Org-level RLS on `usage_logs` therefore never matches. Team analytics still works because it reads `daily_usage_summary`, which gets `org_id` inside the RPC. Check the live DB too, in case a trigger was added by hand.
-4. **Every usage-log row stores a base64 icon.** `window.getIcon().data` is a data URL and goes into `usage_logs.icon_url` on every row and into the summary.
-   - That is roughly 360 rows/hour, each carrying an icon blob. On the free tier this bloats the DB fast.
-   - **Fix:** store an app key and keep icons once per app (a small `app_icons` table or a local cache).
-5. **Paused sessions are lost on quit.** `before-quit` only saves when `sessionStart && trackingInterval`, but pausing sets `trackingInterval = null`.
-6. **Nothing ever triggers auto-resume after an idle auto-pause.** `ipcMain.on("auto-resume")` exists and the renderer listens for `auto-resumed`, but nothing sends either. After 5 minutes of no input the session stays paused until the user notices.
-7. If the session-info modal isn't submitted **within 30s**, the session is saved as "Untitled Session" and the user's later reply is dropped. The modal also *requires* a billing choice, which makes the 30s even tighter.
-8. `time_tracking_sessions.end_time` is never written (there's a trigger for it, but the app only sets `duration`), so the "end" has to be computed everywhere.
-9. Incognito skips usage logs, but **session duration keeps counting**. Decide whether that's intended.
-
-### Security
-10. `nodeIntegration: true`, `contextIsolation: false`, empty preload, about 148 `innerHTML` sites, and window titles (attacker-controllable text, e.g. a web page title) rendered in the UI. Together that means any missed escape is **XSS → full RCE**.
-    - **Fix:** move to a `contextBridge` preload that exposes a typed API. This is a large mechanical change; do it incrementally.
-11. **Two Supabase clients both have `autoRefreshToken: true`** and share the same refresh token. With refresh-token rotation they can invalidate each other, which could cause random sign-outs (the "session expired" health check may be papering over this). Suspected, not reproduced.
-    - **Fix:** one owner of the session, ideally main, with the renderer only talking IPC.
-12. The CSP hardcodes the Supabase project URL in two places (`src/index.ts` `createWindow`, `public/index.html`). Setting a different `SUPABASE_URL` breaks the renderer client. Generate the CSP from config.
-13. **Window titles are uploaded raw**, and org admins/managers can read them through RLS. Titles can contain secrets, email subjects, customer names. Consider a "don't upload titles" option or keeping only the derived fields.
-
-### Product / UX
-14. **The global shortcut `Ctrl+Shift+I`** (incognito toggle) is registered OS-wide. That steals DevTools in every Chromium browser/Electron app and Chat in VS Code, which is a bad fit for a developer audience.
-15. README says global hotkeys control tracking "from anywhere", but `Ctrl+R` / `Ctrl+P` only work while the app window has focus. The tray has no Start/Stop.
-16. Recording state is duplicated between renderer globals and main-process variables, with no single source of truth. If the window reloads mid-session, the UI shows "not recording" while main is still tracking.
-17. Daily-goal progress counts *usage* time, which includes browser time. It does not count session time.
-
-### Release / ops
-18. `SENTRY_DSN` and `UPDATER_ENABLED` are read from `process.env` **at runtime** (`src/sentryMain.ts`, `src/sentryRenderer.ts`, `src/updater.ts`). No webpack Define/Environment plugin injects them, and `forge.config.ts` loads `.env.local` only for signing. On end-user machines Sentry and the updater are therefore **off in shipped builds**. Verify, then bake them in at build time.
-
-### Code health
-19. `getAllSessions` duplicates its whole filter chain for the tag branch. Fix by resolving the tag to session IDs first, then sharing one query builder.
-20. `getLanguageDataFromTitle` builds a RegExp for every linguist extension (over 1,000) on every tick. Precompile once.
-21. Dead or legacy code: `src/config.ts` (numeric userId, local config), `startSession`/`endSession` (unused), `getEditorByExecutable`, the `.d.ts` stubs next to `updater.ts`/`updaterHandlers.ts` and their `@ts-ignore` imports, and the README mentions of `AdminPanel.ts`/`UserRoleManager.ts`, which no longer exist.
-22. The tracking engine in `src/index.ts` has **no tests**, and neither do `editors.ts`, `extractData.ts` or `offlineQueue.ts`. It is the core of the product. Extract it into `src/tracking/` as a pure state machine (inject clock, window source, sinks) so it can be tested.
-23. The project-management UI is duplicated between `organizationTab.ts` and `projectsTab.ts`.
-24. `TODO.txt` is a completed migration log, not a backlog. Archive it and keep the live backlog in Part 4 of this file (or GitHub issues).
+| # | Problem | Status |
+|---|---|---|
+| 1 | "Today" was the UTC day on the server, local in the UI | Fixed in A1: local days everywhere (`toLocalDateString`, `localDayStartISO/EndISO`) |
+| 2 | `daily_usage_summary` gained a row per tick for apps without a language (NULLs distinct) | Fixed in A2: `UNIQUE NULLS NOT DISTINCT` |
+| 3 | `usage_logs.org_id` always NULL | Fixed in A3; the table itself was dropped later (2026-10-18) |
+| 4 | A base64 icon on every usage row | Fixed in A4: icons once per summary row |
+| 5 | Paused sessions lost on quit | Fixed in A5 |
+| 6 | No auto-resume after an idle pause | Fixed in A5 (and C4) |
+| 7 | 30-s session-info timeout | Fixed in A5: 10 min |
+| 8 | `end_time` never written | Fixed in A5 |
+| 9 | Incognito skips usage but session time keeps counting | **Kept on purpose** (owner, 2026-10-18) |
+| 10 | Node in the renderer: any missed escape = RCE | Fixed in B5 (isolation, sandbox, preload allowlist) and B4 (one quote-safe `escapeHtml`) |
+| 11 | Two Supabase clients refreshing one token | Fixed 2026-10-15: one client, in main |
+| 12 | CSP hardcoded the Supabase URL | Fixed in A8; the page CSP is now `connect-src 'self'` |
+| 13 | Window titles uploaded raw and readable by org admins | Fixed 2026-10-18: `usage_logs` dropped; titles never leave the device |
+| 14 | Global `Ctrl+Shift+I` stole DevTools | Fixed in A6: `Ctrl+Alt+Shift+I` |
+| 15 | README overstated the hotkeys; tray had no Start/Stop | Fixed in A6 |
+| 16 | Recording state duplicated renderer/main | Fixed in B2: main owns it |
+| 17 | The daily goal counts foreground-app (usage) time, browsers included | **Kept on purpose** (owner, 2026-10-18) |
+| 18 | Sentry DSN / updater config not in shipped builds | Fixed in A7 |
+| 19 | `getAllSessions` duplicated its filter chain | Fixed in B4 |
+| 20 | ~1,650 regexes built per 10-s tick for the language | Fixed 2026-10-18: extensions indexed once, only substrings at a "." are looked up (same results on 8,298 titles, ~1.4 ms → ~1 µs per title) |
+| 21 | Dead/legacy code | Fixed in B4 |
+| 22 | No tests for the tracking engine | Fixed in B1 (`src/tracking/`, unit tests); `extractData` and `offlineQueue` have tests too |
+| 23 | Project UI duplicated | Fixed in U2 |
+| 24 | `TODO.txt` a stale log | Fixed 2026-10-18: untracked and in `.gitignore` (the owner's local notes) |
 
 ---
 
@@ -333,7 +318,7 @@ In priority order (cheapest and highest value first):
   - Fixed on the way: the session details modal always said "No session details found" (the handler returned the usage array, the modal expected `{ session, usage }`); it now also uses `end_time`. Percent-bar labels and the details' app list are escaped.
   - Verified: unit tests (parsers, snapshot/growth/mtime rules, worktree dedupe, lock files, email filter), a test against a real git repo, PGlite checks, and e2e against the rebuilt database (2026-10-17): a scratch repo gets a commit, an edit and a new file during a recorded session, a Connect Claude Code hook event puts it in the session, and the saved `code_stats` (+9 −1 · 3 files · 1 commit, per language, no paths), a JSONB containment query, the `code_stats` CHECK, the Sessions code line and Insights are checked.
   - Fixed by that e2e: Insights' "Code changed" stayed stale after Stop (`session-saved` didn't refresh `insights`).
-- [ ] C3 Agent source: Claude Code hooks installer plus local receiver; transcript fallback; process detection
+- [x] C3 Agent source: Claude Code hooks installer plus local receiver; transcript fallback — closed 2026-10-18 without process detection (Windows can't read another process's cwd without native code; the hooks cover the case that mattered, a terminal agent's repo)
   - [x] Passive part (transcripts) — done on `phase-c3-agents` (2026-10-15); see "Agent sessions" in Part 1. **DB change:** `agent_sessions` (table, triggers, RLS, indexes). Process detection skipped (see Part 1).
   - [x] Opt-in "Connect Claude Code" hooks — done on `phase-c3-hooks` (2026-10-15); see "Connect Claude Code" in Part 1. No DB change.
     - Verified: unit tests (text edits, install/uninstall round trips incl. compact and CRLF files, receiver auth/limits, live state), and a probe of the packaged app against a scratch Claude config: preview → apply → backup, events → Home chips and heartbeat, a real `claude -p` run delivering events through the curl hooks, restart, stale-preview refusal, disconnect restoring the file byte for byte, `--squirrel-uninstall` removing the hooks.
@@ -373,12 +358,23 @@ In priority order (cheapest and highest value first):
   - Scheduled sessions have a project (schedule form picker; shown in the list and details). Starting one selects its project as a manual pick. `create/update-scheduled-session` only accept a project the user can see and never take `org_id` from the renderer (scheduled-session RLS doesn't check the project). Fixed on the way: the duration estimate was never saved (the form sent `estimated_duration`, the column is `estimated_duration_minutes`), and tag names went into the calendar HTML unescaped.
   - Project cards show "AI agents (30 d): time · reported cost · sessions" from `agent_sessions` (`renderer/utils/agentSummary.ts`; "+" when some sessions have no reported cost yet). Main sends `agent-sessions-synced` after an upload, which marks Projects dirty.
 
-**Phase D — later / optional**
-- [ ] Always-on auto-segmentation with the review inbox
-- [ ] Privacy: title-upload toggle, local-only mode
+**Phase D — always-on mode** (decisions below; schema already in `schema.sql`)
+- [ ] D1 Segmenter (main, pure module + tracker wiring): while always-on is enabled and no manual session runs, cut activity into segments; a new segment starts after an idle gap ≥ 15 min or when the attributed project changes (C1)
+- [ ] D2 Drafts: save each segment as it grows as a `status = 'draft'`, `source = 'auto'` session, upserted on `client_id` (also through the offline queue), with `app_usage`, `code_stats`, supervising time
+- [ ] D3 Review inbox (Sessions → List, where the short-session review panel is): confirm (title, project, billable), merge neighbours, discard; a count on Home/rail
+- [ ] D4 Drafts everywhere else: billing and invoices can't see them (DB CHECK + billable filter), team analytics and project stats skip them (SQL); session lists, timeline, standup and C6 project activity must show or skip them explicitly
+- ~~Privacy: title-upload toggle~~ — not needed, titles are no longer uploaded. ~~Local-only mode~~ — out of scope (owner, 2026-10-18); a separate project if ever.
+
+**Pre-Phase-D cleanup** — done 2026-10-18 on `main`
+- [x] `usage_logs` dropped (owner's choice over keeping it with a title toggle): nothing per tick is uploaded, sessions carry `app_usage`, the details popups show totals. Resolves #13, so no "don't upload titles" option is needed.
+- [x] Phase D's schema settled in the same rebuild: `status`, `source`, `client_id` on sessions (see "Phase D" below).
+- [x] Currencies: `cloud_projects.currency`, `user_preferences.currency` (Settings → Preferences), project form picker, Billing/Home/invoices in each project's currency, per-currency totals, one currency per invoice, agent cost only on USD invoices.
+- [x] #20 language regexes; TODO.txt local-only; README rewritten for Phase C; Part 2 brought up to date.
+- **DB change:** needs a rebuild (`reset.sql` + `schema.sql`) (done by the owner 2026-10-18): the app writes `app_usage`, and against an older database a non-network save error drops the session. Verified: unit tests, type-check, lint, `npm run test:db` (incl. drafts, `client_id` upsert, currency checks). e2e against the rebuilt database (105 checks, incl. `app_usage` on the session and no `usage_logs`).
+- Fixed by that e2e: Sessions → List showed only "No summary data available" when the account had no app usage yet (fresh database, or sessions with no recognised app), hiding the sessions.
 
 **Before release**
-- [ ] Currencies other than USD (owner, 2026-10-17). Rates, Billing and invoices all assume `$`; agent costs are reported in USD and would need converting or labelling.
+- [x] Currencies other than USD (owner, 2026-10-17) — done 2026-10-18, see above. Agent costs stay USD (labelled), not converted.
 
 ## Owner decisions for Phase C (answered 2026-10-15)
 1. **Primary user: solo freelancer, billing-first.** Prioritize C6: per-project human/agent time, agent cost, and agent cost as an invoice line item. Team views come later.
@@ -392,6 +388,14 @@ In priority order (cheapest and highest value first):
 4. **Manual Start/Stop stays the main model.** Build C1 and C4 so they also work outside a session, to enable an opt-in always-on mode in Phase D.
 
 **Phase C order:** C1 → C4 → C3 (passive first) → C2 → C6 → C5.
+
+## Owner decisions for Phase D (answered 2026-10-18)
+1. **Always-on is opt-in.** Start/Stop stays the default.
+2. **A segment ends** after an idle gap of **15 minutes** or when the project changes (both).
+3. **Segments are saved right away as drafts** and confirmed in the review inbox. **A draft can't be billed or invoiced.**
+4. **Privacy:** no local-only mode. Window titles were dropped from uploads altogether (`usage_logs` removed), which covers the title option.
+5. **Incognito** keeps counting session time, and the **daily goal** keeps counting foreground-app time (both as they are).
+6. **Schema:** settled in one rebuild before Phase D (`status`, `source`, `client_id`). After Phase D: decide on migrations.
 
 ---
 

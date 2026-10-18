@@ -35,7 +35,7 @@ vi.mock("../../src/supabase/tags", async (importOriginal) => {
 import { getAllSessions, addSession } from "../../src/supabase/timeTracking";
 import { getAllTags } from "../../src/supabase/tags";
 import { getDailyGoal, getAllDailyGoals } from "../../src/supabase/goals";
-import { getUsageSummary, logUsage } from "../../src/supabase/usageLogs";
+import { getUsageSummary, addUsageToDailySummary } from "../../src/supabase/usageLogs";
 import {
   getScheduledSessions,
   createScheduledSession,
@@ -138,12 +138,13 @@ describe("RLS: User-scoped data isolation", () => {
       expect(eqCalls[1].args).toEqual(["date", "2025-01-15"]);
     });
 
-    it("logUsage embeds user_id in insert payload", async () => {
-      mockResult({ data: { id: "log-1" }, error: null });
-      await logUsage("user-A", "VS Code", "test.ts");
+    it("addUsageToDailySummary sends the user_id to the RPC", async () => {
+      mockResult({ data: null, error: null });
+      await addUsageToDailySummary({
+        userId: "user-A", date: "2025-01-15", appName: "VS Code", language: null, languageExtension: null, icon: null, seconds: 10,
+      });
 
-      const insertCalls = getCallsFor("insert");
-      expect(insertCalls[0].args[0].user_id).toBe("user-A");
+      expect(getCallsFor("rpc")[0].args[1].p_user_id).toBe("user-A");
     });
   });
 
