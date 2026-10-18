@@ -38,10 +38,15 @@ export interface TrackingState {
 }
 
 export interface AutoSegment {
+  /** Its draft's client_id */
+  clientId: string;
   /** ISO */
   startedAt: string;
   /** Active seconds when main sent this state */
   activeSeconds: number;
+  supervisingSeconds: number;
+  /** [start, end] ISO pairs, as of when main sent this state */
+  supervisingSpans: [string, string][];
   isPaused: boolean;
   repoKey: string | null;
   projectId: string | null;

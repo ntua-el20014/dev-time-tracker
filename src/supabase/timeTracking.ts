@@ -48,13 +48,15 @@ export async function getSmallSessions(
 }
 
 /**
- * Delete multiple sessions by IDs
- * Used for batch cleanup from review panel
+ * Delete some of the user's confirmed sessions (batch cleanup from the
+ * review panel). Drafts go through the inbox, which settles them first.
  */
-export async function deleteSessions(sessionIds: string[]) {
+export async function deleteSessions(userId: string, sessionIds: string[]) {
   const { error } = await supabase
     .from("time_tracking_sessions")
     .delete()
+    .eq("user_id", userId)
+    .eq("status", CONFIRMED)
     .in("id", sessionIds);
 
   if (error) {
@@ -176,9 +178,11 @@ export async function getSessionById(sessionId: string) {
 }
 
 /**
- * Update a session
+ * Update one of the user's confirmed sessions. Returns the row, or null if
+ * there is no such session (drafts are edited by confirming them).
  */
 export async function updateSession(
+  userId: string,
   sessionId: string,
   updates: {
     title?: string;
@@ -195,23 +199,26 @@ export async function updateSession(
       updated_at: new Date().toISOString(),
     })
     .eq("id", sessionId)
-    .select()
-    .single();
+    .eq("user_id", userId)
+    .eq("status", CONFIRMED)
+    .select();
 
   if (error) {
     throw error;
   }
-  return data;
+  return Array.isArray(data) ? (data[0] ?? null) : null;
 }
 
 /**
- * Delete a single session
+ * Delete one of the user's confirmed sessions
  */
-export async function deleteSession(sessionId: string) {
+export async function deleteSession(userId: string, sessionId: string) {
   const { error } = await supabase
     .from("time_tracking_sessions")
     .delete()
-    .eq("id", sessionId);
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .eq("status", CONFIRMED);
 
   if (error) {
     throw error;
@@ -366,14 +373,25 @@ export async function saveDraftSession(
 const DRAFT_COLUMNS =
   "id, client_id, title, start_time, end_time, duration, project_id, supervising_seconds, supervising_spans, code_stats, app_usage";
 
-/** The user's drafts (the review inbox), newest first. */
-export async function getDraftSessions(userId: string): Promise<DraftRow[]> {
-  const { data, error } = await supabase
+/**
+ * The user's drafts (the review inbox), newest first; optionally only those
+ * starting within some local days (YYYY-MM-DD, inclusive), like sessions.
+ */
+export async function getDraftSessions(
+  userId: string,
+  range?: { startDate: string; endDate: string },
+): Promise<DraftRow[]> {
+  let query = supabase
     .from("time_tracking_sessions")
     .select(DRAFT_COLUMNS)
     .eq("user_id", userId)
-    .eq("status", "draft")
-    .order("start_time", { ascending: false });
+    .eq("status", "draft");
+  if (range) {
+    query = query
+      .gte("start_time", localDayStartISO(range.startDate))
+      .lte("start_time", localDayEndISO(range.endDate));
+  }
+  const { data, error } = await query.order("start_time", { ascending: false });
   if (error) throw error;
   return (data as DraftRow[] | null) || [];
 }

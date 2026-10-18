@@ -7,6 +7,9 @@
  *
  * Supervising time (no input while an AI agent worked) is drawn as slices
  * over the session bars.
+ *
+ * Always-on drafts (Phase D) are drawn too, but not counted: they aren't
+ * tracked time until the user confirms them.
  */
 
 export interface TimelineSession {
@@ -26,6 +29,8 @@ export interface TimelineSession {
   supervisingSeconds?: number;
   supervisingSpans?: { start: Date; end: Date }[];
   running?: boolean;
+  /** An unconfirmed always-on draft (shown, not counted) */
+  draft?: boolean;
 }
 
 export interface TimelineBar {
@@ -46,9 +51,12 @@ export interface TimelineLayout {
   ticks: { at: Date; left: number }[];
   /** Supervising slices, in percent of the axis */
   supervising: { left: number; width: number }[];
+  /** Confirmed (and running) sessions only */
   totalSeconds: number;
   billableSeconds: number;
   supervisingSeconds: number;
+  /** Active seconds in drafts, apart from the totals above */
+  draftSeconds: number;
 }
 
 export const MIN_BAR_PERCENT = 0.6;
@@ -115,19 +123,24 @@ export function layoutTimeline(
     }
   }
 
+  const counted = sessions.filter((s) => !s.draft);
   return {
     axisStart,
     axisEnd,
     bars,
     ticks,
     supervising,
-    totalSeconds: sessions.reduce((sum, s) => sum + (s.duration || 0), 0),
-    billableSeconds: sessions.reduce(
+    totalSeconds: counted.reduce((sum, s) => sum + (s.duration || 0), 0),
+    billableSeconds: counted.reduce(
       (sum, s) => sum + (s.billable ? (s.billedSeconds ?? s.duration) || 0 : 0),
       0,
     ),
-    supervisingSeconds: sessions.reduce(
+    supervisingSeconds: counted.reduce(
       (sum, s) => sum + (s.supervisingSeconds || 0),
+      0,
+    ),
+    draftSeconds: sessions.reduce(
+      (sum, s) => sum + (s.draft ? s.duration || 0 : 0),
       0,
     ),
   };

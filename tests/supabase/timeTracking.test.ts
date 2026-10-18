@@ -64,13 +64,17 @@ describe("timeTracking", () => {
 
   // ───────────── deleteSessions ─────────────
   describe("deleteSessions", () => {
-    it("deletes sessions by IDs", async () => {
+    it("deletes the user's confirmed sessions by IDs", async () => {
       mockResult({ data: null, error: null });
 
-      await deleteSessions(["s1", "s2", "s3"]);
+      await deleteSessions("user-1", ["s1", "s2", "s3"]);
 
       const inCalls = getCallsFor("in");
       expect(inCalls[0].args).toEqual(["id", ["s1", "s2", "s3"]]);
+      expect(getCallsFor("eq").map((c) => c.args)).toEqual([
+        ["user_id", "user-1"],
+        ["status", "confirmed"],
+      ]);
     });
 
     it("throws on error", async () => {
@@ -79,7 +83,7 @@ describe("timeTracking", () => {
         error: { message: "Delete failed" },
       });
 
-      await expect(deleteSessions(["s1"])).rejects.toEqual({
+      await expect(deleteSessions("user-1", ["s1"])).rejects.toEqual({
         message: "Delete failed",
       });
     });
@@ -234,11 +238,11 @@ describe("timeTracking", () => {
 
   // ───────────── updateSession ─────────────
   describe("updateSession", () => {
-    it("updates session fields", async () => {
+    it("updates the fields of the user's confirmed session", async () => {
       const updated = { id: "s1", title: "New Title", is_billable: true };
-      mockResult({ data: updated, error: null });
+      mockResult({ data: [updated], error: null });
 
-      const result = await updateSession("s1", {
+      const result = await updateSession("user-1", "s1", {
         title: "New Title",
         is_billable: true,
       });
@@ -250,12 +254,22 @@ describe("timeTracking", () => {
       expect(updateArg.title).toBe("New Title");
       expect(updateArg.is_billable).toBe(true);
       expect(updateArg.updated_at).toBeDefined();
+      expect(getCallsFor("eq").map((c) => c.args)).toEqual([
+        ["id", "s1"],
+        ["user_id", "user-1"],
+        ["status", "confirmed"],
+      ]);
+    });
+
+    it("returns null when no confirmed session matched (e.g. a draft)", async () => {
+      mockResult({ data: [], error: null });
+      expect(await updateSession("user-1", "d1", { title: "X" })).toBeNull();
     });
 
     it("throws on error", async () => {
       mockResult({ data: null, error: { message: "Update failed" } });
 
-      await expect(updateSession("s1", { title: "Fail" })).rejects.toEqual({
+      await expect(updateSession("user-1", "s1", { title: "Fail" })).rejects.toEqual({
         message: "Update failed",
       });
     });
@@ -266,12 +280,15 @@ describe("timeTracking", () => {
     it("deletes a single session", async () => {
       mockResult({ data: null, error: null });
 
-      await deleteSession("s1");
+      await deleteSession("user-1", "s1");
 
       const fromCalls = getCallsFor("from");
       expect(fromCalls[0].args[0]).toBe("time_tracking_sessions");
-      const eqCalls = getCallsFor("eq");
-      expect(eqCalls[0].args).toEqual(["id", "s1"]);
+      expect(getCallsFor("eq").map((c) => c.args)).toEqual([
+        ["id", "s1"],
+        ["user_id", "user-1"],
+        ["status", "confirmed"],
+      ]);
     });
   });
 
@@ -503,6 +520,21 @@ describe("timeTracking", () => {
         ["user_id", "u1"],
         ["status", "draft"],
       ]);
+      expect(getCallsFor("gte")).toHaveLength(0);
+    });
+
+    it("lists the drafts starting within some local days", async () => {
+      mockResult({ data: [], error: null });
+      await getDraftSessions("u1", { startDate: "2026-10-18", endDate: "2026-10-18" });
+      expect(eqArgs()).toEqual([
+        ["user_id", "u1"],
+        ["status", "draft"],
+      ]);
+      expect(getCallsFor("gte")[0].args).toEqual([
+        "start_time",
+        new Date(2026, 9, 18, 0, 0, 0, 0).toISOString(),
+      ]);
+      expect(getCallsFor("lte")[0].args[0]).toBe("start_time");
     });
 
     it("counts drafts without fetching them", async () => {

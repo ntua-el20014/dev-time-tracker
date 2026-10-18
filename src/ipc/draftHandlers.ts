@@ -72,11 +72,22 @@ async function settled(
     : rows;
 }
 
-ipcMain.handle("get-draft-sessions", async () => {
+const isDay = (value: unknown): value is string =>
+  typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/** All drafts (the inbox), or those starting within some local days (Home's timeline). */
+ipcMain.handle("get-draft-sessions", async (_event, range?: unknown) => {
   try {
     const user = await requireUser();
+    const r = (range ?? {}) as Record<string, unknown>;
+    const days =
+      isDay(r.startDate) && isDay(r.endDate)
+        ? { startDate: r.startDate, endDate: r.endDate }
+        : undefined;
     const rows = await enrichSessions(
-      await timeTracking.getDraftSessions(user.id),
+      days
+        ? await timeTracking.getDraftSessions(user.id, days)
+        : await timeTracking.getDraftSessions(user.id),
     );
     const open = openDraftClientId();
     return rows.map((row) => ({

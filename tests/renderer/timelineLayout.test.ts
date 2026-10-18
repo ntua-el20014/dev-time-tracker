@@ -66,6 +66,21 @@ describe("layoutTimeline", () => {
     expect(l.ticks.at(-1)?.left).toBe(100);
   });
 
+  it("draws drafts but keeps them out of the tracked totals", () => {
+    const l = layoutTimeline(
+      [
+        session("a", at(9), at(10), { duration: 3000, billable: true }),
+        session("d", at(10, 30), at(11), { duration: 1500, draft: true, supervisingSeconds: 600 }),
+      ],
+      at(13),
+    );
+    expect(l.bars.map((b) => b.session.id)).toEqual(["a", "d"]);
+    expect(l.totalSeconds).toBe(3000);
+    expect(l.billableSeconds).toBe(3000);
+    expect(l.supervisingSeconds).toBe(0);
+    expect(l.draftSeconds).toBe(1500);
+  });
+
   it("sums active and billable time", () => {
     const l = layoutTimeline(
       [

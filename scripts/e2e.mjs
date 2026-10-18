@@ -647,6 +647,15 @@ try {
   const listed1 = (await u1.invoke("get-sessions")).v || [];
   check("drafts are not in the session list", !listed1.some((s) => draftIds.includes(s.id)));
   check("draft count", (await u1.invoke("get-draft-count")).v === 3);
+  // Drafts are edited only through the inbox
+  check("edit-session leaves a draft alone", (await u1.invoke("edit-session", { id: draftIds[2], title: "edited", tags: ["e2e"] })).v === false);
+  await u1.invoke("delete-session", draftIds[2]);
+  check(
+    "delete-session leaves a draft alone",
+    (await rawApi(u1, "GET", `time_tracking_sessions?id=eq.${draftIds[2]}&select=title`)).body === `[{"title":"dtt-e2e-repo"}]`,
+  );
+  // The drafts start 3 h ago or later; just after midnight they are yesterday's
+  const draftsToday = new Date(draftSpec[0].start_time).toDateString() === new Date().toDateString();
 
   await u1.ev(`document.querySelector('.nav-item[data-view="sessions"]').click()`);
   await u1.ev(`document.querySelector('#view-sessions .subnav-btn[data-sub="list"]').click()`);
@@ -656,6 +665,24 @@ try {
     return b && !b.hidden && b.textContent === "3";
   })()`, 8000));
   await u1.shot("u1-draft-inbox.png");
+
+  // Home's timeline: drafts drawn unfilled, counted apart, linking to the inbox
+  if (draftsToday) {
+    await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
+    check("Home timeline draws the drafts", await u1.waitFor(`document.querySelectorAll("#homeTimeline .today-bar.draft").length === 3`, 10000));
+    check(
+      "Home timeline counts drafts as unconfirmed, not tracked",
+      await u1.waitFor(`(document.querySelector("#homeTimeline .timeline-totals")?.textContent || "").includes("1h 00m unconfirmed")`, 5000),
+      await u1.ev(`document.querySelector("#homeTimeline .timeline-totals")?.textContent`),
+    );
+    await u1.shot("u1-home-drafts.png");
+    await u1.ev(`document.querySelector("#homeTimeline .today-bar.draft")?.click()`);
+    check("clicking a draft bar opens the inbox", await u1.waitFor(`document.querySelector(".draft-item")?.offsetParent !== null`, 8000));
+  } else {
+    console.log("  (skipped Home timeline draft checks: the drafts started yesterday)");
+  }
+  await u1.ev(`document.querySelector('.nav-item[data-view="sessions"]').click()`);
+  await u1.ev(`document.querySelector('#view-sessions .subnav-btn[data-sub="list"]').click()`);
 
   // Merge the two older ones through the UI
   await u1.ev(`(() => {
@@ -720,6 +747,13 @@ try {
   check("rail badge hidden with no drafts", await u1.waitFor(`document.querySelector('.nav-item[data-view="sessions"] .nav-badge')?.hidden === true`, 8000));
   await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
   check("Home has no drafts line", await u1.waitFor(`document.getElementById("homeDrafts")?.hidden === true`, 8000));
+  if (draftsToday) {
+    check("Home timeline has no draft bars left", await u1.waitFor(`document.querySelectorAll("#homeTimeline .today-bar.draft").length === 0`, 8000));
+    check(
+      "the confirmed draft is a tracked bar on Home",
+      await u1.waitFor(`[...document.querySelectorAll("#homeTimeline .today-bar:not(.draft)")].some((b) => b.title.includes(${JSON.stringify(draftTitle)}))`, 8000),
+    );
+  }
   check("always-on can be turned off", (await u1.invoke("set-always-on", false)).v === false);
   // Whatever is left of this block's rows, even after a failed check
   for (const id of draftIds) await rawApi(u1, "DELETE", `time_tracking_sessions?id=eq.${id}`);

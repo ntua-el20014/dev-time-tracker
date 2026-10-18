@@ -164,7 +164,7 @@ describe("IPC: Session Handlers", () => {
 
   describe("edit-session", () => {
     it("updates session fields and tags", async () => {
-      mockUpdateSession.mockResolvedValue({});
+      mockUpdateSession.mockResolvedValue({ id: "s1" });
       mockSetSessionTagsByNames.mockResolvedValue(undefined);
 
       const handler = registeredHandlers["edit-session"];
@@ -175,13 +175,24 @@ describe("IPC: Session Handlers", () => {
       });
 
       expect(result).toBe(true);
-      expect(mockUpdateSession).toHaveBeenCalledWith("s1", {
+      expect(mockUpdateSession).toHaveBeenCalledWith("user-1", "s1", {
         title: "New Title",
       });
       expect(mockSetSessionTagsByNames).toHaveBeenCalledWith("user-1", "s1", [
         "bug",
         "ui",
       ]);
+    });
+
+    it("leaves drafts alone, tags included", async () => {
+      mockUpdateSession.mockResolvedValue(null);
+
+      const handler = registeredHandlers["edit-session"];
+      const result = await handler(fakeEvent, { id: "d1", tags: ["bug"] });
+
+      expect(result).toBe(false);
+      expect(mockUpdateSession).toHaveBeenCalledWith("user-1", "d1", {});
+      expect(mockSetSessionTagsByNames).not.toHaveBeenCalled();
     });
 
     it("returns false on error", async () => {
@@ -205,7 +216,7 @@ describe("IPC: Session Handlers", () => {
       const result = await handler(fakeEvent, "s1");
 
       expect(result).toBe(true);
-      expect(mockDeleteSession).toHaveBeenCalledWith("s1");
+      expect(mockDeleteSession).toHaveBeenCalledWith("user-1", "s1");
     });
 
     it("returns false on error", async () => {
@@ -242,7 +253,7 @@ describe("IPC: Session Handlers", () => {
       const result = await handler(fakeEvent, ["s1", "s2", 3]);
 
       expect(result).toBe(true);
-      expect(mockDeleteSessions).toHaveBeenCalledWith(["s1", "s2", "3"]);
+      expect(mockDeleteSessions).toHaveBeenCalledWith("user-1", ["s1", "s2", "3"]);
     });
   });
 });

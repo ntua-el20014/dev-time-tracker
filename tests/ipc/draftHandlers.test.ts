@@ -78,6 +78,15 @@ describe("draft handlers", () => {
     expect(tt.getDraftSessions).toHaveBeenCalledWith("u1");
   });
 
+  it("lists one day's drafts for Home, ignoring malformed days", async () => {
+    tt.getDraftSessions.mockResolvedValue([]);
+    const day = { startDate: "2026-10-18", endDate: "2026-10-18" };
+    await handlers["get-draft-sessions"]({}, day);
+    expect(tt.getDraftSessions).toHaveBeenLastCalledWith("u1", day);
+    await handlers["get-draft-sessions"]({}, { startDate: "x'; --", endDate: "2026-10-18" });
+    expect(tt.getDraftSessions).toHaveBeenLastCalledWith("u1");
+  });
+
   it("confirms into a visible project, after settling the draft", async () => {
     tt.getDraftSessionsByIds.mockResolvedValue([draft("a", 9)]);
     tt.confirmDraftSession.mockResolvedValue(true);

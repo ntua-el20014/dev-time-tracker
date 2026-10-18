@@ -162,9 +162,14 @@ ipcMain.handle(
       }
       if (isBillable !== undefined) updates.is_billable = isBillable;
 
-      if (Object.keys(updates).length > 0) {
-        await timeTracking.updateSession(sessionId, updates);
-      }
+      // Always run, so a draft (or someone else's row) is never tagged:
+      // drafts are edited by confirming them in the inbox
+      const updated = await timeTracking.updateSession(
+        user.id,
+        sessionId,
+        updates,
+      );
+      if (!updated) return false;
 
       // Update tags if provided
       if (tagNames && Array.isArray(tagNames)) {
@@ -184,8 +189,11 @@ ipcMain.handle(
  */
 ipcMain.handle("delete-session", async (_event, id: string | number) => {
   try {
-    const sessionId = String(id);
-    await timeTracking.deleteSession(sessionId);
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+    await timeTracking.deleteSession(user.id, String(id));
     return true;
   } catch (err) {
     logError("delete-session", err);
@@ -222,8 +230,12 @@ ipcMain.handle(
   "delete-sessions",
   async (_event, sessionIds: (string | number)[]) => {
     try {
+      const user = await getCurrentUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
       const ids = sessionIds.map(String);
-      await timeTracking.deleteSessions(ids);
+      await timeTracking.deleteSessions(user.id, ids);
       return true;
     } catch (err) {
       logError("delete-sessions", err);

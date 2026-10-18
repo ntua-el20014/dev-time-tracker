@@ -117,9 +117,14 @@ export interface TrackingState {
 }
 
 export interface AutoSegmentSummary {
+  /** Its draft's client_id (Home's timeline draws this one live, not the saved row) */
+  clientId: string;
   /** ISO */
   startedAt: string;
   activeSeconds: number;
+  supervisingSeconds: number;
+  /** [start, end] ISO pairs */
+  supervisingSpans: [string, string][];
   isPaused: boolean;
   repoKey: string | null;
   /** The repo's linked project, if any */
@@ -1276,8 +1281,11 @@ function autoSegmentSummary(): AutoSegmentSummary | null {
   const segment = segmenter.current(new Date());
   if (!segment) return null;
   return {
+    clientId: segment.clientId,
     startedAt: segment.start.toISOString(),
     activeSeconds: segment.duration,
+    supervisingSeconds: segment.supervisingSeconds,
+    supervisingSpans: segment.supervisingSpans,
     isPaused: segment.isPaused,
     repoKey: segment.repoKey,
     projectId: segment.repoKey ? attribution.projectFor(segment.repoKey) : null,

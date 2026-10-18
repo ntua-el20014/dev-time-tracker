@@ -343,9 +343,9 @@ Adds a retrospective session with a known duration. Used for manually adding pas
 
 Gets sessions with duration less than or equal to specified threshold. Useful for reviewing and cleaning up short/incomplete sessions.
 
-### `deleteSessions(sessionIds: string[])`
+### `deleteSessions(userId: string, sessionIds: string[])`
 
-Deletes multiple sessions by IDs. Used for batch cleanup from review panel.
+Deletes some of the user's confirmed sessions by ID (drafts are left alone). Used for batch cleanup from review panel.
 
 ### `getAllSessions(userId: string, filters?: { projectId?: string; startDate?: string; endDate?: string; isBillable?: boolean; tag?: string; limit?: number; offset?: number })`
 
@@ -355,13 +355,13 @@ Gets all sessions for a user with optional filters including tag filtering.
 
 Gets a specific session by ID. Returns null if not found.
 
-### `updateSession(sessionId: string, updates: { title?: string; description?: string; project_id?: string | null; is_billable?: boolean; duration?: number })`
+### `updateSession(userId: string, sessionId: string, updates: { title?: string; description?: string; project_id?: string | null; is_billable?: boolean; duration?: number })`
 
-Updates a session.
+Updates one of the user's confirmed sessions. Returns the row, or null if none matched (e.g. a draft).
 
-### `deleteSession(sessionId: string)`
+### `deleteSession(userId: string, sessionId: string)`
 
-Deletes a single session.
+Deletes one of the user's confirmed sessions.
 
 ### `getSessionsInDateRange(userId: string, startDate: string, endDate: string)`
 
