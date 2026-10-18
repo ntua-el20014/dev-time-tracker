@@ -59,6 +59,7 @@ ipcMain.handle(
         .from("time_tracking_sessions")
         .select("*")
         .eq("user_id", user.id)
+        .eq("status", "confirmed")
         .gte("start_time", localDayStartISO(filters.startDate))
         .lte("start_time", localDayEndISO(filters.endDate));
 

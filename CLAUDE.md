@@ -58,6 +58,7 @@ Supabase (RLS enforces per-user / per-org access)
 | `usageSampler.ts` | Foreground window (x-win) → `{appName, windowTitle, language, languageExtension, icon, category}` (`category`: browsers only, C5 below). Matches `execName` against `assets/known_editors.json` plus per-user `custom-apps-<uid>.json`; **unknown apps are dropped**. Language comes from `getLanguageDataFromTitle()` (`src/utils/extractData.ts`). |
 | `workspaceHints.ts` / `repoResolver.ts` / `projectAttribution.ts` | C1, see "Project detection" below. |
 | `codeStats.ts` | C2, see "Code stats" below. |
+| `segmenter.ts` | D1/D2, see "Always-on segments" below. |
 | `usageBatcher.ts` | Buffers ticks; every 60s (and on pause/stop/sign-out/quit) does one `update_daily_usage_summary` RPC per (local day, app, language, page type). Nothing per tick is uploaded. A network failure queues that increment and the rest of the flush offline (`usage_summary` items). Icons are sent once per summary row. The Today tab refreshes on each flush (`window-tracked`). The tracker also adds every sample to the running session's `app_usage` (`shared/appUsage.ts`, ≤ 200 entries), saved with the session. |
 
 **Project detection (C1)** runs every 5 s in main, also outside sessions (not in incognito), and nothing leaves the machine except the links the user creates:
@@ -103,6 +104,16 @@ Supabase (RLS enforces per-user / per-org access)
 - Billing: earnings in each project's currency, totals per currency; an "AI Agent Cost (USD)" total card and column when there is any (`agentCostUsd`/`agentCostIncomplete`/`agentSessions` per project, `totalAgentCostUsd`); a pass-through expense, **not** part of earnings. Projects where only agents worked get a row.
 - Invoices: `get-projects-for-invoice` returns each project's agent cost (and lists agent-only projects with a cost). The modal offers "Add AI agent costs as a line item" (off by default, shown only when a chosen project has a cost); the PDF then gets "AI coding agent usage (N sessions, at cost)" per project, in its subtotal. Only reported costs are added. Claude Code reports API-price cost, which isn't what a subscription user pays.
 
+**Always-on segments (D1, D2)** — `segmenter.ts` (pure) cuts activity outside manual sessions into segments, while always-on is enabled (Settings → Preferences → Always-on; per user and device, `userData/tracking-<uid>.json` `{ alwaysOn }`, off by default; `get-always-on`/`set-always-on`):
+- A segment opens on human input (an agent alone never opens one). Inside it, time counts as in a session (C4): away stretches pause it, backdated to the last sign of work; supervising time is kept as spans.
+- It closes after 15 min without a sign of work (`SEGMENT_GAP_SECONDS`, also when the idle timeout is longer), ending at the last sign of work; on manual Start, sign-out, quit or turning always-on off (reason `"ended"`).
+- It splits when work stays in another project for ≥ 3 min (`PROJECT_SWITCH_SECONDS`), at the moment of the move; running time and supervising spans are cut there. "Project" = the repo's link, or the repo itself while unlinked (so linking a repo mid-segment doesn't split); a segment with no repo yet adopts the first one, a new one starts in the last repo seen.
+- Each segment has a `clientId` (UUID, the draft's `client_id`). The tracker reports `opened`/`closed` events to `onSegmentEvent` listeners (with the user id) and shows the open one as `autoSegment` in the state (Home's timer card: "Always-on, recording a draft since 10:15").
+- **Drafts (D2):** a segment is saved as a `status = 'draft'`, `source = 'auto'`, never-billable session every 5 min while it grows and when it closes, once it has ≥ 2 min of active time (`MIN_SEGMENT_SECONDS`; a segment saved once is kept even if a split shortens it). Title = the repo's name, project = the repo's link (taken when it closes). `saveDraftSession()` updates the row with that `client_id` *only while it is still a draft*, else inserts; a unique violation means the user confirmed it meanwhile, and nothing is written. Saves of one draft run in order.
+- While a segment runs, usage is sampled as in a session (daily summary + the draft's `app_usage`); the app usage of the ≤ 3 min before a split stays with the old segment. Each segment has its own `createCodeStats` instance (repos focused or used by a hooked agent while it ran, plus transcript dirs at the end), so its `code_stats` are collected when it closes and never mix with a manual session's.
+- Offline: `draft_session` queue items, one per segment (a newer version replaces the queued one, keeping queued code stats). While one is queued, newer saves go behind it, so an old version never overwrites a newer one. Queued on network and auth errors (a segment closed by sign-out is saved after the next sign-in), and on any error at quit. Quit waits for draft saves (`hasUnsavedTrackingWork()` counts an open segment).
+- Every session list and stat reads `status = 'confirmed'` only (`getAllSessions`, `getSessionsInDateRange`, `getSmallSessions`, invoice sessions, project activity; billing needs `is_billable`, which a draft never is). Drafts are visible nowhere until D3's inbox.
+
 Flows:
 - **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` with `{projectId}` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" with the chosen project + `session-info-timeout`), then saves with `end_time`, `code_stats` (collected while the prompt is open) and `app_usage`. The dialog preselects the project and, if it has an hourly rate, Billable.
 - **Quit:** `hasUnsavedTrackingWork()` / `finalizeTrackingForQuit()` settle an open prompt, save a running or paused session, and flush usage.
@@ -137,11 +148,13 @@ Server-side rules the app relies on:
 
 Local files:
 - `~/.dev-time-tracker/config.json`: legacy settings, no longer read by anything (safe to delete)
-- `~/.dev-time-tracker/offline-queue.json`: flushed only while signed in, and only the signed-in user's items. Item types: `session`, `usage_summary`, and legacy `usage_log` (older versions; replayed into the summary)
+- `~/.dev-time-tracker/offline-queue.json`: flushed only while signed in, and only the signed-in user's items. Item types: `session`, `draft_session`, `usage_summary`, and legacy `usage_log` (older versions; replayed into the summary)
 - `userData/custom-apps-<uid>.json`
 - `userData/lang-<uid>.json`
 - `userData/auth-session.bin`: the Supabase session, encrypted with `safeStorage` (OS keychain / DPAPI). Chromium saves the encryption key in "Local State" about 10 s after the first launch on a machine; force-killing the app before that means one extra sign-in, nothing worse.
 - `userData/agent-ingest-<uid>.json`, `userData/integrations-<uid>.json` (C3)
+- `userData/tracking-<uid>.json`: `{ alwaysOn }` (Phase D)
+- Offline queue item type `draft_session` (Phase D): the latest version of an always-on segment
 - `userData/claude-hooks.json`: port and token of Connect Claude Code (present while connected); `~/.claude/settings.json.dev-time-tracker-*.bak`: backups made before each change to Claude Code's settings
 
 ### Renderer layout
@@ -359,10 +372,19 @@ In priority order (cheapest and highest value first):
   - Project cards show "AI agents (30 d): time · reported cost · sessions" from `agent_sessions` (`renderer/utils/agentSummary.ts`; "+" when some sessions have no reported cost yet). Main sends `agent-sessions-synced` after an upload, which marks Projects dirty.
 
 **Phase D — always-on mode** (decisions below; schema already in `schema.sql`)
-- [ ] D1 Segmenter (main, pure module + tracker wiring): while always-on is enabled and no manual session runs, cut activity into segments; a new segment starts after an idle gap ≥ 15 min or when the attributed project changes (C1)
-- [ ] D2 Drafts: save each segment as it grows as a `status = 'draft'`, `source = 'auto'` session, upserted on `client_id` (also through the offline queue), with `app_usage`, `code_stats`, supervising time
+- [x] D1 Segmenter (main, pure module + tracker wiring): while always-on is enabled and no manual session runs, cut activity into segments; a new segment starts after an idle gap ≥ 15 min or when the attributed project changes (C1) — done on `phase-d1-segmenter` (2026-10-18); see "Always-on segments" in Part 1.
+  - Judgment calls: a project change must last 3 min before it splits (a quick look at another repo doesn't), and the split is backdated to the move; an unlinked repo counts as its own project; only human input opens a segment.
+  - Verified: unit tests (`tests/tracking/segmenter.test.ts`: opening, backdated pauses, the gap with a longer idle timeout, supervising, lock/sleep, splits incl. supervising across the move, relinking), type-check, lint. Not exercised in the running app: there is no way to turn it on from the UI yet.
+  - Owner agreed with these choices (2026-10-18). The items left for D2 were done in D2.
+- [x] D2 Drafts: save each segment as it grows as a `status = 'draft'`, `source = 'auto'` session, upserted on `client_id` (also through the offline queue), with `app_usage`, `code_stats`, supervising time — done on `phase-d1-segmenter` (2026-10-18); see "Always-on segments" in Part 1. No DB change.
+  - Also: the Settings toggle, Home's always-on status line, and every session reader filtered to confirmed sessions (D4's "skip" half; D3 shows drafts).
+  - Upsert without a DB change: update-where-draft, else insert (a unique violation = already confirmed). A database `ON CONFLICT … WHERE status = 'draft'` RPC would do it in one round trip, if the schema is rebuilt anyway.
+  - Fixed on the way: `offlineQueue.flush()` removed items by index, so an item replaced or added while a write was in flight could be dropped; it now removes the exact item it sent.
+  - Verified: unit tests (`saveDraftSession` update/insert/confirmed/errors, confirmed-only filters, queue replacement incl. a newer version arriving mid-flush), type-check, lint, `npm run test:db`. **Not exercised in the running app or against live Supabase** (no e2e for always-on yet: it needs real idle time or a test hook).
+  - Not done: discarding a draft in D3 while its segment is still open would let the next save recreate it (D3 must end or forget the segment).
 - [ ] D3 Review inbox (Sessions → List, where the short-session review panel is): confirm (title, project, billable), merge neighbours, discard; a count on Home/rail
 - [ ] D4 Drafts everywhere else: billing and invoices can't see them (DB CHECK + billable filter), team analytics and project stats skip them (SQL); session lists, timeline, standup and C6 project activity must show or skip them explicitly
+  - Skipping done in D2 (all readers ask for `status = 'confirmed'`). Left: deciding where drafts should be *shown* (e.g. the Home timeline, hatched as unconfirmed).
 - ~~Privacy: title-upload toggle~~ — not needed, titles are no longer uploaded. ~~Local-only mode~~ — out of scope (owner, 2026-10-18); a separate project if ever.
 
 **Pre-Phase-D cleanup** — done 2026-10-18 on `main`

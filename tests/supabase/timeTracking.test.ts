@@ -25,6 +25,7 @@ import {
   deleteSession,
   addSession,
   getSessionsInDateRange,
+  saveDraftSession,
 } from "../../src/supabase/timeTracking";
 
 describe("timeTracking", () => {
@@ -386,6 +387,104 @@ describe("timeTracking", () => {
         "2025-01-31",
       );
       expect(result).toEqual([]);
+    });
+  });
+
+  // ───────────── drafts (Phase D) ─────────────
+  describe("drafts", () => {
+    const draft = {
+      clientId: "6f1c0a52-0000-4000-8000-000000000001",
+      startTime: "2026-10-18T09:00:00.000Z",
+      endTime: "2026-10-18T09:40:00.000Z",
+      duration: 2100,
+      title: "dev-time-tracker",
+      projectId: "p1",
+      supervising: {
+        seconds: 300,
+        spans: [["2026-10-18T09:10:00.000Z", "2026-10-18T09:15:00.000Z"]] as [string, string][],
+      },
+      appUsage: [{ app: "VS Code", language: "TypeScript", category: null, seconds: 1800 }],
+    };
+
+    it("session lists only show confirmed sessions", async () => {
+      mockResult({ data: [], error: null });
+      await getAllSessions("u1");
+      mockResult({ data: [], error: null });
+      await getSessionsInDateRange("u1", "2026-10-01", "2026-10-31");
+      mockResult({ data: [], error: null });
+      await getSmallSessions("u1", 60);
+      const statusFilters = getCallsFor("eq").filter((c) => c.args[0] === "status");
+      expect(statusFilters).toEqual([
+        { method: "eq", args: ["status", "confirmed"] },
+        { method: "eq", args: ["status", "confirmed"] },
+        { method: "eq", args: ["status", "confirmed"] },
+      ]);
+    });
+
+    it("updates the existing draft of the segment", async () => {
+      mockResult({ data: [{ id: "s1" }], error: null });
+      expect(await saveDraftSession("u1", draft)).toBe("saved");
+
+      expect(getCallsFor("insert")).toHaveLength(0);
+      const [update] = getCallsFor("update");
+      expect(update.args[0]).toMatchObject({
+        duration: 2100,
+        end_time: draft.endTime,
+        project_id: "p1",
+        supervising_seconds: 300,
+        app_usage: draft.appUsage,
+      });
+      // Growth saves don't carry code stats, so they don't clear them
+      expect(update.args[0]).not.toHaveProperty("code_stats");
+      // Never a confirmed row
+      expect(getCallsFor("eq").map((c) => c.args)).toEqual(
+        expect.arrayContaining([
+          ["user_id", "u1"],
+          ["client_id", draft.clientId],
+          ["status", "draft"],
+        ]),
+      );
+    });
+
+    it("inserts a new draft, never billable", async () => {
+      mockResult({ data: [], error: null });
+      mockResult({ data: null, error: null });
+      const codeStats = [
+        {
+          repo_key: "github.com/me/a",
+          repo_name: "a",
+          commits: 1,
+          files_changed: 2,
+          lines_added: 10,
+          lines_removed: 1,
+          languages: {},
+        },
+      ];
+      expect(await saveDraftSession("u1", { ...draft, codeStats })).toBe("saved");
+
+      const [insert] = getCallsFor("insert");
+      expect(insert.args[0]).toMatchObject({
+        user_id: "u1",
+        client_id: draft.clientId,
+        status: "draft",
+        source: "auto",
+        is_billable: false,
+        start_time: draft.startTime,
+        code_stats: codeStats,
+      });
+    });
+
+    it("leaves a confirmed row alone", async () => {
+      mockResult({ data: [], error: null }); // no draft row to update
+      mockResult({ data: null, error: { code: "23505", message: "duplicate key" } });
+      expect(await saveDraftSession("u1", draft)).toBe("confirmed");
+    });
+
+    it("throws other errors", async () => {
+      mockResult({ data: null, error: { message: "fetch failed" } });
+      await expect(saveDraftSession("u1", draft)).rejects.toMatchObject({
+        message: "fetch failed",
+      });
     });
   });
 });

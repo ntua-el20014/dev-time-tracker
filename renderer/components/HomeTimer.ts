@@ -38,8 +38,20 @@ interface PickerProject {
 
 let projects: PickerProject[] = [];
 
+const clockTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+/** Outside a session with always-on: the segment being recorded as a draft. */
+function alwaysOnText(state: TrackingState): string {
+  const segment = state.autoSegment;
+  if (!segment) return "Ready · Always-on, waiting for activity";
+  return segment.isPaused
+    ? `Ready · Always-on, paused (you were away) · draft since ${clockTime(segment.startedAt)}`
+    : `Ready · Always-on, recording a draft since ${clockTime(segment.startedAt)}`;
+}
+
 function statusText(state: TrackingState): string {
-  if (!state.isRecording) return "Ready";
+  if (!state.isRecording) return state.alwaysOn ? alwaysOnText(state) : "Ready";
   if (state.isPaused) return state.autoPaused ? "Paused — you were away" : "Paused";
   return state.activity === "supervising" ? "Supervising an agent" : "Recording";
 }

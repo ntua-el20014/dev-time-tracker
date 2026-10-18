@@ -15,6 +15,12 @@ export interface SupervisingTime {
   spans: [string, string][];
 }
 
+/**
+ * Session lists show confirmed sessions only. Drafts (always-on segments,
+ * Phase D) wait in the review inbox until the user confirms them.
+ */
+const CONFIRMED = "confirmed";
+
 const SESSION_COLUMNS =
   "id, title, description, start_time, end_time, duration, project_id, is_billable, supervising_seconds, supervising_spans, code_stats, created_at";
 
@@ -30,6 +36,7 @@ export async function getSmallSessions(
     .from("time_tracking_sessions")
     .select(SESSION_COLUMNS)
     .eq("user_id", userId)
+    .eq("status", CONFIRMED)
     .lte("duration", maxDurationSeconds)
     .order("start_time", { ascending: false });
 
@@ -110,7 +117,8 @@ export async function getAllSessions(
   let query = supabase
     .from("time_tracking_sessions")
     .select(SESSION_COLUMNS)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("status", CONFIRMED);
 
   if (taggedSessionIds) {
     query = query.in("id", taggedSessionIds);
@@ -276,6 +284,7 @@ export async function getSessionsInDateRange(
     .from("time_tracking_sessions")
     .select(SESSION_COLUMNS)
     .eq("user_id", userId)
+    .eq("status", CONFIRMED)
     .gte("start_time", localDayStartISO(startDate))
     .lte("start_time", localDayEndISO(endDate))
     .order("start_time", { ascending: false });
@@ -284,4 +293,71 @@ export async function getSessionsInDateRange(
     throw error;
   }
   return data || [];
+}
+
+/** An always-on segment, saved as a draft while it grows and when it ends. */
+export interface DraftSessionData {
+  /** Chosen on the device; one row per segment */
+  clientId: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  title: string | null;
+  projectId: string | null;
+  supervising: SupervisingTime;
+  appUsage: AppUsageEntry[];
+  /** Only once the segment has ended (git runs then); left as is otherwise */
+  codeStats?: RepoCodeStats[];
+}
+
+/**
+ * Create or update the draft of an always-on segment (keyed by its
+ * client_id). A row the user already confirmed is never touched: then
+ * nothing is written and "confirmed" is returned.
+ */
+export async function saveDraftSession(
+  userId: string,
+  draft: DraftSessionData,
+): Promise<"saved" | "confirmed"> {
+  const fields = {
+    start_time: draft.startTime,
+    end_time: draft.endTime,
+    duration: draft.duration,
+    title: draft.title,
+    project_id: draft.projectId,
+    supervising_seconds: draft.supervising.seconds,
+    supervising_spans: draft.supervising.spans,
+    app_usage: draft.appUsage,
+    ...(draft.codeStats ? { code_stats: draft.codeStats } : {}),
+  };
+
+  // Usually the row exists already (the segment grew since the last save)
+  const { data: updated, error: updateError } = await (supabase as any)
+    .from("time_tracking_sessions")
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("client_id", draft.clientId)
+    .eq("status", "draft")
+    .select("id");
+  if (updateError) throw updateError;
+  if (Array.isArray(updated) && updated.length > 0) return "saved";
+
+  const row: SessionInsert = {
+    user_id: userId,
+    client_id: draft.clientId,
+    status: "draft",
+    source: "auto",
+    is_billable: false,
+    code_stats: [],
+    ...fields,
+  };
+  const { error } = await supabase
+    .from("time_tracking_sessions")
+    .insert(row as any);
+  if (error) {
+    // The row exists but isn't a draft any more: the user confirmed it
+    if ((error as { code?: string }).code === "23505") return "confirmed";
+    throw error;
+  }
+  return "saved";
 }

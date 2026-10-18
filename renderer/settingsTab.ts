@@ -90,6 +90,10 @@ async function renderSettings(container: HTMLElement) {
   if (!trackingInterval || typeof trackingInterval !== "number")
     trackingInterval = 10;
 
+  const alwaysOn = await safeIpcInvoke<boolean>("get-always-on", [], {
+    fallback: false,
+  });
+
   const defaultCurrency = await safeIpcInvoke<string>("get-default-currency", [], {
     fallback: DEFAULT_CURRENCY,
   });
@@ -153,6 +157,16 @@ async function renderSettings(container: HTMLElement) {
       <label for="trackingIntervalRange" class="settings-label">Tracking Interval:</label>
       <input type="range" id="trackingIntervalRange" min="5" max="30" step="5" value="${trackingInterval}" class="settings-range">
       <span id="trackingIntervalValue" class="settings-range-value">${trackingInterval}s</span>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Always-on:</span>
+      <label class="notification-toggle" for="alwaysOnToggle" aria-label="Always-on tracking">
+        <input type="checkbox" id="alwaysOnToggle" ${alwaysOn ? "checked" : ""} />
+        <span class="notification-toggle-track" aria-hidden="true">
+          <span class="notification-toggle-thumb"></span>
+        </span>
+      </label>
+      <span class="settings-range-value">Outside sessions, record work as drafts to review (never billed until confirmed). On this device.</span>
     </div>
     <div class="settings-row">
       <label for="defaultCurrencySelect" class="settings-label">Currency:</label>
@@ -431,6 +445,17 @@ async function renderSettings(container: HTMLElement) {
   } else {
     // Idle timeout elements not found - skip event listener setup
   }
+
+  const alwaysOnToggle =
+    container.querySelector<HTMLInputElement>("#alwaysOnToggle");
+  alwaysOnToggle?.addEventListener("change", async () => {
+    const enabled = await safeIpcInvoke<boolean>(
+      "set-always-on",
+      [alwaysOnToggle.checked],
+      { fallback: !alwaysOnToggle.checked },
+    );
+    alwaysOnToggle.checked = enabled;
+  });
 
   const intervalRange = container.querySelector(
     "#trackingIntervalRange",

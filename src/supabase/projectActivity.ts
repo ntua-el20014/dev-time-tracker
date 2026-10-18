@@ -59,6 +59,7 @@ export async function getProjectActivity(
     .from("time_tracking_sessions")
     .select("project_id, duration, supervising_seconds, code_stats")
     .eq("user_id", userId)
+    .eq("status", "confirmed")
     .not("project_id", "is", null)
     .gte("start_time", localDayStartISO(startDate))
     .lte("start_time", localDayEndISO(endDate));

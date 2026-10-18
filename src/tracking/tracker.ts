@@ -14,6 +14,7 @@ import {
   type IpcMainEvent,
 } from "electron";
 import { execFile } from "child_process";
+import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -23,14 +24,23 @@ import {
   getLanguageDataFromTitle,
   loadUserLangMapFromDisk,
 } from "../utils/extractData";
-import { addSession } from "../supabase/timeTracking";
+import {
+  addSession,
+  saveDraftSession,
+  type DraftSessionData,
+} from "../supabase/timeTracking";
 import { addUsageToDailySummary } from "../supabase/usageLogs";
 import {
   getIdleTimeout,
   getTrackingInterval,
 } from "../supabase/userPreferences";
 import { logError, classifyError, withRetry } from "../utils/errorHandler";
-import { enqueueUsageSummary, enqueueSession } from "../utils/offlineQueue";
+import {
+  enqueueDraftSession,
+  enqueueSession,
+  enqueueUsageSummary,
+  hasQueuedDraftSession,
+} from "../utils/offlineQueue";
 import {
   DEFAULT_IDLE_TIMEOUT_SECONDS,
   DEFAULT_TRACKING_INTERVAL_SECONDS,
@@ -39,9 +49,14 @@ import { SessionClock, type SessionSnapshot } from "./sessionClock";
 import { decideIdleAction, type Activity } from "./idlePolicy";
 import { createAgentHeartbeat } from "./agentHeartbeat";
 import { LiveAgents, type HookEvent, type LiveStatus } from "./agentLive";
-import { createCodeStats } from "./codeStats";
+import { createCodeStats, type CodeStatsDeps } from "./codeStats";
 import type { RepoCodeStats } from "../../shared/codeStats";
 import { addAppUsage, type AppUsageEntry } from "../../shared/appUsage";
+import {
+  Segmenter,
+  type SegmentEvent,
+  type SegmentSnapshot,
+} from "./segmenter";
 import { createUsageSampler } from "./usageSampler";
 import { UsageBatcher } from "./usageBatcher";
 import { getWorkspaceHint } from "./workspaceHints";
@@ -93,6 +108,20 @@ export interface TrackingState {
   agentActiveAt: string | null;
   /** Claude Code sessions reporting through hooks (Connect Claude Code), latest first */
   liveAgents: LiveAgentSummary[];
+  /** Always-on mode (Phase D): activity outside sessions is cut into segments */
+  alwaysOn: boolean;
+  /** The open always-on segment, or null */
+  autoSegment: AutoSegmentSummary | null;
+}
+
+export interface AutoSegmentSummary {
+  /** ISO */
+  startedAt: string;
+  activeSeconds: number;
+  isPaused: boolean;
+  repoKey: string | null;
+  /** The repo's linked project, if any */
+  projectId: string | null;
 }
 
 export interface LiveAgentSummary {
@@ -133,6 +162,12 @@ let selectedProjectId: string | null = null;
 let projectSource: ProjectSource = "auto";
 let activity: Activity = "active";
 const attribution = new ProjectAttribution();
+/** Always-on mode for the signed-in user (per device, off by default) */
+let alwaysOn = false;
+const segmenter = new Segmenter({
+  newId: randomUUID,
+  projectOf: (repoKey) => attribution.projectFor(repoKey),
+});
 /** System away states: never auto-resume while either is set. */
 let screenLocked = false;
 let systemSuspended = false;
@@ -166,6 +201,8 @@ export function getTrackingState(): TrackingState {
     supervisingSpans: clock.supervisingSpans(new Date()),
     agentActiveAt: agentActiveAt(),
     liveAgents: liveAgentSummaries(),
+    alwaysOn,
+    autoSegment: autoSegmentSummary(),
   };
 }
 
@@ -194,6 +231,11 @@ export function getTrackingUserId(): string | null {
 /** Called whenever the renderer syncs (or clears) the auth session. */
 export function setTrackingUser(userId: string | null) {
   if (userId === currentUserId) return;
+  // The open segment belongs to the previous user
+  dispatchSegmentEvents(segmenter.end(new Date()), currentUserId);
+  segmenter.reset();
+  repoNames.clear();
+  alwaysOn = false;
   currentUserId = userId;
   // Projects belong to a user; the renderer restores the user's last one
   selectedProjectId = null;
@@ -202,6 +244,7 @@ export function setTrackingUser(userId: string | null) {
   if (userId) {
     loadUserLangMapFromDisk(userId);
     void loadTrackingPreferences(userId);
+    void loadAlwaysOn(userId);
     void reloadRepoLinks();
   }
 }
@@ -312,11 +355,14 @@ function tick() {
   try {
     const sample = sampleUsage(currentUserId);
     if (!sample) return;
-    addAppUsage(
-      sessionAppUsage,
-      { app: sample.appName, language: sample.language, category: sample.category },
-      intervalSeconds,
-    );
+    const usage = clock.isRecording ? sessionAppUsage : openDraft?.appUsage;
+    if (usage) {
+      addAppUsage(
+        usage,
+        { app: sample.appName, language: sample.language, category: sample.category },
+        intervalSeconds,
+      );
+    }
     batcher.add({
       userId: currentUserId,
       ...sample,
@@ -451,6 +497,14 @@ function detectTick() {
     attribution.addSessionTime(DETECT_MS / 1000);
     if (repo) codeStats.noteRepo(repo);
   }
+  if (repo) repoNames.set(repo.key, repo.name);
+  // Also during a manual session: the segment after it starts in this repo
+  if (alwaysOn) {
+    dispatchSegmentEvents(
+      segmenter.observeRepo(new Date(), attribution.currentRepo()?.key ?? null),
+    );
+  }
+  if (repo && openDraft && !segmenter.isPaused) openDraft.code.noteRepo(repo);
   if (changed && !applyDetectedProject()) emitState();
 }
 
@@ -523,7 +577,10 @@ export function setSessionProject(
 
 export function startTracking() {
   if (clock.isRecording) return;
-  clock.startAt(new Date());
+  const now = new Date();
+  // A manual session takes over from always-on
+  dispatchSegmentEvents(segmenter.end(now));
+  clock.startAt(now);
   attribution.resetSession();
   codeStats.startSession();
   sessionAppUsage = [];
@@ -731,7 +788,11 @@ export function toggleIncognito(): boolean {
 /** True if quitting now would lose a session or buffered usage. */
 export function hasUnsavedTrackingWork(): boolean {
   return (
-    clock.isRecording || pendingStopSave !== null || batcher.pendingCount > 0
+    clock.isRecording ||
+    pendingStopSave !== null ||
+    batcher.pendingCount > 0 ||
+    segmenter.isOpen ||
+    draftSaves.size > 0
   );
 }
 
@@ -740,6 +801,8 @@ export function hasUnsavedTrackingWork(): boolean {
  * or paused session, and flushes buffered usage (offline queue on failure).
  */
 export async function finalizeTrackingForQuit() {
+  quitting = true;
+  dispatchSegmentEvents(segmenter.end(new Date()));
   if (pendingStopSave) {
     settleSessionInfo?.(APP_CLOSED_SESSION_INFO);
     await pendingStopSave;
@@ -769,6 +832,7 @@ export async function finalizeTrackingForQuit() {
       appUsage,
     );
   }
+  await Promise.all([...draftSaves]);
 }
 
 // ── Code stats (C2) ──────────────────────────────────────────────────
@@ -781,7 +845,7 @@ const QUIT_CODE_STATS_MS = 5_000;
 /** New files larger than this aren't counted line by line. */
 const MAX_COUNT_BYTES = 1024 * 1024;
 
-const codeStats = createCodeStats({
+const codeStatsDeps: CodeStatsDeps = {
   git: (cwd, args) =>
     new Promise((resolve) => {
       execFile(
@@ -814,7 +878,9 @@ const codeStats = createCodeStats({
   },
   languageOf: (file) =>
     getLanguageDataFromTitle(path.basename(file))?.language ?? null,
-});
+};
+/** The manual session's; each always-on segment has its own */
+const codeStats = createCodeStats(codeStatsDeps);
 
 /** Where agents worked during a session, from their transcripts (agents.ts). */
 let agentDirsBetween: (start: number, end: number) => Promise<string[]> =
@@ -831,8 +897,9 @@ export function setAgentDirsProvider(
  * after `limitMs` with no stats.
  */
 async function collectCodeStats(
-  session: SessionSnapshot,
+  session: { start: Date; end: Date },
   limitMs = CODE_STATS_MS,
+  stats = codeStats,
 ): Promise<RepoCodeStats[]> {
   const start = session.start.getTime();
   const end = session.end.getTime();
@@ -846,7 +913,7 @@ async function collectCodeStats(
       const repo = resolveRepoForDir(dir);
       if (repo) extra.push(repo);
     }
-    return codeStats.finish(start, end, extra);
+    return stats.finish(start, end, extra);
   })();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<RepoCodeStats[]>((resolve) => {
@@ -941,9 +1008,10 @@ function refreshLiveAgents() {
 /** A Claude Code hook event arrived (already reduced to metadata). */
 export function applyAgentHookEvent(event: HookEvent) {
   liveAgents.apply(event);
-  if (event.cwd && clock.isRecording && !isIncognito) {
+  const stats = clock.isRecording ? codeStats : openDraft?.code;
+  if (event.cwd && stats && !isIncognito) {
     const repo = resolveRepoForDir(event.cwd);
-    if (repo) codeStats.noteRepo(repo);
+    if (repo) stats.noteRepo(repo);
   }
   refreshLiveAgents();
   pollIdle();
@@ -970,6 +1038,249 @@ async function pollHeartbeat() {
   if (heartbeat.lastActivity() !== before) pollIdle();
 }
 
+// ── Always-on segments (Phase D) ─────────────────────────────────────
+
+/** Segments are cut only outside manual sessions, while enabled and signed in. */
+const segmentsWanted = () =>
+  alwaysOn && currentUserId !== null && !clock.isRecording;
+
+type SegmentListener = (event: SegmentEvent, userId: string) => void;
+const segmentListeners = new Set<SegmentListener>();
+
+/** Segments opening and closing (with the user they belong to). */
+export function onSegmentEvent(listener: SegmentListener) {
+  segmentListeners.add(listener);
+}
+
+function dispatchSegmentEvents(
+  events: SegmentEvent[],
+  userId: string | null = currentUserId,
+) {
+  if (events.length === 0) return;
+  if (userId) {
+    for (const event of events) {
+      handleDraft(event, userId);
+      for (const listener of segmentListeners) {
+        try {
+          listener(event, userId);
+        } catch (err) {
+          logError("segmentListener", err);
+        }
+      }
+    }
+  }
+  syncSegmentTimers();
+  emitState();
+}
+
+function observeSegmentActivity(
+  now: Date,
+  idleSeconds: number,
+  secondsSinceAgent: number | null,
+) {
+  if (!segmentsWanted()) return;
+  const wasPaused = segmenter.isPaused;
+  const events = segmenter.observeActivity({
+    now,
+    idleSeconds,
+    idleTimeoutSeconds,
+    secondsSinceAgent,
+    screenLocked,
+    systemSuspended,
+  });
+  if (events.length > 0) dispatchSegmentEvents(events);
+  else if (segmenter.isPaused !== wasPaused) {
+    syncSegmentTimers();
+    emitState();
+  }
+}
+
+/** Outside a session, usage is sampled while a segment runs. */
+function syncSegmentTimers() {
+  if (clock.isRecording) return; // the session owns the timers
+  if (segmenter.isOpen && !segmenter.isPaused) startTimers();
+  else if (tickTimer) {
+    stopTimers();
+    void flushTrackedUsage();
+  }
+}
+
+// ── Drafts (D2) ──────────────────────────────────────────────────────
+
+/** Shorter segments aren't saved (e.g. a stray mouse move at night). */
+const MIN_SEGMENT_SECONDS = 120;
+/** How often the open segment's draft is saved while it grows. */
+const DRAFT_SAVE_MS = 5 * 60_000;
+
+interface OpenDraft {
+  clientId: string;
+  userId: string;
+  /** Foreground time while the segment ran (saved as app_usage) */
+  appUsage: AppUsageEntry[];
+  /** Repos worked in during the segment, for its code stats at the end */
+  code: ReturnType<typeof createCodeStats>;
+  /** Saved (or queued) at least once: then it's kept even if a split shortens it */
+  saved: boolean;
+  /** Saves of one draft run one after another (update-or-insert isn't atomic) */
+  chain: Promise<void>;
+}
+
+let openDraft: OpenDraft | null = null;
+/** Saves not finished yet; quit waits for them */
+const draftSaves = new Set<Promise<void>>();
+/** Repo names by key, for draft titles */
+const repoNames = new Map<string, string>();
+let quitting = false;
+
+function handleDraft(event: SegmentEvent, userId: string) {
+  if (event.type === "opened") {
+    openDraft = {
+      clientId: event.clientId,
+      userId,
+      appUsage: [],
+      code: createCodeStats(codeStatsDeps),
+      saved: false,
+      chain: Promise.resolve(),
+    };
+    const repo = attribution.currentRepo();
+    if (repo && !isIncognito) openDraft.code.noteRepo(repo);
+    return;
+  }
+  const draft = openDraft;
+  if (!draft || draft.clientId !== event.segment.clientId) return;
+  openDraft = null;
+  if (event.segment.duration < MIN_SEGMENT_SECONDS && !draft.saved) return;
+  // Taken now: links and names may be gone (sign-out) by the time git is done
+  const data = draftData(draft, event.segment);
+  const segment = event.segment;
+  const limit = quitting ? QUIT_CODE_STATS_MS : CODE_STATS_MS;
+  queueDraftSave(draft, async () => ({
+    ...data,
+    codeStats: await collectCodeStats(segment, limit, draft.code),
+  }));
+}
+
+function draftData(draft: OpenDraft, segment: SegmentSnapshot): DraftSessionData {
+  return {
+    clientId: draft.clientId,
+    startTime: segment.start.toISOString(),
+    endTime: segment.end.toISOString(),
+    duration: segment.duration,
+    title: segment.repoKey ? (repoNames.get(segment.repoKey) ?? null) : null,
+    projectId: segment.repoKey ? attribution.projectFor(segment.repoKey) : null,
+    supervising: {
+      seconds: segment.supervisingSeconds,
+      spans: segment.supervisingSpans,
+    },
+    appUsage: draft.appUsage.map((entry) => ({ ...entry })),
+  };
+}
+
+/** Save the open segment as it is now (it keeps growing). */
+function saveGrowingDraft() {
+  const draft = openDraft;
+  const segment = segmenter.current(new Date());
+  if (!draft || !segment || segment.duration < MIN_SEGMENT_SECONDS) return;
+  const data = draftData(draft, segment);
+  queueDraftSave(draft, async () => data);
+}
+
+function queueDraftSave(
+  draft: OpenDraft,
+  build: () => Promise<DraftSessionData>,
+) {
+  draft.saved = true;
+  const save = draft.chain.then(async () => {
+    const data = await build();
+    await writeDraft(draft.userId, data, quitting);
+  });
+  draft.chain = save.catch(() => undefined);
+  const tracked = save.catch((err) => logError("saveDraft", err));
+  draftSaves.add(tracked);
+  void tracked.finally(() => draftSaves.delete(tracked));
+}
+
+async function writeDraft(
+  userId: string,
+  data: DraftSessionData,
+  queueOnAnyError: boolean,
+) {
+  // An older version is waiting offline: queue behind it, never overtake it
+  if (hasQueuedDraftSession(userId, data.clientId)) {
+    enqueueDraftSession(userId, data);
+    return;
+  }
+  try {
+    await saveDraftSession(userId, data);
+  } catch (err) {
+    const kind = classifyError(err);
+    // "auth": e.g. the segment ended because the user signed out
+    if (queueOnAnyError || kind === "network" || kind === "auth") {
+      enqueueDraftSession(userId, data);
+    } else {
+      logError("saveDraftSession", err);
+    }
+  }
+}
+
+function autoSegmentSummary(): AutoSegmentSummary | null {
+  const segment = segmenter.current(new Date());
+  if (!segment) return null;
+  return {
+    startedAt: segment.start.toISOString(),
+    activeSeconds: segment.duration,
+    isPaused: segment.isPaused,
+    repoKey: segment.repoKey,
+    projectId: segment.repoKey ? attribution.projectFor(segment.repoKey) : null,
+  };
+}
+
+const trackingSettingsFile = (uid: string) =>
+  path.join(app.getPath("userData"), `tracking-${uid}.json`);
+
+async function readTrackingSettings(
+  uid: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const raw = await fs.promises.readFile(trackingSettingsFile(uid), "utf-8");
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+async function loadAlwaysOn(uid: string) {
+  const settings = await readTrackingSettings(uid);
+  if (currentUserId !== uid) return;
+  alwaysOn = settings.alwaysOn === true;
+  emitState();
+}
+
+export function isAlwaysOn(): boolean {
+  return alwaysOn;
+}
+
+/** Turn always-on mode on or off for the signed-in user (kept on this device). */
+export async function setAlwaysOn(enabled: boolean) {
+  const uid = currentUserId;
+  if (!uid) throw new Error("Not signed in");
+  if (!enabled) dispatchSegmentEvents(segmenter.end(new Date()));
+  alwaysOn = enabled;
+  emitState();
+  const file = trackingSettingsFile(uid);
+  const settings = await readTrackingSettings(uid);
+  const tmp = `${file}.tmp`;
+  await fs.promises.writeFile(
+    tmp,
+    JSON.stringify({ ...settings, alwaysOn: enabled }),
+    "utf-8",
+  );
+  await fs.promises.rename(tmp, file);
+}
+
 // ── Idle / power ─────────────────────────────────────────────────────
 
 const clockTime = (d: Date) =>
@@ -978,13 +1289,14 @@ const clockTime = (d: Date) =>
 function pollIdle() {
   const now = new Date();
   const lastAgent = lastAgentActivity(now.getTime());
+  const idleSeconds = powerMonitor.getSystemIdleTime();
+  const secondsSinceAgent =
+    lastAgent === null ? null : Math.max(0, (now.getTime() - lastAgent) / 1000);
+  observeSegmentActivity(now, idleSeconds, secondsSinceAgent);
   const decision = decideIdleAction({
-    idleSeconds: powerMonitor.getSystemIdleTime(),
+    idleSeconds,
     idleTimeoutSeconds,
-    secondsSinceAgent:
-      lastAgent === null
-        ? null
-        : Math.max(0, (now.getTime() - lastAgent) / 1000),
+    secondsSinceAgent,
     ...clock.state,
     screenLocked,
     systemSuspended,
@@ -1020,6 +1332,7 @@ export function initTracking(options: {
   powerMonitor.on("lock-screen", () => {
     screenLocked = true;
     pauseTracking(true);
+    pollIdle(); // pauses an always-on segment
   });
   powerMonitor.on("unlock-screen", () => {
     screenLocked = false;
@@ -1027,12 +1340,14 @@ export function initTracking(options: {
   powerMonitor.on("suspend", () => {
     systemSuspended = true;
     pauseTracking(true);
+    pollIdle();
   });
   powerMonitor.on("resume", () => {
     systemSuspended = false;
   });
 
   setInterval(pollIdle, IDLE_POLL_MS);
+  setInterval(saveGrowingDraft, DRAFT_SAVE_MS);
   setInterval(detectTick, DETECT_MS);
   void pollHeartbeat();
   setInterval(() => void pollHeartbeat(), HEARTBEAT_MS);
@@ -1065,4 +1380,9 @@ ipcMain.handle("stop-tracking", async () => {
   return getTrackingState();
 });
 ipcMain.handle("toggle-incognito", () => toggleIncognito());
+ipcMain.handle("get-always-on", () => isAlwaysOn());
+ipcMain.handle("set-always-on", async (_event, enabled: unknown) => {
+  await setAlwaysOn(enabled === true);
+  return isAlwaysOn();
+});
 ipcMain.handle("get-incognito-status", () => isIncognito);

@@ -4,6 +4,8 @@
  * Queued item types:
  *   - usage_summary — time to add to one daily_usage_summary row
  *   - session       — one per completed tracking session
+ *   - draft_session — the latest version of an always-on segment (Phase D);
+ *                     a newer one replaces the queued one
  *   - usage_log     — legacy (one per tick, queued by older versions); its
  *                     time is replayed into the summary
  *
@@ -22,7 +24,12 @@ import os from "os";
 import { BrowserWindow } from "electron";
 import { CONFIG_DIR } from "../../shared/constants";
 import { addUsageToDailySummary } from "../supabase/usageLogs";
-import { addSession, type SupervisingTime } from "../supabase/timeTracking";
+import {
+  addSession,
+  saveDraftSession,
+  type DraftSessionData,
+  type SupervisingTime,
+} from "../supabase/timeTracking";
 import type { RepoCodeStats } from "../../shared/codeStats";
 import type { AppUsageEntry } from "../../shared/appUsage";
 import { toLocalDateString } from "./timeFormat";
@@ -95,7 +102,19 @@ export interface QueuedSession {
   };
 }
 
-export type QueueItem = QueuedUsageSummary | QueuedUsageLog | QueuedSession;
+export interface QueuedDraftSession {
+  type: "draft_session";
+  queuedAt: string;
+  /** Idempotency key: `draft_session:<userId>:<clientId>` (one per segment) */
+  key: string;
+  data: DraftSessionData & { userId: string };
+}
+
+export type QueueItem =
+  | QueuedUsageSummary
+  | QueuedUsageLog
+  | QueuedSession
+  | QueuedDraftSession;
 
 export interface SyncStatus {
   pendingCount: number;
@@ -260,6 +279,56 @@ export function enqueueSession(
   broadcastSyncStatus();
 }
 
+const draftKey = (userId: string, clientId: string) =>
+  `draft_session:${userId}:${clientId}`;
+
+/**
+ * Enqueue a draft save that failed. Replaces a queued older version of the
+ * same segment, but keeps code stats it had if this version has none.
+ */
+export function enqueueDraftSession(
+  userId: string,
+  draft: DraftSessionData,
+): void {
+  const key = draftKey(userId, draft.clientId);
+  const index = queue.findIndex((item) => item.key === key);
+  const previous = index >= 0 ? (queue[index] as QueuedDraftSession) : null;
+  const item: QueuedDraftSession = {
+    type: "draft_session",
+    queuedAt: new Date().toISOString(),
+    key,
+    data: {
+      ...draft,
+      codeStats: draft.codeStats ?? previous?.data.codeStats,
+      userId,
+    },
+  };
+  if (index >= 0) queue[index] = item;
+  else queue.push(item);
+  keySet.add(key);
+  saveToDisk();
+  broadcastSyncStatus();
+}
+
+/**
+ * Whether a version of this segment is waiting in the queue. Newer versions
+ * must then be queued behind it (enqueueDraftSession replaces it), so an
+ * older one can never overwrite a newer one.
+ */
+export function hasQueuedDraftSession(userId: string, clientId: string): boolean {
+  return keySet.has(draftKey(userId, clientId));
+}
+
+/**
+ * Take a processed item out of the queue. A draft may have been replaced
+ * by a newer version meanwhile: that one stays (and is sent next).
+ */
+function removeItem(item: QueueItem): void {
+  const at = queue.indexOf(item);
+  if (at >= 0) queue.splice(at, 1);
+  if (!queue.some((q) => q.key === item.key)) keySet.delete(item.key);
+}
+
 /**
  * Attempt to flush the signed-in user's queued items to Supabase.
  * Items are processed in order; the first network/auth failure aborts the
@@ -339,11 +408,13 @@ export async function flush(): Promise<number> {
           d.codeStats,
           d.appUsage,
         );
+      } else if (item.type === "draft_session") {
+        const { userId, ...draft } = item.data;
+        await saveDraftSession(userId, draft);
       }
 
       // Success — remove from queue
-      queue.splice(i, 1);
-      keySet.delete(item.key);
+      removeItem(item);
       flushed++;
     } catch (err) {
       const category = classifyError(err);
@@ -360,8 +431,7 @@ export async function flush(): Promise<number> {
       // Other errors (e.g. duplicate row, constraint violation) won't
       // succeed on retry. Log and discard so they don't block the queue.
       logError(`offlineQueue.flush [${item.type}] — discarding`, err);
-      queue.splice(i, 1);
-      keySet.delete(item.key);
+      removeItem(item);
       flushed++; // count as "processed" even though it failed permanently
     }
   }

@@ -31,6 +31,20 @@ export interface TrackingState {
   agentActiveAt: string | null;
   /** Claude Code sessions reporting through hooks (Connect Claude Code), latest first */
   liveAgents: LiveAgent[];
+  /** Always-on mode (Phase D): activity outside sessions is cut into segments */
+  alwaysOn: boolean;
+  /** The open always-on segment, or null */
+  autoSegment: AutoSegment | null;
+}
+
+export interface AutoSegment {
+  /** ISO */
+  startedAt: string;
+  /** Active seconds when main sent this state */
+  activeSeconds: number;
+  isPaused: boolean;
+  repoKey: string | null;
+  projectId: string | null;
 }
 
 export interface LiveAgent {
@@ -64,6 +78,8 @@ let state: TrackingState = {
   supervisingSpans: [],
   agentActiveAt: null,
   liveAgents: [],
+  alwaysOn: false,
+  autoSegment: null,
 };
 const listeners = new Set<(state: TrackingState) => void>();
 

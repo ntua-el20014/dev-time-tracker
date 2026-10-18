@@ -23,8 +23,10 @@ vi.mock("../../src/supabase/usageLogs", () => ({
   addUsageToDailySummary: (...args: unknown[]) => addUsageToDailySummary(...args),
 }));
 const addSession = vi.fn();
+const saveDraftSession = vi.fn();
 vi.mock("../../src/supabase/timeTracking", () => ({
   addSession: (...args: unknown[]) => addSession(...args),
+  saveDraftSession: (...args: unknown[]) => saveDraftSession(...args),
 }));
 vi.mock("../../src/utils/errorHandler", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -58,6 +60,7 @@ describe("offlineQueue.flush", () => {
     getSession.mockReset();
     addUsageToDailySummary.mockReset().mockResolvedValue(undefined);
     addSession.mockReset().mockResolvedValue({});
+    saveDraftSession.mockReset().mockResolvedValue("saved");
   });
 
   it("keeps everything while signed out instead of discarding it", async () => {
@@ -144,5 +147,77 @@ describe("offlineQueue.flush", () => {
     );
     await q.flush();
     expect(addSession.mock.calls[0][11]).toEqual(appUsage);
+  });
+
+  describe("drafts", () => {
+    const draft = (duration: number, extra = {}) => ({
+      clientId: "seg-1",
+      startTime: "2026-10-18T09:00:00.000Z",
+      endTime: "2026-10-18T09:30:00.000Z",
+      duration,
+      title: null,
+      projectId: null,
+      supervising: { seconds: 0, spans: [] as [string, string][] },
+      appUsage: [],
+      ...extra,
+    });
+    const codeStats = [
+      {
+        repo_key: "github.com/me/a",
+        repo_name: "a",
+        commits: 1,
+        files_changed: 1,
+        lines_added: 3,
+        lines_removed: 0,
+        languages: {},
+      },
+    ];
+
+    it("keeps only the latest version of a segment, with its code stats", async () => {
+      const q = await freshQueue();
+      signedInAs(null);
+      q.enqueueDraftSession("user-A", draft(600, { codeStats }));
+      q.enqueueDraftSession("user-A", draft(900));
+      expect(q.getPendingCount()).toBe(1);
+      expect(q.hasQueuedDraftSession("user-A", "seg-1")).toBe(true);
+      expect(q.hasQueuedDraftSession("user-B", "seg-1")).toBe(false);
+
+      signedInAs("user-A");
+      expect(await q.flush()).toBe(1);
+      expect(saveDraftSession).toHaveBeenCalledTimes(1);
+      expect(saveDraftSession).toHaveBeenCalledWith(
+        "user-A",
+        expect.objectContaining({ clientId: "seg-1", duration: 900, codeStats }),
+      );
+      expect(q.hasQueuedDraftSession("user-A", "seg-1")).toBe(false);
+    });
+
+    it("a version queued while the older one is being sent is sent after it", async () => {
+      const q = await freshQueue();
+      signedInAs("user-A");
+      q.enqueueDraftSession("user-A", draft(600));
+      let release!: () => void;
+      saveDraftSession.mockImplementationOnce(
+        () => new Promise<string>((resolve) => (release = () => resolve("saved"))),
+      );
+
+      const flushing = q.flush();
+      await vi.waitFor(() => expect(saveDraftSession).toHaveBeenCalledTimes(1));
+      q.enqueueDraftSession("user-A", draft(1200));
+      release();
+      expect(await flushing).toBe(2);
+
+      expect(saveDraftSession.mock.calls.map((c) => c[1].duration)).toEqual([600, 1200]);
+      expect(q.getPendingCount()).toBe(0);
+    });
+
+    it("keeps a draft on network errors", async () => {
+      const q = await freshQueue();
+      signedInAs("user-A");
+      q.enqueueDraftSession("user-A", draft(600));
+      saveDraftSession.mockRejectedValueOnce(new Error("fetch failed"));
+      expect(await q.flush()).toBe(0);
+      expect(q.hasQueuedDraftSession("user-A", "seg-1")).toBe(true);
+    });
   });
 });

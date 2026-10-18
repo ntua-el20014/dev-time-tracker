@@ -35,6 +35,7 @@ describe("getProjectActivity", () => {
     });
     expect(getCallsFor("eq").map((c) => c.args)).toEqual([
       ["user_id", "u1"],
+      ["status", "confirmed"], // drafts aren't the user's confirmed time
       ["user_id", "u1"],
     ]);
   });
