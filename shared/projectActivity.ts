@@ -134,3 +134,17 @@ export function formatSpan(seconds: number): string {
 export function formatAgentTotals(t: AgentTotals): string {
   return `${formatSpan(t.activeSeconds)} · ${formatAgentCost(t)} · ${t.sessions} session${t.sessions === 1 ? "" : "s"}`;
 }
+
+/**
+ * The projects with the most going on (Home's widget): ordered by your time
+ * plus agent time (only to rank them; the two overlap and are never shown
+ * added up), projects with nothing left out.
+ */
+export function busiestProjects(list: ProjectActivity[], limit: number): ProjectActivity[] {
+  const weight = (a: ProjectActivity) =>
+    a.humanSeconds + a.supervisingSeconds + a.agent.activeSeconds;
+  return list
+    .filter((a) => a.sessions > 0 || a.agent.sessions > 0)
+    .sort((x, y) => weight(y) - weight(x))
+    .slice(0, limit);
+}

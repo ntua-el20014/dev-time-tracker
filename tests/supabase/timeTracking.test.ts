@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   mockResult,
+  mockRpcResult,
   resetMockState,
   getCallsFor,
 } from "../helpers/supabaseMock";
@@ -442,34 +443,37 @@ describe("timeTracking", () => {
       ]);
     });
 
-    it("updates the existing draft of the segment", async () => {
-      mockResult({ data: [{ id: "s1" }], error: null });
+    const rpcCall = () => {
+      const calls = getCallsFor("rpc");
+      expect(calls).toHaveLength(1);
+      expect(calls[0].args[0]).toBe("save_draft_session");
+      return calls[0].args[1];
+    };
+
+    it("saves a growing segment in one call, keeping its code stats", async () => {
+      mockRpcResult("save_draft_session", { data: "saved", error: null });
       expect(await saveDraftSession("u1", draft)).toBe("saved");
 
       expect(getCallsFor("insert")).toHaveLength(0);
-      const [update] = getCallsFor("update");
-      expect(update.args[0]).toMatchObject({
-        duration: 2100,
-        end_time: draft.endTime,
-        project_id: "p1",
-        supervising_seconds: 300,
-        app_usage: draft.appUsage,
+      expect(getCallsFor("update")).toHaveLength(0);
+      expect(rpcCall()).toEqual({
+        p_user_id: "u1",
+        p_client_id: draft.clientId,
+        p_start_time: draft.startTime,
+        p_end_time: draft.endTime,
+        p_duration: 2100,
+        p_title: "dev-time-tracker",
+        p_project_id: "p1",
+        p_supervising_seconds: 300,
+        p_supervising_spans: draft.supervising.spans,
+        p_app_usage: draft.appUsage,
+        // Growth saves don't carry code stats: null keeps the stored ones
+        p_code_stats: null,
       });
-      // Growth saves don't carry code stats, so they don't clear them
-      expect(update.args[0]).not.toHaveProperty("code_stats");
-      // Never a confirmed row
-      expect(getCallsFor("eq").map((c) => c.args)).toEqual(
-        expect.arrayContaining([
-          ["user_id", "u1"],
-          ["client_id", draft.clientId],
-          ["status", "draft"],
-        ]),
-      );
     });
 
-    it("inserts a new draft, never billable", async () => {
-      mockResult({ data: [], error: null });
-      mockResult({ data: null, error: null });
+    it("sends the code stats of a segment that ended", async () => {
+      mockRpcResult("save_draft_session", { data: "saved", error: null });
       const codeStats = [
         {
           repo_key: "github.com/me/a",
@@ -482,27 +486,16 @@ describe("timeTracking", () => {
         },
       ];
       expect(await saveDraftSession("u1", { ...draft, codeStats })).toBe("saved");
-
-      const [insert] = getCallsFor("insert");
-      expect(insert.args[0]).toMatchObject({
-        user_id: "u1",
-        client_id: draft.clientId,
-        status: "draft",
-        source: "auto",
-        is_billable: false,
-        start_time: draft.startTime,
-        code_stats: codeStats,
-      });
+      expect(rpcCall().p_code_stats).toEqual(codeStats);
     });
 
-    it("leaves a confirmed row alone", async () => {
-      mockResult({ data: [], error: null }); // no draft row to update
-      mockResult({ data: null, error: { code: "23505", message: "duplicate key" } });
+    it("reports a row the user already confirmed", async () => {
+      mockRpcResult("save_draft_session", { data: "confirmed", error: null });
       expect(await saveDraftSession("u1", draft)).toBe("confirmed");
     });
 
-    it("throws other errors", async () => {
-      mockResult({ data: null, error: { message: "fetch failed" } });
+    it("throws errors", async () => {
+      mockRpcResult("save_draft_session", { data: null, error: { message: "fetch failed" } });
       await expect(saveDraftSession("u1", draft)).rejects.toMatchObject({
         message: "fetch failed",
       });

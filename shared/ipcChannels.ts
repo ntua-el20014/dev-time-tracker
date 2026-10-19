@@ -88,6 +88,7 @@ export const INVOKE_CHANNELS = [
   "get-user-theme",
   "link-detected-repo",
   "merge-draft-sessions",
+  "open-browser-categories-json",
   "open-custom-apps-json",
   "open-lang-json",
   "org:approve-request",

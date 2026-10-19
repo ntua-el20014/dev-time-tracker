@@ -1,7 +1,7 @@
 # CLAUDE.md — Dev Time Tracker
 
 Guide for working in this repo: how the code is laid out, the conventions to follow, known problems, and the roadmap we agreed to work from.
-Written 2026-10-14 after a full read-through, kept current since (last: 2026-10-18, after Phase D). Part 2 lists what that read-through found and where each item stands. Line numbers will drift, so search by function name.
+Written 2026-10-14 after a full read-through, kept current since (last: 2026-10-19, after Phase D and its follow-ups). Part 2 lists what that read-through found and where each item stands. Line numbers will drift, so search by function name.
 
 ---
 
@@ -13,7 +13,7 @@ An Electron 28 desktop app, written in TypeScript and bundled with webpack via E
 ### Commands
 ```
 npm start                 # dev (electron-forge start, webpack HMR)
-npm test                  # vitest (~600 tests, mocked Supabase — ~15s)
+npm test                  # vitest (~650 tests, mocked Supabase — ~15s)
 npm run type-check        # main + renderer tsconfigs
 npm run lint              # eslint
 npm run make              # installers
@@ -91,6 +91,7 @@ Supabase (RLS enforces per-user / per-org access)
 - **Title first:** the browser's suffix is stripped (Edge: also its profile name and "and N more pages"), then ordered patterns (GitHub/GitLab PR and issue titles, "· GitHub", "- Claude", "| MDN", "- Stack Overflow", "localhost:3000/…", …). Google Docs/Sheets/Slides and Office never count as docs.
 - **URL only when the title says nothing** (host + path rules: forges by path, AI chat, Q&A, issue trackers, CI/cloud consoles, docs hosts or `/docs` paths, private/local hosts). x-win's `url` blocks for 20–90 ms per read and doesn't work for every browser (this machine's Opera reports "Opera Internet Browser" and always gets ""), so the sampler stops asking a browser after 5 empty reads that never once worked (`URL_GIVE_UP_AFTER`). Not on Linux.
 - Stored as part of the `daily_usage_summary` key (`p_category`) and in the session's `app_usage`, also through the offline queue. Only the category; never the URL or the title.
+- **The user's own rules:** `userData/browser-categories-<uid>.json` (Settings → Integrations → "Open browser-categories.json", like `lang.json`): `titles` (text the page title contains → category) and `hosts` (a site and its subdomains, optionally `host/path` → category). Parsed by `parseCustomBrowserRules()` (malformed entries skipped, ≤ 500 each), loaded by `src/utils/browserRules.ts` (re-read when the file's mtime changes, so edits apply on the next sample) and passed to `classifyBrowserPage()` through the sampler's `customBrowserRules` dep. Checked before the built-in rules, first match wins; a host rule only applies when the title isn't recognised (the URL is read only then), so overriding a recognised page takes a title rule. A category is a built-in key or label, `other` (Other browsing), or the user's own name (≤ 40 characters, stored as given; `browserCategoryLabel()` shows it as is).
 - UI: App activity shows "Code review 40m · Docs 30m · Other browsing 1h" under each browser; Insights has "Browser time" (30 days, `get-browser-usage`; browsers by name from the known/custom app lists, `getBrowserNames()`).
 
 **Code stats (C2)** — `codeStats.ts` (git through an injected runner; `tracker.ts` uses `execFile("git")`, 15 s per command, the whole collection gives up after 60 s, 5 s on quit):
@@ -101,6 +102,7 @@ Supabase (RLS enforces per-user / per-org access)
 
 **Project activity (C6)** — `shared/projectActivity.ts` (pure) sums, per project, the user's own sessions (time with input = duration − supervising, supervising time, code from `code_stats`) and their agent sessions (active time, reported `cost_usd`; a session without a cost makes the total a lower bound, shown as "$12.30+"). Agent time overlaps the user's time, so the two are shown side by side, never added. `src/supabase/projectActivity.ts` queries it (`get-project-activity`, local days) and gives agent totals per project to Billing and invoices. Only the user's own work, also on org projects.
 - Projects: each card has "Last 30 days": Your time (incl. supervising), AI agents (time · cost · sessions), Code (+/− · files · commits); the Statistics modal adds lines per language.
+- Home: "Last 7 days by project" under the earnings box (`renderer/components/ProjectActivityWidget.ts`): the 5 busiest projects (`busiestProjects()`: your time + agent time, only to rank), each with your time (supervising part), AI agents (time · cost · sessions) and code. Loads without holding up the rest of Home; re-renders itself on `agent-sessions-synced`.
 - Billing: earnings in each project's currency, totals per currency; an "AI Agent Cost (USD)" total card and column when there is any (`agentCostUsd`/`agentCostIncomplete`/`agentSessions` per project, `totalAgentCostUsd`); a pass-through expense, **not** part of earnings. Projects where only agents worked get a row.
 - Invoices: `get-projects-for-invoice` returns each project's agent cost (and lists agent-only projects with a cost). The modal offers "Add AI agent costs as a line item" (off by default, shown only when a chosen project has a cost); the PDF then gets "AI coding agent usage (N sessions, at cost)" per project, in its subtotal. Only reported costs are added. Claude Code reports API-price cost, which isn't what a subscription user pays.
 
@@ -109,7 +111,7 @@ Supabase (RLS enforces per-user / per-org access)
 - It closes after 15 min without a sign of work (`SEGMENT_GAP_SECONDS`, also when the idle timeout is longer), ending at the last sign of work; on manual Start, sign-out, quit or turning always-on off (reason `"ended"`).
 - It splits when work stays in another project for ≥ 3 min (`PROJECT_SWITCH_SECONDS`), at the moment of the move; running time and supervising spans are cut there. "Project" = the repo's link, or the repo itself while unlinked (so linking a repo mid-segment doesn't split); a segment with no repo yet adopts the first one, a new one starts in the last repo seen.
 - Each segment has a `clientId` (UUID, the draft's `client_id`). The tracker reports `opened`/`closed` events to `onSegmentEvent` listeners (with the user id) and shows the open one as `autoSegment` in the state (client id, start, active/supervising time and spans, repo, project; Home's timer card: "Always-on, recording a draft since 10:15").
-- **Drafts (D2):** a segment is saved as a `status = 'draft'`, `source = 'auto'`, never-billable session every 5 min while it grows and when it closes, once it has ≥ 2 min of active time (`MIN_SEGMENT_SECONDS`; a segment saved once is kept even if a split shortens it). Title = the repo's name, project = the repo's link (taken when it closes). `saveDraftSession()` updates the row with that `client_id` *only while it is still a draft*, else inserts; a unique violation means the user confirmed it meanwhile, and nothing is written. Saves of one draft run in order.
+- **Drafts (D2):** a segment is saved as a `status = 'draft'`, `source = 'auto'`, never-billable session every 5 min while it grows and when it closes, once it has ≥ 2 min of active time (`MIN_SEGMENT_SECONDS`; a segment saved once is kept even if a split shortens it). Title = the repo's name, project = the repo's link (taken when it closes). `saveDraftSession()` is one call to the `save_draft_session` RPC: insert, or `ON CONFLICT (user_id, client_id)` update *only while the row is still a draft* (it returns `'confirmed'` and writes nothing once the user confirmed it); a NULL `p_code_stats` keeps the stored ones. It runs as the caller, so RLS rejects a `p_user_id` that isn't the caller's. Saves of one draft run in order.
 - While a segment runs, usage is sampled as in a session (daily summary + the draft's `app_usage`); the app usage of the ≤ 3 min before a split stays with the old segment. Each segment has its own `createCodeStats` instance (repos focused or used by a hooked agent while it ran, plus transcript dirs at the end), so its `code_stats` are collected when it closes and never mix with a manual session's.
 - Offline: `draft_session` queue items, one per segment (a newer version replaces the queued one, keeping queued code stats). While one is queued, newer saves go behind it, so an old version never overwrites a newer one. Queued on network and auth errors (a segment closed by sign-out is saved after the next sign-in), and on any error at quit. Quit waits for draft saves (`hasUnsavedTrackingWork()` counts an open segment).
 - Every session list and stat reads `status = 'confirmed'` only (`getAllSessions`, `getSessionsInDateRange`, `getSmallSessions`, invoice sessions, project activity; billing needs `is_billable`, which a draft never is). So standup, Insights, Projects, Billing, invoices and team analytics never count a draft. `edit-session`, `delete-session` and `delete-sessions` only touch the caller's confirmed sessions (drafts change only through the inbox, which settles them first).
@@ -150,11 +152,13 @@ Server-side rules the app relies on:
 - `org_id` on sessions, usage summaries and agent sessions is set by trigger from the profile and can't be chosen or changed by clients.
 - Team analytics (`get_org_*`) and `get_project_stats` count confirmed sessions only (drafts are Phase D's unconfirmed segments).
 - Lookup RPCs (`get_user_profile_by_id` etc.) only return yourself or your org.
+- `save_draft_session()` (Phase D) is the only way the app writes drafts; it never touches a confirmed row.
 
 Local files:
 - `~/.dev-time-tracker/config.json`: legacy settings, no longer read by anything (safe to delete)
 - `~/.dev-time-tracker/offline-queue.json`: flushed only while signed in, and only the signed-in user's items. Item types: `session`, `draft_session`, `usage_summary`, and legacy `usage_log` (older versions; replayed into the summary)
 - `userData/custom-apps-<uid>.json`
+- `userData/browser-categories-<uid>.json`: the user's browser category rules (C5)
 - `userData/lang-<uid>.json`
 - `userData/auth-session.bin`: the Supabase session, encrypted with `safeStorage` (OS keychain / DPAPI). Chromium saves the encryption key in "Local State" about 10 s after the first launch on a machine; force-killing the app before that means one extra sign-in, nothing worse.
 - `userData/agent-ingest-<uid>.json`, `userData/integrations-<uid>.json` (C3)
@@ -350,12 +354,12 @@ In priority order (cheapest and highest value first):
   - Classified from the title first because x-win can't read every browser's URL (Opera here), and each URL read blocks the main process.
   - Fixed on the way: an app's merged App-activity row could lose its icon (stored on one summary row only, and the merge kept the first row's).
   - Verified: unit tests (≈60 titles/URLs, sampler URL give-up, batcher grouping, queries), a probe of this machine's open browser windows through x-win, and e2e (category summary rows through the RPC, `get-logs` breakdown, `get-browser-usage`, App activity line, Insights section).
-  - Not done: team analytics don't use categories; categories can't be edited by the user (a custom-rules file like `lang.json` would be the place).
+  - Not done: team analytics don't use categories (kept, owner 2026-10-19). ~~Categories can't be edited by the user~~ — done 2026-10-19 (`browser-categories.json`, see Part 1).
 - [x] C6 Human vs agent time, lines changed, agent cost per project; agent cost as an optional invoice line item — done on `phase-c6-project-activity` (2026-10-17); see "Project activity" in Part 1. No DB change.
   - Placed in Projects and Billing (Part 5), not on Home.
   - Fixed on the way: the invoice modal put project names into innerHTML and attributes unescaped, and read session counts back out of its own label text.
   - Verified: unit tests (activity sums, agent cost in earnings, invoice line and PDF text, handler), e2e (an agent session with a cost in the e2e project → project activity, the Projects card, the Billing agent cost, the invoice option and summary).
-  - Not done: a Home widget; team analytics still count full duration with no agent data; agent cost is USD only (fine for now; other currencies before release, see below), with no markup option.
+  - ~~A Home widget~~ — done 2026-10-19 ("Last 7 days by project", see Part 1). Kept as they are (owner, 2026-10-19): team analytics count full duration with no agent data; agent cost is USD only, with no markup option.
   - Owner (2026-10-17): agent cost on invoices stays off by default; showing Claude Code's API-price cost unadjusted is fine for now.
 
 **Phase U — UI restructure (Part 5); interleave with Phase C**
@@ -383,7 +387,7 @@ In priority order (cheapest and highest value first):
   - Owner agreed with these choices (2026-10-18). The items left for D2 were done in D2.
 - [x] D2 Drafts: save each segment as it grows as a `status = 'draft'`, `source = 'auto'` session, upserted on `client_id` (also through the offline queue), with `app_usage`, `code_stats`, supervising time — done on `phase-d1-segmenter` (2026-10-18); see "Always-on segments" in Part 1. No DB change.
   - Also: the Settings toggle, Home's always-on status line, and every session reader filtered to confirmed sessions (D4's "skip" half; D3 shows drafts).
-  - Upsert without a DB change: update-where-draft, else insert (a unique violation = already confirmed). A database `ON CONFLICT … WHERE status = 'draft'` RPC would do it in one round trip, if the schema is rebuilt anyway.
+  - Upsert without a DB change: update-where-draft, else insert (a unique violation = already confirmed). ~~A database `ON CONFLICT … WHERE status = 'draft'` RPC would do it in one round trip~~ — done 2026-10-19 (`save_draft_session`).
   - Fixed on the way: `offlineQueue.flush()` removed items by index, so an item replaced or added while a write was in flight could be dropped; it now removes the exact item it sent.
   - Verified: unit tests (`saveDraftSession` update/insert/confirmed/errors, confirmed-only filters, queue replacement incl. a newer version arriving mid-flush), type-check, lint, `npm run test:db`. **Not exercised in the running app or against live Supabase** (no e2e for always-on yet: it needs real idle time or a test hook).
   - ~~Discarding a draft while its segment is still open would let the next save recreate it~~ — handled in D3 (`settleDraft`).
@@ -408,6 +412,16 @@ In priority order (cheapest and highest value first):
 
 **Before release**
 - [x] Currencies other than USD (owner, 2026-10-17) — done 2026-10-18, see above. Agent costs stay USD (labelled), not converted.
+- Owner (2026-10-19): agent costs stay USD; team analytics stay as they are (full duration, no agent data, no browser categories); keyboard shortcuts stay fixed (not configurable).
+
+**After Phase D** — done 2026-10-19 on `main`
+- [x] One-call draft save: `save_draft_session` RPC (see "Always-on segments" in Part 1). **DB change:** needs a rebuild (`reset.sql` + `schema.sql`); until then every draft save fails (logged; queued only at quit), so rebuild before running a build with this change.
+- [x] Home widget "Last 7 days by project" (C6, see "Project activity").
+- [x] User-editable browser categories, `browser-categories.json` (C5, see "Browser categories").
+- Fixed on the way: `tests/tracking/codeStats.git.test.ts` waited a fixed 300 ms for the working-tree snapshot and failed now and then under load (the snapshot then saw the edits it should measure); it now waits until git/fs work is idle.
+- Verified: unit tests (rule parsing incl. broken files, title/host precedence, the sampler passing the rules, ranking, the RPC call), type-check, lint, `npm run test:db` (`save_draft_session`: insert, growth keeps code stats, another user's id refused by RLS, a confirmed row reported and left alone), e2e against live Supabase (all pass; Home widget with your time, agent cost and code, its link, the Settings card). The RPC isn't exercised against live Supabase until the rebuild; e2e inserts drafts directly.
+
+**Next:** decide on migrations (Part 4 "Owner decisions for Phase D", 6), now that Phase D is done.
 
 ## Owner decisions for Phase C (answered 2026-10-15)
 1. **Primary user: solo freelancer, billing-first.** Prioritize C6: per-project human/agent time, agent cost, and agent cost as an invoice line item. Team views come later.

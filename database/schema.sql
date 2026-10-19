@@ -939,6 +939,61 @@ BEGIN
 END;
 $$;
 
+-- ── Always-on drafts (Phase D) ──────────────────────
+
+-- Save an always-on segment as a draft in one round trip: insert it, or
+-- update the caller's row with that client_id while it is still a draft.
+-- Once the user confirmed it, nothing is written and 'confirmed' is
+-- returned. A NULL p_code_stats keeps what is stored (code stats are only
+-- collected when a segment ends). Runs as the caller, so RLS rejects any
+-- p_user_id but the caller's.
+CREATE OR REPLACE FUNCTION save_draft_session(
+    p_user_id UUID,
+    p_client_id UUID,
+    p_start_time TIMESTAMPTZ,
+    p_end_time TIMESTAMPTZ,
+    p_duration INTEGER,
+    p_title TEXT,
+    p_project_id UUID,
+    p_supervising_seconds INTEGER,
+    p_supervising_spans JSONB,
+    p_app_usage JSONB,
+    p_code_stats JSONB DEFAULT NULL
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_id UUID;
+BEGIN
+    INSERT INTO time_tracking_sessions AS t (
+        user_id, client_id, status, source, is_billable,
+        start_time, end_time, duration, title, project_id,
+        supervising_seconds, supervising_spans, app_usage, code_stats
+    )
+    VALUES (
+        p_user_id, p_client_id, 'draft', 'auto', false,
+        p_start_time, p_end_time, p_duration, p_title, p_project_id,
+        p_supervising_seconds, p_supervising_spans, p_app_usage, COALESCE(p_code_stats, '[]'::JSONB)
+    )
+    ON CONFLICT ON CONSTRAINT time_tracking_sessions_client_id DO UPDATE SET
+        start_time = EXCLUDED.start_time,
+        end_time = EXCLUDED.end_time,
+        duration = EXCLUDED.duration,
+        title = EXCLUDED.title,
+        project_id = EXCLUDED.project_id,
+        supervising_seconds = EXCLUDED.supervising_seconds,
+        supervising_spans = EXCLUDED.supervising_spans,
+        app_usage = EXCLUDED.app_usage,
+        code_stats = COALESCE(p_code_stats, t.code_stats),
+        updated_at = NOW()
+    WHERE t.status = 'draft'
+    RETURNING t.id INTO v_id;
+
+    RETURN CASE WHEN v_id IS NULL THEN 'confirmed' ELSE 'saved' END;
+END;
+$$;
+
 -- ── Team analytics (admins/managers of the org) ─────
 -- Sessions are bucketed by the viewer's local day (p_time_zone, an IANA
 -- name sent by the app). Draft sessions (Phase D) are left out. With p_billable_only, hours are what is billed:

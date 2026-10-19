@@ -4,6 +4,10 @@
  * from the URL when the title says nothing. Only the category is stored
  * (usage_logs.category, daily_usage_summary.category), never the URL.
  *
+ * The user can add rules of their own (browser-categories.json, see
+ * parseCustomBrowserRules), checked before the built-in ones, with
+ * categories of their own too.
+ *
  * Pure, so it runs in tests; the renderer uses the labels.
  */
 
@@ -21,9 +25,13 @@ export const BROWSER_CATEGORIES = {
 
 export type BrowserCategory = keyof typeof BROWSER_CATEGORIES;
 
-/** Label of a stored category; unclassified browser time is "Other browsing". */
+/**
+ * Label of a stored category: a built-in one's label, a user's own category
+ * as named, and unclassified browser time is "Other browsing".
+ */
 export function browserCategoryLabel(category: string | null | undefined): string {
-  return (category && BROWSER_CATEGORIES[category as BrowserCategory]) || "Other browsing";
+  if (!category) return "Other browsing";
+  return BROWSER_CATEGORIES[category as BrowserCategory] ?? category;
 }
 
 // ── Titles ───────────────────────────────────────────────────────────
@@ -189,13 +197,117 @@ export function classifyBrowserUrl(raw: string): BrowserCategory | null {
   return null;
 }
 
-/** Title first (free); the URL only when the title says nothing. */
+// ── The user's own rules ─────────────────────────────────────────────
+
+/**
+ * Rules from the user's browser-categories.json, checked before the
+ * built-in ones; the first match wins. A category is null for "Other
+ * browsing", a built-in key, or a name of the user's own.
+ */
+export interface CustomBrowserRules {
+  /** Text the page title contains (lowercased) */
+  titles: { text: string; category: string | null }[];
+  /** A host (and its subdomains), optionally only under a path */
+  hosts: { host: string; path: string; category: string | null }[];
+}
+
+export const NO_CUSTOM_RULES: CustomBrowserRules = { titles: [], hosts: [] };
+
+const MAX_CUSTOM_RULES = 500;
+/** daily_usage_summary.category holds at most 40 characters */
+const MAX_CATEGORY_LENGTH = 40;
+
+/**
+ * A category as the user wrote it: "other" means Other browsing, a built-in
+ * key or label means that one, anything else is the user's own name.
+ * undefined: not a category (the rule is skipped).
+ */
+function customCategory(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "string") return undefined;
+  const name = value.trim();
+  if (!name) return undefined;
+  const lower = name.toLowerCase();
+  if (lower === "other" || lower === "other browsing") return null;
+  const builtIn = (Object.keys(BROWSER_CATEGORIES) as BrowserCategory[]).find(
+    (key) => key === lower || BROWSER_CATEGORIES[key].toLowerCase() === lower,
+  );
+  return builtIn ?? name.slice(0, MAX_CATEGORY_LENGTH);
+}
+
+function entriesOf(value: unknown): [string, unknown][] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>).slice(0, MAX_CUSTOM_RULES);
+}
+
+/**
+ * Reads browser-categories.json:
+ *   { "titles": { "- Notion": "docs" },
+ *     "hosts": { "grafana.mycorp.com": "ci-deploy", "github.com/mycorp/handbook": "docs" } }
+ * Anything malformed is skipped, never thrown.
+ */
+export function parseCustomBrowserRules(data: unknown): CustomBrowserRules {
+  const root = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const titles: CustomBrowserRules["titles"] = [];
+  for (const [text, value] of entriesOf(root.titles)) {
+    const category = customCategory(value);
+    const needle = text.trim().toLowerCase();
+    if (needle && category !== undefined) titles.push({ text: needle, category });
+  }
+  const hosts: CustomBrowserRules["hosts"] = [];
+  for (const [pattern, value] of entriesOf(root.hosts)) {
+    const category = customCategory(value);
+    const m = /^(?:[a-z][a-z\d+.-]*:\/\/)?(?:\*\.)?([a-z\d.-]+)(?::\d+)?(\/[^?#]*)?/i.exec(pattern.trim());
+    if (!m || category === undefined) continue;
+    const path = (m[2] ?? "").replace(/\/+$/, "").toLowerCase();
+    hosts.push({ host: m[1].toLowerCase().replace(/^www\./, ""), path, category });
+  }
+  return { titles, hosts };
+}
+
+function customTitleCategory(
+  windowTitle: string,
+  rules: CustomBrowserRules,
+): string | null | undefined {
+  if (rules.titles.length === 0) return undefined;
+  const titles = pageTitleCandidates(windowTitle || "").map((t) => t.toLowerCase());
+  return rules.titles.find((r) => titles.some((t) => t.includes(r.text)))?.category;
+}
+
+function customUrlCategory(raw: string, rules: CustomBrowserRules): string | null | undefined {
+  if (rules.hosts.length === 0) return undefined;
+  let url: URL;
+  try {
+    url = new URL(/^[a-z][a-z\d+.-]*:/i.test(raw) ? raw : `http://${raw}`);
+  } catch {
+    return undefined;
+  }
+  const host = url.hostname.toLowerCase();
+  const path = url.pathname.toLowerCase();
+  return rules.hosts.find(
+    (r) =>
+      hostIs(host, r.host) &&
+      (!r.path || path === r.path || path.startsWith(r.path + "/")),
+  )?.category;
+}
+
+/**
+ * Title first (free); the URL only when the title says nothing. The user's
+ * rules go before the built-in ones at each step, so a host rule only
+ * applies to pages the title doesn't already classify (a title rule
+ * overrides those).
+ */
 export function classifyBrowserPage(
   windowTitle: string,
   readUrl: () => string | null,
-): BrowserCategory | null {
+  custom: CustomBrowserRules = NO_CUSTOM_RULES,
+): string | null {
+  const mine = customTitleCategory(windowTitle, custom);
+  if (mine !== undefined) return mine;
   const byTitle = classifyBrowserTitle(windowTitle);
   if (byTitle) return byTitle;
   const url = readUrl();
-  return url ? classifyBrowserUrl(url) : null;
+  if (!url) return null;
+  const mineByUrl = customUrlCategory(url, custom);
+  return mineByUrl !== undefined ? mineByUrl : classifyBrowserUrl(url);
 }

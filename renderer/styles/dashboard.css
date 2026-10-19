@@ -189,6 +189,88 @@
   color: #ff6b6b;
 }
 
+/* ========== Last 7 days by project (C6) ========== */
+#dashboard-projects {
+  margin-bottom: 24px;
+}
+
+.home-projects {
+  background: var(--row-odd);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
+.home-projects-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.home-projects-header h3 {
+  margin: 0;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.home-projects-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.home-projects-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.92em;
+}
+
+.home-projects-row:first-child {
+  border-top: none;
+}
+
+.home-projects-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 160px;
+  font-weight: 600;
+}
+
+.home-projects-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+
+.home-projects-cells {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  opacity: 0.9;
+}
+
+.home-projects-sep,
+.home-projects-sub {
+  opacity: 0.6;
+}
+
+.home-projects-empty {
+  margin: 0;
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+
 /* ========== Billable Hours Summary ========== */
 .billable-hours-summary {
   background: var(--row-odd);

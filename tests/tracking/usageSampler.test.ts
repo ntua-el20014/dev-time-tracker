@@ -102,3 +102,24 @@ describe("usageSampler", () => {
     expect(getUrl).toHaveBeenCalledTimes(URL_GIVE_UP_AFTER + 4);
   });
 });
+
+describe("usageSampler with the user's browser rules", () => {
+  it("passes the user's rules to the classifier", () => {
+    const { deps } = setup(null);
+    const customBrowserRules = vi.fn(() => ({
+      titles: [{ text: "notion", category: "docs" }],
+      hosts: [],
+    }));
+    const sample = createUsageSampler({
+      ...deps,
+      getForegroundWindow: () => ({
+        execName: "chrome.exe",
+        title: "Roadmap - Notion - Google Chrome",
+        getIconData: () => "",
+      }),
+      customBrowserRules,
+    });
+    expect(sample("u1")?.category).toBe("docs");
+    expect(customBrowserRules).toHaveBeenCalledWith("u1");
+  });
+});

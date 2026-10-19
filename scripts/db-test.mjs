@@ -185,6 +185,35 @@ async function runScenario(label) {
   check("a confirmed draft can become billable", !err, err ?? "");
   await db.query(`DELETE FROM time_tracking_sessions WHERE client_id = $1 OR app_usage <> '[]'`, [clientId]);
 
+  // save_draft_session: the app's one-call draft save
+  const segId = "00000000-0000-4000-8000-00000000d002";
+  const saveDraft = (userId, duration, codeStats = null) =>
+    one(
+      `SELECT save_draft_session($1, $2, '2026-10-14T08:00:00Z', '2026-10-14T09:00:00Z', $3, 'repo', NULL, 60,
+         '[["2026-10-14T08:10:00Z","2026-10-14T08:11:00Z"]]', jsonb_build_array(jsonb_build_object('app', 'VS Code', 'seconds', $3::INT)), $4::JSONB) AS r`,
+      [userId, segId, duration, codeStats],
+    );
+  check("save_draft_session inserts a draft", (await saveDraft(A, 600, '[{"repo_key":"k","repo_name":"r"}]')).r === "saved");
+  check("save_draft_session updates it as it grows", (await saveDraft(A, 900)).r === "saved");
+  let seg = await rows(
+    `SELECT duration, status, source, is_billable, jsonb_array_length(code_stats) AS code FROM time_tracking_sessions WHERE client_id = $1`,
+    [segId],
+  );
+  check(
+    "one auto draft, never billable, code stats kept when a save carries none",
+    seg.length === 1 && seg[0].duration === 900 && seg[0].status === "draft" && seg[0].source === "auto" && !seg[0].is_billable && seg[0].code === 1,
+    JSON.stringify(seg),
+  );
+  await as(B);
+  err = await fails(`SELECT save_draft_session($1, gen_random_uuid(), NOW(), NOW(), 60, 'x', NULL, 0, '[]', '[]')`, [A]);
+  check("save_draft_session can't write another user's draft", !!err, err ?? "");
+  await as(A);
+  await db.query(`UPDATE time_tracking_sessions SET status = 'confirmed', is_billable = true, duration = 1000 WHERE client_id = $1`, [segId]);
+  check("save_draft_session reports a confirmed row", (await saveDraft(A, 1200)).r === "confirmed");
+  seg = await rows(`SELECT duration, status FROM time_tracking_sessions WHERE client_id = $1`, [segId]);
+  check("…and leaves it alone", seg.length === 1 && seg[0].duration === 1000 && seg[0].status === "confirmed", JSON.stringify(seg));
+  await db.query(`DELETE FROM time_tracking_sessions WHERE client_id = $1`, [segId]);
+
   // ── Daily usage summary ──
   for (let i = 0; i < 3; i++) {
     await db.query(

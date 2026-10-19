@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   agentTotalsByProject,
+  busiestProjects,
+  emptyAgentTotals,
   formatAgentTotals,
   formatSpan,
   summarizeProjectActivity,
@@ -83,5 +85,27 @@ describe("formatting", () => {
   it("never shows 60 minutes", () => {
     expect(formatSpan(3599)).toBe("1h 00m");
     expect(formatSpan(29)).toBe("0m");
+  });
+});
+
+describe("busiestProjects", () => {
+  const activity = (projectId: string, human: number, agent: number, sessions = 1) => ({
+    projectId,
+    sessions,
+    humanSeconds: human,
+    supervisingSeconds: 0,
+    agent: { ...emptyAgentTotals(), sessions: agent ? 1 : 0, activeSeconds: agent },
+    code: { commits: 0, files: 0, added: 0, removed: 0, languages: {} } as any,
+  });
+
+  it("ranks by your time plus agent time and drops empty projects", () => {
+    const list = [
+      activity("a", 600, 0),
+      activity("b", 300, 3600),
+      activity("c", 0, 0, 0),
+      activity("d", 1200, 0),
+    ];
+    expect(busiestProjects(list, 2).map((a) => a.projectId)).toEqual(["b", "d"]);
+    expect(busiestProjects(list, 5).map((a) => a.projectId)).toEqual(["b", "d", "a"]);
   });
 });

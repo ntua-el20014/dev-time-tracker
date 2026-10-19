@@ -17,6 +17,7 @@ import { navigateTo } from "./navigation";
 import { renderHomeTimer } from "./components/HomeTimer";
 import { renderTodayTimeline } from "./components/TodayTimeline";
 import { renderEarningsWidget } from "./components/BillableHoursSummary";
+import { renderProjectActivityWidget } from "./components/ProjectActivityWidget";
 import type { DailySummaryRow, SessionRow } from "../shared/types";
 
 /**
@@ -126,6 +127,7 @@ export async function renderDashboard() {
         </button>
       </div>
       <div id="dashboard-earnings"></div>
+      <div id="dashboard-projects"></div>
       <div id="dashboard-calendar"></div>
       <div id="dashboard-quickstats"></div>
       <div id="dashboard-charts"></div>
@@ -158,6 +160,10 @@ export async function renderDashboard() {
     toBilling.addEventListener("click", () => navigateTo("billing"));
     earningsDiv.appendChild(toBilling);
   }
+
+  // --- Last 7 days by project (C6); below the fold, so it doesn't hold up the rest ---
+  const projectsDiv = document.getElementById("dashboard-projects");
+  if (projectsDiv) void renderProjectActivityWidget(projectsDiv);
 
   // --- Daily Goal ---
   const goalDiv = document.getElementById("dashboard-goal-progress");

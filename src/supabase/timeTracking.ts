@@ -320,54 +320,30 @@ export interface DraftSessionData {
 
 /**
  * Create or update the draft of an always-on segment (keyed by its
- * client_id). A row the user already confirmed is never touched: then
- * nothing is written and "confirmed" is returned.
+ * client_id), in one call (save_draft_session). A row the user already
+ * confirmed is never touched: then nothing is written and "confirmed" is
+ * returned.
  */
 export async function saveDraftSession(
   userId: string,
   draft: DraftSessionData,
 ): Promise<"saved" | "confirmed"> {
-  const fields = {
-    start_time: draft.startTime,
-    end_time: draft.endTime,
-    duration: draft.duration,
-    title: draft.title,
-    project_id: draft.projectId,
-    supervising_seconds: draft.supervising.seconds,
-    supervising_spans: draft.supervising.spans,
-    app_usage: draft.appUsage,
-    ...(draft.codeStats ? { code_stats: draft.codeStats } : {}),
-  };
-
-  // Usually the row exists already (the segment grew since the last save)
-  const { data: updated, error: updateError } = await (supabase as any)
-    .from("time_tracking_sessions")
-    .update({ ...fields, updated_at: new Date().toISOString() })
-    .eq("user_id", userId)
-    .eq("client_id", draft.clientId)
-    .eq("status", "draft")
-    .select("id");
-  if (updateError) throw updateError;
-  if (Array.isArray(updated) && updated.length > 0) return "saved";
-
-  const row: SessionInsert = {
-    user_id: userId,
-    client_id: draft.clientId,
-    status: "draft",
-    source: "auto",
-    is_billable: false,
-    code_stats: [],
-    ...fields,
-  };
-  const { error } = await supabase
-    .from("time_tracking_sessions")
-    .insert(row as any);
-  if (error) {
-    // The row exists but isn't a draft any more: the user confirmed it
-    if ((error as { code?: string }).code === "23505") return "confirmed";
-    throw error;
-  }
-  return "saved";
+  const { data, error } = await (supabase as any).rpc("save_draft_session", {
+    p_user_id: userId,
+    p_client_id: draft.clientId,
+    p_start_time: draft.startTime,
+    p_end_time: draft.endTime,
+    p_duration: draft.duration,
+    p_title: draft.title,
+    p_project_id: draft.projectId,
+    p_supervising_seconds: draft.supervising.seconds,
+    p_supervising_spans: draft.supervising.spans,
+    p_app_usage: draft.appUsage,
+    // null keeps the stored code stats (growth saves don't carry them)
+    p_code_stats: draft.codeStats ?? null,
+  });
+  if (error) throw error;
+  return data === "confirmed" ? "confirmed" : "saved";
 }
 
 const DRAFT_COLUMNS =

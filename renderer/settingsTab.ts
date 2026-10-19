@@ -30,6 +30,7 @@ import { getLangIconUrl } from "../src/utils/langIconUrl";
 import { isNavItemVisible, navigateTo, pinNavItem } from "./navigation";
 import type { Tag, UpdaterState } from "../shared/types";
 import { DEFAULT_CURRENCY } from "../shared/currency";
+import { BROWSER_CATEGORIES } from "../shared/browserCategories";
 import { currencyOptionsHtml } from "./utils/currencyOptions";
 
 
@@ -823,6 +824,37 @@ async function renderIntegrations(container: HTMLElement) {
       After saving, your changes will be applied automatically.
     </div>
   </div>
+  <div class="language-pie-info" style="margin-top: 16px;">
+    <b>Name what your browser time was for:</b><br>
+    Edit the file <code>browser-categories.json</code> in your app data folder:<br>
+    <div class="centered-btn">
+      <button id="openBrowserCategoriesBtn" class="open-lang-json-btn">
+        Open browser-categories.json
+      </button>
+    </div>
+    Example content:
+    <pre>
+{
+  "titles": {
+    "- Notion": "docs",
+    "Figma": "Design"
+  },
+  "hosts": {
+    "grafana.mycorp.com": "ci-deploy",
+    "github.com/mycorp/handbook": "docs",
+    "youtube.com": "other"
+  }
+}</pre>
+    <div class="info-note">
+      <b>titles</b>: text the page title contains. <b>hosts</b>: a site (and its subdomains), optionally with a path.
+      Your rules go before the built-in ones; the first match wins.<br>
+      Categories: ${(Object.keys(BROWSER_CATEGORIES) as (keyof typeof BROWSER_CATEGORIES)[])
+        .map((key) => `<code>${escapeHtml(key)}</code> (${escapeHtml(BROWSER_CATEGORIES[key])})`)
+        .join(", ")}, <code>other</code> (Other browsing), or a name of your own (up to 40 characters).<br>
+      Only the category is saved, never the title or address. A host rule applies only when the title isn't recognised
+      (some browsers don't report addresses); to change a recognised page, use a title rule. Changes apply on the next sample.
+    </div>
+  </div>
   `;
 
   container.querySelector("#openLangJsonBtn")?.addEventListener("click", () => {
@@ -832,6 +864,11 @@ async function renderIntegrations(container: HTMLElement) {
     .querySelector("#openCustomAppsBtn")
     ?.addEventListener("click", () => {
       safeIpcInvoke("open-custom-apps-json", [], { fallback: null });
+    });
+  container
+    .querySelector("#openBrowserCategoriesBtn")
+    ?.addEventListener("click", () => {
+      safeIpcInvoke("open-browser-categories-json", [], { fallback: null });
     });
 
   const agents = container.querySelector<HTMLElement>("#agentIntegration");

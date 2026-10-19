@@ -60,6 +60,7 @@ import {
   type SegmentSnapshot,
 } from "./segmenter";
 import { createUsageSampler } from "./usageSampler";
+import { customBrowserRules } from "../utils/browserRules";
 import { UsageBatcher } from "./usageBatcher";
 import { getWorkspaceHint } from "./workspaceHints";
 import { createRepoResolver, type RepoInfo } from "./repoResolver";
@@ -329,6 +330,7 @@ const sampleUsage = createUsageSampler({
   },
   matchApp,
   getLanguageFromTitle: getLanguageDataFromTitle,
+  customBrowserRules,
 });
 
 const batcher = new UsageBatcher({

@@ -9,6 +9,7 @@ import {
   getCustomAppsFilePath,
   type KnownAppsData,
 } from "./editors";
+import { BROWSER_RULES_TEMPLATE, browserRulesPath } from "./browserRules";
 
 function getUserLangPath(userId: string) {
   return path.join(app.getPath("userData"), `lang-${userId}.json`);
@@ -90,4 +91,17 @@ ipcMain.handle("open-custom-apps-json", async (_event, userId?: string) => {
   }
   const filePath = getCustomAppsFilePath(uid);
   shell.openPath(filePath);
+});
+
+// ── Browser categories per-user JSON (C5) ─────────────────────────────
+
+ipcMain.handle("open-browser-categories-json", async () => {
+  const user = await getCurrentUser();
+  if (!user) return false;
+  const file = browserRulesPath(user.id);
+  if (!fs.existsSync(file)) {
+    fs.writeFileSync(file, BROWSER_RULES_TEMPLATE, "utf-8");
+  }
+  await shell.openPath(file);
+  return true;
 });

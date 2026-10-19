@@ -32,22 +32,44 @@ const HOUR = 3600_000;
 const write = (file: string, lines: number, prefix = "line") =>
   fs.writeFileSync(path.join(root, file), Array.from({ length: lines }, (_, i) => `${prefix} ${i}`).join("\n") + "\n");
 
+/** git/fs work in flight, so a test can wait for the snapshot to finish */
+let inFlight = 0;
+function tracked<T>(work: Promise<T>): Promise<T> {
+  inFlight++;
+  return work.finally(() => inFlight--);
+}
+/** Wait until the snapshot noteRepo() started is done (a fixed delay is flaky under load). */
+async function snapshotTaken() {
+  for (let idle = 0; idle < 2; ) {
+    await new Promise((r) => setTimeout(r, 25));
+    idle = inFlight === 0 ? idle + 1 : 0;
+  }
+}
+
 const stats = createCodeStats({
   git: (cwd, args) =>
-    new Promise((resolve) =>
-      execFile("git", args, { cwd }, (err, stdout) => resolve(err ? null : stdout)),
+    tracked(
+      new Promise((resolve) =>
+        execFile("git", args, { cwd }, (err, stdout) => resolve(err ? null : stdout)),
+      ),
     ),
-  async mtimeMs(r, f) {
-    try {
-      return fs.statSync(path.join(r, f)).mtimeMs;
-    } catch {
-      return null;
-    }
-  },
-  async countLines(r, f) {
-    const text = fs.readFileSync(path.join(r, f), "utf8");
-    return text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
-  },
+  mtimeMs: (r, f) =>
+    tracked(
+      (async () => {
+        try {
+          return fs.statSync(path.join(r, f)).mtimeMs;
+        } catch {
+          return null;
+        }
+      })(),
+    ),
+  countLines: (r, f) =>
+    tracked(
+      (async () => {
+        const text = fs.readFileSync(path.join(r, f), "utf8");
+        return text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
+      })(),
+    ),
   languageOf: (f) => (f.endsWith(".ts") ? "TypeScript" : f.endsWith(".md") ? "Markdown" : null),
 });
 
@@ -74,7 +96,7 @@ describe.skipIf(!hasGit)("codeStats with real git", () => {
     const repo = { key: "path:test", name: "test", root };
     stats.startSession();
     stats.noteRepo(repo);
-    await new Promise((r) => setTimeout(r, 300)); // let the snapshot finish
+    await snapshotTaken();
 
     // a commit during the session: 5 new lines, 2 changed
     const lines = fs.readFileSync(path.join(root, "old.ts"), "utf8").split("\n");
@@ -105,7 +127,7 @@ describe.skipIf(!hasGit)("codeStats with real git", () => {
     const repo = { key: "path:test", name: "test", root };
     stats.startSession();
     stats.noteRepo(repo);
-    await new Promise((r) => setTimeout(r, 300));
+    await snapshotTaken();
     write("new.ts", 6); // was 4 lines
     write("untracked.md", 2);
     const [s] = await stats.finish(start, Date.now() + 1000);

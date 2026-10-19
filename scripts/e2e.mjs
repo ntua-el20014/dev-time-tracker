@@ -458,6 +458,26 @@ try {
   );
   await u1.shot("u1-invoice-agent-cost.png");
   await u1.ev(`document.getElementById("cancel-invoice-modal")?.click()`);
+  // Home's "Last 7 days by project"
+  await u1.ev(`window.markTabsDirty("dashboard")`);
+  await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
+  const homeRow = `([...document.querySelectorAll("#dashboard-projects .home-projects-row")].find(r => r.querySelector(".home-projects-name")?.textContent.trim() === ${JSON.stringify(projName)})?.innerText || "")`;
+  check(
+    "Home lists the project with your time, AI agents with cost, and code",
+    await u1.waitFor(`(() => { const t = ${homeRow}; return t.includes("You ") && t.includes("AI agents 10m · $1.25 · 1 session") && t.includes("+9 −1 · 3 files · 1 commit"); })()`, 10000),
+    await u1.ev(`${homeRow}.slice(0, 400)`),
+  );
+  await u1.ev(`document.getElementById("dashboard-projects")?.scrollIntoView({ block: "center" })`);
+  await u1.shot("u1-home-projects.png");
+  await u1.ev(`document.querySelector('#dashboard-projects .home-projects-link')?.click()`);
+  check("Home's project widget links to Projects", await u1.waitFor(`document.querySelector('.nav-item[data-view="projects"]')?.classList.contains("active")`, 5000));
+  // Settings → Integrations explains browser-categories.json
+  await u1.ev(`document.querySelector('.nav-item[data-view="settings"]').click()`);
+  await u1.ev(`document.querySelector('.profile-chapter-btn[data-chapter="integrations"]')?.click()`);
+  check(
+    "Settings offers browser-categories.json with the category keys",
+    await u1.waitFor(`(() => { const t = document.getElementById("openBrowserCategoriesBtn")?.closest(".language-pie-info")?.innerText || ""; return t.includes("code-review") && t.includes("a name of your own"); })()`, 8000),
+  );
   await u1.ev(`document.querySelector('.nav-item[data-view="home"]').click()`);
 
   // Server-side org attribution of the session

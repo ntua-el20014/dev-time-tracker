@@ -16,7 +16,7 @@ Start a session, pick a project, and it records where the time went: your own ti
 - **Active, Supervising, Away:**
   Without keyboard or mouse input the session doesn't pause right away if an AI agent is still working. That time counts as *supervising*, for up to an hour without input. When you're really away, the session pauses, backdated to your last sign of work, and resumes on input. Each project decides whether supervising time is billed.
 - **App activity:**
-  Every 10 seconds (configurable) the foreground app is sampled while recording. Its language comes from the file extension in the window title. For a browser, the page type is worked out on your machine (code review, issues, CI, docs, AI chat, Q&A, local dev). Only the totals are uploaded (see *Privacy*).
+  Every 10 seconds (configurable) the foreground app is sampled while recording. Its language comes from the file extension in the window title. For a browser, the page type is worked out on your machine (code review, issues, CI, docs, AI chat, Q&A, local dev), and you can add your own rules and page types in **Settings → Integrations → Open browser-categories.json**. Only the totals are uploaded (see *Privacy*).
 - **Code changed (git):**
   At Stop, each repo you or an agent worked in gets lines added and removed per language, files changed and commits made during the session. Uncommitted work is included.
 
@@ -153,6 +153,7 @@ More detail: [Supabase API Reference](./src/supabase/README.md).
 | `set_org_id_from_user()` | Server-side `org_id` on sessions, usage summaries and agent sessions |
 | `calculate_session_duration()` | Derives `duration` from `end_time` only when the app didn't set it |
 | `update_daily_usage_summary()` | Adds usage time per user / local day / app / language / page type |
+| `save_draft_session()` | Saves an always-on segment as a draft in one call; never touches a session you confirmed |
 | `session_billed_seconds()` | Billed part of a session (supervising time left out where the project doesn't bill it) |
 | `get_current_user_org_id()` / `get_current_user_role()` / `is_user_admin*()` | SECURITY DEFINER helpers used by RLS policies |
 | `get_user_profile_by_id()` / `get_organization_by_user_id()` / `get_organization_members_by_org_id()` | Lookups limited to yourself and your own org |

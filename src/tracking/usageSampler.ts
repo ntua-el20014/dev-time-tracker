@@ -3,7 +3,10 @@
  * Dependencies are injected so this runs in tests without x-win or Electron.
  */
 import type { AppMatch } from "../utils/editors";
-import { classifyBrowserPage, type BrowserCategory } from "../../shared/browserCategories";
+import {
+  classifyBrowserPage,
+  type CustomBrowserRules,
+} from "../../shared/browserCategories";
 
 /**
  * A browser whose URL came back empty this many times in a row, never
@@ -29,8 +32,8 @@ export interface UsageSample {
   languageExtension: string | null;
   /** App icon data URL ("" if unavailable) */
   icon: string;
-  /** Browsers: what the page was for (C5), null if unknown */
-  category: BrowserCategory | null;
+  /** Browsers: what the page was for (C5; a built-in key or the user's own name), null if unknown */
+  category: string | null;
 }
 
 export interface SamplerDeps {
@@ -39,6 +42,8 @@ export interface SamplerDeps {
   getLanguageFromTitle(
     title: string,
   ): { language: string; extension: string } | null;
+  /** The user's own browser categories (browser-categories.json) */
+  customBrowserRules?(userId: string): CustomBrowserRules;
 }
 
 export function createUsageSampler(deps: SamplerDeps) {
@@ -90,7 +95,11 @@ export function createUsageSampler(deps: SamplerDeps) {
       icon,
       category:
         app.category === "browser"
-          ? classifyBrowserPage(title, () => readUrl(win, execName))
+          ? classifyBrowserPage(
+              title,
+              () => readUrl(win, execName),
+              deps.customBrowserRules?.(userId),
+            )
           : null,
     };
   };

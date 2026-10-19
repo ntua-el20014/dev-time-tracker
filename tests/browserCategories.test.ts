@@ -5,6 +5,7 @@ import {
   classifyBrowserTitle,
   classifyBrowserUrl,
   pageTitleOf,
+  parseCustomBrowserRules,
 } from "../shared/browserCategories";
 
 describe("pageTitleOf", () => {
@@ -104,9 +105,67 @@ describe("classifyBrowserPage", () => {
 });
 
 describe("browserCategoryLabel", () => {
-  it("labels known categories and calls the rest other browsing", () => {
+  it("labels built-in categories, keeps the user's own names, calls none other browsing", () => {
     expect(browserCategoryLabel("code-review")).toBe("Code review");
     expect(browserCategoryLabel(null)).toBe("Other browsing");
-    expect(browserCategoryLabel("something-else")).toBe("Other browsing");
+    expect(browserCategoryLabel("Design")).toBe("Design");
+  });
+});
+
+describe("custom browser rules", () => {
+  const rules = parseCustomBrowserRules({
+    titles: {
+      "- Notion": "docs",
+      Figma: "Design",
+      "Pull Request #1": "other",
+      "  ": "docs",
+      broken: 42,
+    },
+    hosts: {
+      "grafana.mycorp.com": "CI, cloud & monitoring",
+      "https://www.github.com/mycorp/handbook/": "Docs",
+      "*.youtube.com": "other",
+      "intranet": "Company stuff that has a name far longer than forty characters",
+    },
+  });
+
+  it("reads titles and hosts, skipping what isn't a rule", () => {
+    expect(rules.titles).toEqual([
+      { text: "- notion", category: "docs" },
+      { text: "figma", category: "Design" },
+      { text: "pull request #1", category: null },
+    ]);
+    expect(rules.hosts).toEqual([
+      { host: "grafana.mycorp.com", path: "", category: "ci-deploy" },
+      { host: "github.com", path: "/mycorp/handbook", category: "docs" },
+      { host: "youtube.com", path: "", category: null },
+      { host: "intranet", path: "", category: "Company stuff that has a name far longer" },
+    ]);
+  });
+
+  it("never throws on a broken file", () => {
+    for (const data of [null, 3, "x", [], { titles: [1, 2], hosts: "a" }]) {
+      expect(parseCustomBrowserRules(data)).toEqual({ titles: [], hosts: [] });
+    }
+  });
+
+  it("goes before the built-in title rules, without reading the URL", () => {
+    const readUrl = vi.fn(() => "https://example.com");
+    expect(classifyBrowserPage("Roadmap - Notion - Google Chrome", readUrl, rules)).toBe("docs");
+    expect(classifyBrowserPage("Logo v2 – Figma - Google Chrome", readUrl, rules)).toBe("Design");
+    // Overrides a page the built-in rules know
+    expect(classifyBrowserPage("Fix bug by me · Pull Request #23 · o/r · GitHub - Google Chrome", readUrl, rules)).toBe("code-review");
+    expect(classifyBrowserPage("Fix · Pull Request #1 · o/r · GitHub - Google Chrome", readUrl, rules)).toBeNull();
+    expect(readUrl).not.toHaveBeenCalled();
+  });
+
+  it("matches hosts with subdomains and paths when the title says nothing", () => {
+    const page = (url: string) => classifyBrowserPage("Dashboard - Google Chrome", () => url, rules);
+    expect(page("https://grafana.mycorp.com/d/abc")).toBe("ci-deploy");
+    expect(page("https://github.com/mycorp/handbook/blob/main/README.md")).toBe("docs");
+    expect(page("https://github.com/mycorp/handbook-old")).toBe("code");
+    expect(page("https://m.youtube.com/watch?v=1")).toBeNull();
+    // Unmatched: the built-in URL rules still apply
+    expect(page("https://stackoverflow.com/questions/1")).toBe("q-and-a");
   });
 });
