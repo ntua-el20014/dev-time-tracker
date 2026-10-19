@@ -131,22 +131,6 @@
   color: var(--accent-text) !important;
 }
 
-.theme-toggle-btn {
-  color: var(--accent-text) !important;
-}
-
-.theme-toggle-btn:hover {
-  color: var(--accent-text) !important;
-}
-
-.save-accent-btn {
-  color: var(--accent-text) !important;
-}
-
-.save-accent-btn:hover {
-  color: var(--accent-text) !important;
-}
-
 .choose-avatar-btn {
   color: var(--accent-text) !important;
 }

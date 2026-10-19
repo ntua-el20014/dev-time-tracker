@@ -6,7 +6,7 @@
 
 .sync-status {
   position: fixed;
-  bottom: 8px;
+  top: 10px;
   /* sit to the left of the connection-status pill */
   right: 110px;
   z-index: 9999;

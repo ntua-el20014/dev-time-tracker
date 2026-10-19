@@ -9,7 +9,7 @@
  * - macOS: needs a code-signed app, so it's off unless UPDATER_ENABLED=true.
  * - Linux: not supported by Squirrel.
  *
- * Updates download in the background; Settings → Preferences then offers
+ * Updates download in the background; Settings → About then offers
  * "Restart to install".
  *
  * Config (getEnv): UPDATER_ENABLED=false disables it; UPDATER_GITHUB_REPO

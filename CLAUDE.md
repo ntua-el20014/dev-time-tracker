@@ -1,495 +1,218 @@
 # CLAUDE.md — Dev Time Tracker
 
-Guide for working in this repo: how the code is laid out, the conventions to follow, known problems, and the roadmap we agreed to work from.
-Written 2026-10-14 after a full read-through, kept current since (last: 2026-10-19, migrations introduced). Part 2 lists what that read-through found and where each item stands. Line numbers will drift, so search by function name.
+How this repo is laid out, how its parts work, and the rules to follow when changing it.
+Last updated 2026-10-19. Line numbers drift, so search by function name.
+
+**Status:** every planned phase is done (see the legend below). The owner is using the app locally and will report bugs and improvements; work comes from those reports. The first public release comes after that.
 
 ---
 
-## Part 1 — How the codebase works
+## What it is
+An Electron 28 desktop app, written in TypeScript and bundled with webpack via Electron Forge. It records **sessions** (Start/Stop timer with pause) and, while a session runs, samples the **foreground window** every N seconds (default 10). Each sample yields app, language (from the file extension in the window title) and, for browsers, a page type. Only time totals per app/language/page type are uploaded (per local day and per session), never titles or URLs. All data lives in **Supabase** (Postgres + Auth + RLS); there is no local database.
 
-### What it is
-An Electron 28 desktop app, written in TypeScript and bundled with webpack via Electron Forge. It records **sessions** (Start/Stop timer with pause) and, while a session is running, takes a sample of the **foreground window** every N seconds (default 10). Each sample yields app, language (guessed from the file extension in the window title) and, for browsers, a page type; only time totals per app/language/page type are uploaded (per local day and per session), never titles or URLs. All data lives in **Supabase** (Postgres + Auth + RLS); there is no local database. Built on top of that: goals, scheduled sessions, tags, projects, organizations with roles, billable hours, PDF invoices, standup summaries, team analytics, an offline queue, Sentry, an auto-updater, and per-project currencies.
+Built on top: project detection from the focused repo, an agent-aware activity model (active / supervising an AI agent / away), git code stats per session, AI agent sessions and cost (Claude Code, Codex), browser page types, an opt-in always-on mode that saves drafts for review, goals, scheduled sessions, tags, projects, organizations with roles, billing in per-project currencies, PDF invoices, standup summaries, team analytics, an offline queue, Sentry and an auto-updater.
 
-### Commands
-```
-npm start                 # dev (electron-forge start, webpack HMR)
-npm test                  # vitest (~650 tests, mocked Supabase — ~15s)
-npm run type-check        # main + renderer tsconfigs
-npm run lint              # eslint
-npm run make              # installers
-npm run test:db           # schema.sql, reset.sql and baseline.sql + migrations in PGlite (no Supabase needed)
-npm run db:new-migration -- <name>   # next numbered migration from a template; lists it in schema.sql, bumps REQUIRED_SCHEMA_VERSION
-npm run test:smoke        # packaged app, isolated profile, over CDP (run `npm run package` first)
-npm run test:e2e          # packaged app vs real Supabase, 2 test accounts from .env.local
-```
-Baseline as of 2026-10-19: tests, type-check, lint and test:db are all green (CI runs all four). Keep them green.
+**Feature labels** used in code comments and below: C1 project detection · C2 code stats · C3 agent sessions and Claude Code hooks · C4 activity model · C5 browser categories · C6 per-project activity and agent cost · D1–D4 always-on segments, drafts and the review inbox · U1–U3 the sidebar UI.
 
-### Processes and the boundary between them
+## Commands
 ```
-renderer/  (UI — contextIsolation, sandbox, NO Node access)
+npm start                            # dev (electron-forge start, webpack HMR)
+npm test                             # vitest (~660 tests, mocked Supabase, ~15 s)
+npm run type-check                   # main + renderer tsconfigs
+npm run lint                         # eslint
+npm run test:db                      # schema.sql, reset.sql, baseline.sql + migrations in PGlite (no Supabase needed)
+npm run db:new-migration -- <name>   # next numbered migration (see "Database changes")
+npm run package                      # packaged app in out/
+npm run make                         # installers
+npm run test:smoke                   # packaged app, isolated profile, over CDP (package first)
+npm run test:e2e                     # packaged app vs the real Supabase, 2 test accounts from .env.local (package first)
+```
+CI runs lint, type-check, `npm test` and `test:db` on every push. Keep all of them green.
+
+## Project structure
+```
+src/                      Main process
+  index.ts                  App lifecycle, window, tray, CSP, OAuth callback, imports every handler file
+  preload.ts                contextBridge: window.electronAPI, allowlisted channels only
+  buildEnv.ts               getEnv(): runtime env, then values baked in at build time
+  updater.ts                Electron autoUpdater + update.electronjs.org (Windows)
+  sentryMain.ts / sentryRenderer.ts
+  ipc/                      ipcMain.handle channels, one *Handlers.ts per domain
+  supabase/                 Query modules, one per domain (throw on error); config.ts = the one client
+  tracking/                 The tracking engine (below)
+  utils/                    Offline queue, error handling, time formatting, language/app/browser rule files, schema check
+  types/database.types.ts   Table types (keep in step with the schema)
+renderer/                 UI (sandboxed page, no Node)
+  renderer.ts               Entry point: auth bootstrapping, page registration, rail timer, hotkeys, session-info modal
+  navigation.ts             Views, sub-views, dirty flags
+  trackingControls.ts       Mirror of main's tracking state
+  *Tab.ts                   One render*() per page
+  components/               Shared UI (timer card, timeline, inbox, modals, notifications, …)
+  utils/                    Renderer helpers (escapeHtml, safeIpcInvoke, caches, …)
+  styles/                   One CSS file per feature, imported in renderer.ts
+shared/                   Pure code used by both sides (billing, currency, code stats, drafts, browser categories, IPC allowlist, types)
+database/
+  schema.sql                The complete current database (new setups)
+  migrations/               Numbered changes for an existing database
+  baseline.sql              Frozen 2026-10-19: what the migrations start from. Never edit
+  reset.sql                 Wipes everything (start over)
+  README.md                 Setup, migrations, security model
+scripts/                  db-test, e2e, smoke, new-migration
+tests/                    vitest; tests/helpers/supabaseMock.ts is the chainable Supabase mock
+assets/known_editors.json Apps that are tracked (editors, dev tools, browsers); bundled by webpack
+public/index.html         The page (sidebar markup, the CSP <meta>)
+```
+
+## Processes and the boundary between them
+```
+renderer/  (contextIsolation, sandbox, NO Node access)
    │  import { ipcRenderer } from "renderer/ipc.ts"   ← shim over window.electronAPI
    │  safeIpcInvoke() (renderer/utils/ipcHelpers.ts) wraps it with error handling
    ▼
-src/preload.ts  — contextBridge: window.electronAPI = { invoke, send, on, removeAllListeners },
-                  only for channels in shared/ipcChannels.ts
+src/preload.ts  — window.electronAPI = { invoke, send, on, removeAllListeners }, only for channels in shared/ipcChannels.ts
    ▼
-src/ipc/*Handlers.ts + src/tracking/tracker.ts  (main) — ipcMain.handle channels; each resolves the user itself
+src/ipc/*Handlers.ts + src/tracking/tracker.ts  (main) — each handler resolves the user itself
    ▼
-src/supabase/*.ts  — thin query modules, one per domain, throw on error
+src/supabase/*.ts  — thin query modules
    ▼
 Supabase (RLS enforces per-user / per-org access)
 ```
-- **The renderer cannot `import` from `"electron"` or use Node built-ins.** It is built for the `web` target. Use `renderer/ipc.ts`. Treat everything coming from the renderer as untrusted input in main. Examples: `open-oauth-url` only opens http(s); exports only write to dialog-approved paths.
-- **One Supabase client, in main.** Main signs in, finishes OAuth/email-link callbacks (`dev-time-tracker://oauth-callback`), refreshes and stores the session (`src/ipc/authHandlers.ts`; storage `src/supabase/authStorage.ts` → `userData/auth-session.bin`, encrypted with Electron `safeStorage`). The renderer has no client and never sees a token: it uses `renderer/auth.ts` (`auth:*` IPC) and hears sign-in/out on `auth-state` (`{ user: { id, email } }` or null); main also passes the user id to the tracker. A login kept in localStorage by older versions is handed to main once (`auth:import-legacy-session`) and deleted. Lint forbids runtime imports of `src/supabase/*` / `@supabase/*` in `renderer/` (type imports are fine).
-- **The renderer's CSP** (header in `src/index.ts` and the `<meta>` in `public/index.html`, which is what applies to the packaged `file://` page — keep them identical): `script-src 'self'` (no eval, no inline), `connect-src 'self'` (the page can't reach Supabase or anything else), `object-src 'none'`, `base-uri 'none'`.
-- **IPC allowlist:** `shared/ipcChannels.ts` lists the invoke/send/event channels the renderer may use; the preload rejects everything else. `tests/ipcChannels.test.ts` fails if a channel the renderer uses isn't listed, a listed one has no handler, or a listed one isn't used. 23 old handlers no UI calls (e.g. `delete-user`, `set-user-role`, `get-or-create-default-users`) are left out, so they're unreachable from the page.
-- The handler files register themselves as an import side effect (`import "./ipc/xHandlers"` in `src/index.ts`). `src/utils/langMap.ts` also registers handlers this way.
+- **The renderer can't import `"electron"` or Node built-ins** (built for the `web` target). Everything from the renderer is untrusted input in main: e.g. `open-oauth-url` only opens http(s), exports only write to dialog-approved paths.
+- **One Supabase client, in main.** Main signs in, finishes OAuth/email-link callbacks (`dev-time-tracker://oauth-callback`), refreshes and stores the session (`src/ipc/authHandlers.ts`; `src/supabase/authStorage.ts` → `userData/auth-session.bin`, encrypted with `safeStorage`). The renderer never sees a token: it uses `renderer/auth.ts` (`auth:*` IPC) and hears `auth-state` (`{ user: { id, email } }` or null). Lint forbids runtime imports of `src/supabase/*` / `@supabase/*` in `renderer/`.
+- **CSP** (header in `src/index.ts` and the `<meta>` in `public/index.html`, which is what the packaged `file://` page uses; keep them identical): `script-src 'self'`, `connect-src 'self'`, `object-src 'none'`, `base-uri 'none'`.
+- **IPC allowlist:** `shared/ipcChannels.ts` lists the invoke/send/event channels; the preload rejects the rest. `tests/ipcChannels.test.ts` fails if a used channel isn't listed, a listed one has no handler, or a listed one is unused (it looks for `send("…")` / `webContents.send("…")` literally). Old handlers no UI calls are deliberately left out.
+- Handler files register themselves on import (`import "./ipc/xHandlers"` in `src/index.ts`); `src/utils/langMap.ts` too.
+- On sign-in main also checks the database's migration version (`src/utils/schemaCheck.ts`) and sends `database-outdated` when it's behind.
 
-### The tracking engine (`src/tracking/`)
-**The main process owns the recording state.** The renderer and tray only request changes, and render the `tracking-state` broadcast (`{isRecording, isPaused, autoPaused, isIncognito, activeSeconds, startedAt, projectId, projectSource, detectedRepo, activity, supervisingSeconds, supervisingSpans, agentActiveAt, liveAgents}`). `projectId` is the project of the current *or next* session: chosen before Start (`set-session-project`, Home's picker), used by every start path (Home, rail, Ctrl+R, tray), kept for the following sessions, preselected in the Stop dialog and used by the timeout/quit auto-saves. It resets on user change; the renderer restores the user's last choice from localStorage (`renderer/sessionProject.ts`). `projectSource` is `"manual"` when the user picked it (kept until that session stops) or `"auto"` (restored or detected); only an `"auto"` choice is replaced by detection (C1, below), and only before Start. On the renderer side, `renderer/trackingControls.ts` mirrors that state and exposes `startTracking`/`stopTracking`/`togglePause`/… Never flip recording state locally.
+## The tracking engine (`src/tracking/`)
+**Main owns the recording state.** The renderer and tray only request changes and render the `tracking-state` broadcast (recording/paused/incognito, `activeSeconds`, `startedAt`, `projectId` + `projectSource`, `detectedRepo`, `activity`, supervising time and spans, `agentActiveAt`, `liveAgents`, `alwaysOn`, `autoSegment`). Never flip recording state in the renderer; `renderer/trackingControls.ts` mirrors it and exposes `startTracking`/`stopTracking`/`togglePause`/….
+
+`projectId` is the project of the current *or next* session: picked before Start (Home's picker, `set-session-project`), used by every start path (Home, rail, Ctrl+R, tray), kept for later sessions, preselected in the Stop dialog and used by the auto-saves. It resets on user change; the renderer restores the user's last pick (`renderer/sessionProject.ts`). `projectSource` is `"manual"` (kept until that session stops) or `"auto"` (restored or detected); only an `"auto"` pick is replaced by detection, and only before Start.
 
 | Module | Role |
 |---|---|
-| `tracker.ts` | Orchestrator with Electron dependencies: tick and flush timers, idle poll, lock/sleep handling, session-info prompt, session save, quit finalization, tracking IPC (`get-tracking-state`, `start/pause/resume/stop-tracking`, `toggle-incognito`). The user ID comes from `setTrackingUser()`, called by `sync-auth-session`, so ticks make no auth network call. On sign-in it also loads the user's saved idle timeout and tracking interval. |
-| `sessionClock.ts` | Pure timing: active seconds excluding pauses, manual vs automatic pause, supervising spans; a pause may be backdated (spans after it are clipped); stop → `{start, end, duration, supervisingSeconds, supervisingSpans}` |
-| `idlePolicy.ts` | Pure Active / Supervising / Away rules (C4, below): pause when away, backdated; resume an *automatic* pause when idle < 5s and not locked or suspended |
-| `agentHeartbeat.ts` | When an AI agent last wrote a transcript, from mtimes only (no contents): Claude Code `<CLAUDE_CONFIG_DIR or ~/.claude>/projects/*/*.jsonl` (+ `<session>/subagents/*.jsonl`), Codex `<CODEX_HOME or ~/.codex>/sessions/YYYY/MM/DD/*.jsonl` (today, yesterday). Async; between 5-min full scans only new and hot (<2 h) files are stat'ed. Polled every 15 s. Also lists the session transcripts for C3 (`transcripts()`). |
-| `agentTranscripts.ts` / `agentIngest.ts` / `agents.ts` | C3, see "Agent sessions" below. |
-| `claudeHooks.ts` / `claudeHooksConfig.ts` / `hookReceiver.ts` / `agentLive.ts` | C3 hooks, see "Connect Claude Code" below. `src/utils/jsonTextEdit.ts` edits JSON text in place. |
-| `usageSampler.ts` | Foreground window (x-win) → `{appName, windowTitle, language, languageExtension, icon, category}` (`category`: browsers only, C5 below). Matches `execName` against `assets/known_editors.json` plus per-user `custom-apps-<uid>.json`; **unknown apps are dropped**. Language comes from `getLanguageDataFromTitle()` (`src/utils/extractData.ts`). |
-| `workspaceHints.ts` / `repoResolver.ts` / `projectAttribution.ts` | C1, see "Project detection" below. |
-| `codeStats.ts` | C2, see "Code stats" below. |
-| `segmenter.ts` | D1/D2, see "Always-on segments" below. |
-| `usageBatcher.ts` | Buffers ticks; every 60s (and on pause/stop/sign-out/quit) does one `update_daily_usage_summary` RPC per (local day, app, language, page type). Nothing per tick is uploaded. A network failure queues that increment and the rest of the flush offline (`usage_summary` items). Icons are sent once per summary row. The Today tab refreshes on each flush (`window-tracked`). The tracker also adds every sample to the running session's `app_usage` (`shared/appUsage.ts`, ≤ 200 entries), saved with the session. |
+| `tracker.ts` | Orchestrator: tick and flush timers, idle poll, lock/sleep, session-info prompt, session save, quit finalization, tracking IPC. The user id comes from `setTrackingUser()` (on auth change), which also loads the saved idle timeout, interval and always-on setting. Exports `send()` (to the window, waits for load). |
+| `sessionClock.ts` | Pure timing: active seconds without pauses, manual vs automatic pause, supervising spans; backdated pauses clip later spans |
+| `idlePolicy.ts` | Pure active / supervising / away rules (C4); resumes an *automatic* pause on input (not while locked or asleep) |
+| `agentHeartbeat.ts` | When an AI agent last wrote a transcript (mtimes only): Claude Code `<CLAUDE_CONFIG_DIR or ~/.claude>/projects/*/*.jsonl` (+ subagents), Codex `<CODEX_HOME or ~/.codex>/sessions/YYYY/MM/DD/*.jsonl`. Polled every 15 s. |
+| `agentTranscripts.ts` / `agentIngest.ts` / `agents.ts` | Agent sessions (C3) |
+| `claudeHooks.ts` / `claudeHooksConfig.ts` / `hookReceiver.ts` / `agentLive.ts` | Connect Claude Code (C3); `src/utils/jsonTextEdit.ts` edits JSON as text |
+| `usageSampler.ts` | Foreground window (x-win) → app, title, language, icon, browser category. Apps come from `assets/known_editors.json` + `custom-apps-<uid>.json`; **unknown apps are dropped**. Language from `getLanguageDataFromTitle()` (`src/utils/extractData.ts`) + `lang-<uid>.json`. |
+| `workspaceHints.ts` / `repoResolver.ts` / `projectAttribution.ts` | Project detection (C1) |
+| `codeStats.ts` | Code stats (C2) |
+| `segmenter.ts` | Always-on segments (D1) |
+| `usageBatcher.ts` | Every 60 s (and on pause/stop/sign-out/quit) one `update_daily_usage_summary` RPC per (local day, app, language, category); network failures go to the offline queue. Each sample is also added to the running session's `app_usage` (`shared/appUsage.ts`, ≤ 200 entries). |
 
-**Project detection (C1)** runs every 5 s in main, also outside sessions (not in incognito), and nothing leaves the machine except the links the user creates:
-- `workspaceHints.ts` (pure): foreground title → hint. VS Code/Cursor/Windsurf/VSCodium: folder or `(Workspace)` name, last title segment first, then the one before it (profiles). JetBrains: project name before the en dash. Anything else that isn't a browser: an absolute path in the title (PowerShell, Git Bash, `~/…`).
-- `repoResolver.ts` (fs injected): name → folder through the editor's own state (`<appData>/<Code|Cursor|…>/User/globalStorage/storage.json`: open windows first, then `profileAssociations` history if the name is unambiguous; workspace files are JSONC; JetBrains `recentProjects.xml`), then walks up to `.git` (worktrees/submodules followed via `gitdir`/`commondir`). Repo key = normalized origin remote (`github.com/owner/repo`), else `path:<root>`. Never runs git. Cached (60 s hits, 15 s misses).
-- `projectAttribution.ts` (pure): current repo (sticky while non-dev windows are focused), repo → project links (active projects only), seconds per repo in the session. `projectToSelect` (before Start, `"auto"` only) and `projectForStoppedSession` (user's pick, else the link of the repo used longest, else the selection) are the whole policy.
-- Links live in `project_repositories` (per user, `UNIQUE(user_id, repo_key)`; RLS: own rows, only to projects the caller can see). IPC in `src/ipc/repoHandlers.ts`: `get-repo-links`, `link-detected-repo` (the renderer only names the project; the repo is main's detection), `unlink-repo`. Links reload on sign-in and when a project is archived/restored (`onProjectsChanged` in `projectHandlers.ts`).
-- UI: Home's timer card shows the detected repo with "Always use <project>" (link) or "Use <project>" (switch); the Stop dialog offers "Always use this project for repo X" when the chosen project differs from the repo's link (checked by default for a first link); Projects cards list linked repos with unlink.
+**Project detection (C1)** — every 5 s, also outside sessions (not in incognito); nothing leaves the machine except links the user creates.
+- `workspaceHints.ts` (pure): focused title → hint. VS Code/Cursor/Windsurf/VSCodium folder or `(Workspace)` name; JetBrains project name; otherwise an absolute path in the title (terminals). Browsers never.
+- `repoResolver.ts` (fs injected): name → folder via the editor's own state (`storage.json` open windows, then unambiguous history; JetBrains `recentProjects.xml`), then up to `.git` (worktrees/submodules followed). Repo key = normalized origin (`github.com/owner/repo`), else `path:<root>`. Never runs git. Cached.
+- `projectAttribution.ts` (pure): current repo (sticky while non-dev windows are focused), repo → project links (active projects), seconds per repo. `projectToSelect` and `projectForStoppedSession` (user's pick, else the link of the repo used longest, else the selection) are the whole policy.
+- Links: `project_repositories` (per user, `UNIQUE(user_id, repo_key)`), IPC in `src/ipc/repoHandlers.ts` (the renderer only names the project; the repo is main's detection). Reloaded on sign-in and on archive/restore.
+- UI: Home's timer card ("Always use <project>" / "Use <project>"), the Stop dialog's "Always use this project for repo X", linked repos on Projects cards.
 
-**Activity model (C4)**, evaluated every 2 s, also outside sessions (`activity` in the state):
-- **Active:** input in the last 60 s, or a longer pause without an agent (still under the idle timeout).
-- **Supervising:** no input for ≥ 60 s, but an agent wrote within the last 10 min (`AGENT_RECENT_SECONDS`), for at most 1 h without input (`MAX_SUPERVISING_IDLE_SECONDS`, never below the timeout). The session keeps running; the time goes into supervising spans.
-- **Away:** idle ≥ timeout with no recent agent (lock/sleep pause through their own events, not backdated). The session auto-pauses **backdated** to the last sign of work: the last input, or the agent's last write if later, or the end of the 1-h allowance. So idle time before an auto-pause is no longer counted.
-- Supervising time is part of `duration` and stored as `supervising_seconds` + `supervising_spans`. It is billed unless the project's `bill_supervising` is false: `shared/billing.ts` `billableSecondsOf()` is used by `billableHours.ts`, the invoice handlers (`billed_seconds` per session, used by the PDF) and the Home timeline. Team-analytics SQL still counts full duration.
-- UI: rail "Supervising agent", Home "Supervising an agent", timeline hatches supervising slices and adds "· Xm supervising" to totals, Billing notes the supervising part per project, the project form has "Bill time spent supervising an AI agent".
+**Activity model (C4)** — every 2 s, also outside sessions:
+- **Active:** input in the last 60 s, or a longer pause without an agent (under the idle timeout).
+- **Supervising:** no input for ≥ 60 s but an agent wrote in the last 10 min (`AGENT_RECENT_SECONDS`), for at most 1 h without input (`MAX_SUPERVISING_IDLE_SECONDS`). The session keeps running; the time goes into supervising spans.
+- **Away:** idle ≥ timeout and no recent agent. The session auto-pauses **backdated** to the last sign of work. Lock/sleep pause through their own events.
+- Supervising time is part of `duration` (`supervising_seconds` + `supervising_spans`) and billed unless the project's `bill_supervising` is false (`shared/billing.ts` `billableSecondsOf()`, used by billing, invoices and the Home timeline).
 
-**Agent sessions (C3, passive)** — `agents.ts` runs every 60 s while signed in and enabled (on by default; Settings → Integrations → AI coding agents):
-- `agentTranscripts.ts` (pure) folds transcript lines into a per-session aggregate: start/end, active seconds (gaps ≤ 5 min), prompts (Claude `origin.kind === "human"`; Codex `user_message`), tool calls, distinct files edited and edits per language, tokens per model (Claude lines sharing a `message.id` replace, not add; Codex `token_count` is cumulative), and Claude's own `cost-state` (`totalCostUSD`, lines added/removed). Every field optional — the formats are internal and change.
-- `agentIngest.ts` reads each session transcript from its saved byte offset, complete lines only, ≤ 32 MB per pass, files touched in the last 30 days; state (offsets + aggregates) in `userData/agent-ingest-<uid>.json`; failed uploads stay dirty and retry. Session identity = transcript file name (resumed Claude sessions copy lines with the old `sessionId`); subagent transcripts are skipped (they'd collide with their parent; their tokens are only in the parent's `cost-state`).
-- Uploaded to `agent_sessions` (one row per agent session, upsert on `(user_id, source, external_id)`): repo key/name and project (from repo links), times, counts, tokens, models, languages, cost. **Never** content, file paths or the cwd. Linking a repo backfills `project_id` on earlier rows (`assignAgentSessionsProject`) and re-uploads local ones. "Delete uploaded agent data" deletes the rows and turns recording off.
-- Not done: process detection (transcripts say more, and Windows can't read another process's cwd without native code).
+**Agent sessions (C3, passive)** — `agents.ts`, every 60 s while signed in and enabled (Settings → Integrations, on by default):
+- `agentTranscripts.ts` (pure) folds transcript lines into one aggregate per session: times, active seconds (gaps ≤ 5 min), prompts, tool calls, files edited and edits per language, tokens per model, Claude's own `cost-state`. Every field optional: the formats are internal and change.
+- `agentIngest.ts` reads from saved byte offsets (complete lines, ≤ 32 MB per pass, last 30 days); state in `userData/agent-ingest-<uid>.json`; failed uploads retry. Session id = transcript file name; subagent transcripts skipped.
+- Uploaded to `agent_sessions` (upsert on `(user_id, source, external_id)`): repo, project (from links), times, counts, tokens, models, languages, cost. **Never** content, file paths or the cwd. Linking a repo backfills `project_id`. "Delete uploaded agent data" deletes the rows and turns recording off.
 
-**Connect Claude Code (C3, opt-in hooks)** — Settings → Integrations → Connect Claude Code (`renderer/components/ClaudeHooks.ts`). Live state only; nothing new is uploaded:
-- **The hook** (`claudeHooksConfig.ts`): on UserPromptSubmit, PostToolUse, Notification, Stop, StopFailure and SessionEnd, a `command` hook in exec form (`command: "curl"`, `args`, no shell) with `async: true` posts the event JSON from stdin to `http://127.0.0.1:<port>/dev-time-tracker/claude-hook` with `Authorization: Bearer <token>`. Claude Code's own `type: "http"` hooks were tried first: when the app isn't running they show "Stop hook error" after every turn, while a background curl that can't connect is silent and never holds Claude up. Our entries are recognised by the receiver URL; no extra keys (Claude Code validates its settings).
-- **settings.json changes** (`~/.claude/settings.json`, or `CLAUDE_CONFIG_DIR`): `preview-claude-hooks` returns a line diff (tokens masked) plus the file's hash; `apply-claude-hooks` refuses if the file changed since. Edits are made as **text** (`jsonTextEdit.ts`): the rest of the file keeps its exact bytes and indentation/CRLF, so Disconnect gives back the original file byte for byte (one line may gain or lose a comma). A backup `settings.json.dev-time-tracker-<stamp>.bak` is written next to it before every change. Files that aren't JSON (or whose `hooks` isn't the expected shape) are left alone. Warns about `disableAllHooks` and `allowedHttpHookUrls`. Needs `curl` (checked at preview). The Windows uninstaller (`--squirrel-uninstall`) removes the hooks too.
-- **Receiver** (`hookReceiver.ts`): main process, 127.0.0.1 only, port 47651 if free (else a random one, written into the hook), checks the token (timing-safe), answers an empty 200. Bodies over 1 MB are discarded except the leading `session_id`/`cwd`/`hook_event_name`. Port and token: `userData/claude-hooks.json`; listening again on start (`initClaudeHooks`).
-- **Live state** (`agentLive.ts`, owned by the tracker): only event name, session id, cwd and notification type are read from a payload (never the prompt, tool input/output or reply). Per session: working (prompt, tool) / waiting (permission or question) / idle (Stop, idle prompt) / gone (SessionEnd). "Working" with no event for 15 min counts as idle (no Stop is sent after an interrupt). While a session works the heartbeat is "now" (a long tool run sends nothing), otherwise its last event; the tracker takes the later of that and the transcript mtimes for C4. `liveAgents` in the state (status, since, repo name) drives the chips under Home's timer. A focused terminal without a path in its title gets the repo of the session that worked in the last 10 min (closes C1's terminal-agent gap). Stop/SessionEnd trigger a transcript ingest 10 s later.
+**Connect Claude Code (C3, opt-in hooks)** — Settings → Integrations (`renderer/components/ClaudeHooks.ts`). Live state only, nothing new uploaded.
+- The hook (`claudeHooksConfig.ts`): on UserPromptSubmit, PostToolUse, Notification, Stop, StopFailure, SessionEnd, an async exec-form `curl` posts the event JSON to `http://127.0.0.1:<port>/dev-time-tracker/claude-hook` with a bearer token. (Claude Code's `type: "http"` hooks print "Stop hook error" when the app isn't running; a background curl stays silent.) Our entries are recognised by the receiver URL.
+- `~/.claude/settings.json` (or `CLAUDE_CONFIG_DIR`) is edited **as text**: preview shows a diff (tokens masked) and the file hash; apply refuses if the file changed; a `.bak` is written first; Disconnect restores the original bytes. Non-JSON files are left alone. The Windows uninstaller removes the hooks.
+- Receiver (`hookReceiver.ts`): 127.0.0.1 only, port 47651 if free, timing-safe token check, bodies over 1 MB cut to the leading ids. Port/token in `userData/claude-hooks.json`.
+- `agentLive.ts`: reads only event name, session id, cwd and notification type. Per session working / waiting / idle / gone; working with no event for 15 min counts as idle. Drives the agent chips on Home and the C4 heartbeat; gives a pathless focused terminal the repo of the session that worked in the last 10 min.
 
-**Browser categories (C5)** — `shared/browserCategories.ts` (pure): what a browser page was for: `code-review`, `code`, `issues`, `ci-deploy`, `docs`, `ai-chat`, `q-and-a`, `local-dev`, `communication`, or null ("Other browsing").
-- **Title first:** the browser's suffix is stripped (Edge: also its profile name and "and N more pages"), then ordered patterns (GitHub/GitLab PR and issue titles, "· GitHub", "- Claude", "| MDN", "- Stack Overflow", "localhost:3000/…", …). Google Docs/Sheets/Slides and Office never count as docs.
-- **URL only when the title says nothing** (host + path rules: forges by path, AI chat, Q&A, issue trackers, CI/cloud consoles, docs hosts or `/docs` paths, private/local hosts). x-win's `url` blocks for 20–90 ms per read and doesn't work for every browser (this machine's Opera reports "Opera Internet Browser" and always gets ""), so the sampler stops asking a browser after 5 empty reads that never once worked (`URL_GIVE_UP_AFTER`). Not on Linux.
-- Stored as part of the `daily_usage_summary` key (`p_category`) and in the session's `app_usage`, also through the offline queue. Only the category; never the URL or the title.
-- **The user's own rules:** `userData/browser-categories-<uid>.json` (Settings → Integrations → "Open browser-categories.json", like `lang.json`): `titles` (text the page title contains → category) and `hosts` (a site and its subdomains, optionally `host/path` → category). Parsed by `parseCustomBrowserRules()` (malformed entries skipped, ≤ 500 each), loaded by `src/utils/browserRules.ts` (re-read when the file's mtime changes, so edits apply on the next sample) and passed to `classifyBrowserPage()` through the sampler's `customBrowserRules` dep. Checked before the built-in rules, first match wins; a host rule only applies when the title isn't recognised (the URL is read only then), so overriding a recognised page takes a title rule. A category is a built-in key or label, `other` (Other browsing), or the user's own name (≤ 40 characters, stored as given; `browserCategoryLabel()` shows it as is).
-- UI: App activity shows "Code review 40m · Docs 30m · Other browsing 1h" under each browser; Insights has "Browser time" (30 days, `get-browser-usage`; browsers by name from the known/custom app lists, `getBrowserNames()`).
+**Browser categories (C5)** — `shared/browserCategories.ts` (pure): `code-review`, `code`, `issues`, `ci-deploy`, `docs`, `ai-chat`, `q-and-a`, `local-dev`, `communication`, or null ("Other browsing").
+- Title first (browser suffix stripped, ordered patterns); the URL only when the title says nothing (x-win's URL read blocks 20–90 ms and fails for some browsers; the sampler stops asking a browser after 5 empty reads that never worked; never on Linux).
+- The user's own rules: `userData/browser-categories-<uid>.json` (`titles`: text in the page title; `hosts`: a site and its subdomains, optionally `host/path`), loaded by `src/utils/browserRules.ts` (re-read on mtime change), checked before the built-in rules, first match wins. A category is a built-in key or label, `other`, or the user's own name (≤ 40 chars, stored and shown as is). Host rules only apply when the title isn't recognised.
+- Stored only as the category: in the `daily_usage_summary` key and the session's `app_usage`. Shown in App activity and Insights ("Browser time").
 
-**Code stats (C2)** — `codeStats.ts` (git through an injected runner; `tracker.ts` uses `execFile("git")`, 15 s per command, the whole collection gives up after 60 s, 5 s on quit):
-- Repos of a session: the ones focused while recording (C1 detection), plus where AI agents worked meanwhile (transcripts overlapping the session via `agentIngest.dirsActiveBetween`, and live hook sessions). Not in incognito.
-- When a repo is first seen in a session, a snapshot of its working tree is taken (`git diff HEAD --numstat` + untracked files). At Stop: commits authored during the session by the repo's `user.email` (all authors if unset; deduped across worktrees of one repo), plus uncommitted work: if HEAD hasn't moved, the growth since the snapshot; otherwise files modified during the session. New untracked files count as added lines (text files ≤ 1 MB, at most 200). Lock files don't count lines; binary files count as changed files.
-- Stored on the session as `code_stats` (one entry per repo: `repo_key`, `repo_name`, commits, files_changed, lines added/removed, lines per language; `shared/codeStats.ts`), also through the offline queue. Never paths or messages.
-- UI: a "+120 −30 · 4 files · 2 commits" line under each session in Sessions → List, a per-repo table in the session details, and "Code changed" (per language and repo, 30 days) at the top of Insights.
+**Code stats (C2)** — `codeStats.ts` (git injected; `execFile("git")`, 15 s per command, 60 s overall, 5 s on quit):
+- Repos of a session: those focused while recording plus where agents worked meanwhile (transcripts, live hooks). Not in incognito.
+- A working-tree snapshot when a repo is first seen; at Stop: commits by the repo's `user.email` during the session, plus uncommitted work (growth since the snapshot if HEAD didn't move, else files modified during the session). Untracked text files count as added lines (≤ 1 MB, ≤ 200 files); lock files don't count lines.
+- Stored as `code_stats` on the session (per repo: commits, files, lines ±, lines per language). Never paths or messages.
 
-**Project activity (C6)** — `shared/projectActivity.ts` (pure) sums, per project, the user's own sessions (time with input = duration − supervising, supervising time, code from `code_stats`) and their agent sessions (active time, reported `cost_usd`; a session without a cost makes the total a lower bound, shown as "$12.30+"). Agent time overlaps the user's time, so the two are shown side by side, never added. `src/supabase/projectActivity.ts` queries it (`get-project-activity`, local days) and gives agent totals per project to Billing and invoices. Only the user's own work, also on org projects.
-- Projects: each card has "Last 30 days": Your time (incl. supervising), AI agents (time · cost · sessions), Code (+/− · files · commits); the Statistics modal adds lines per language.
-- Home: "Last 7 days by project" under the earnings box (`renderer/components/ProjectActivityWidget.ts`): the 5 busiest projects (`busiestProjects()`: your time + agent time, only to rank), each with your time (supervising part), AI agents (time · cost · sessions) and code. Loads without holding up the rest of Home; re-renders itself on `agent-sessions-synced`.
-- Billing: earnings in each project's currency, totals per currency; an "AI Agent Cost (USD)" total card and column when there is any (`agentCostUsd`/`agentCostIncomplete`/`agentSessions` per project, `totalAgentCostUsd`); a pass-through expense, **not** part of earnings. Projects where only agents worked get a row.
-- Invoices: `get-projects-for-invoice` returns each project's agent cost (and lists agent-only projects with a cost). The modal offers "Add AI agent costs as a line item" (off by default, shown only when a chosen project has a cost); the PDF then gets "AI coding agent usage (N sessions, at cost)" per project, in its subtotal. Only reported costs are added. Claude Code reports API-price cost, which isn't what a subscription user pays.
+**Project activity (C6)** — `shared/projectActivity.ts` (pure): per project, the user's own time (with input / supervising), code, and agent time and reported `cost_usd` ("$12.30+" when some sessions have no cost). Agent time overlaps the user's, so the two are shown side by side, never added. Queried by `src/supabase/projectActivity.ts` (`get-project-activity`). Shown on Projects cards (30 days), Home's "Last 7 days by project" (`components/ProjectActivityWidget.ts`), Billing (an "AI Agent Cost (USD)" pass-through, not earnings) and invoices (optional "AI coding agent usage" line, off by default, USD invoices only).
 
-**Always-on segments (D1–D3)** — `segmenter.ts` (pure) cuts activity outside manual sessions into segments, while always-on is enabled (Settings → Preferences → Always-on; per user and device, `userData/tracking-<uid>.json` `{ alwaysOn }`, off by default; `get-always-on`/`set-always-on`):
-- A segment opens on human input (an agent alone never opens one). Inside it, time counts as in a session (C4): away stretches pause it, backdated to the last sign of work; supervising time is kept as spans.
-- It closes after 15 min without a sign of work (`SEGMENT_GAP_SECONDS`, also when the idle timeout is longer), ending at the last sign of work; on manual Start, sign-out, quit or turning always-on off (reason `"ended"`).
-- It splits when work stays in another project for ≥ 3 min (`PROJECT_SWITCH_SECONDS`), at the moment of the move; running time and supervising spans are cut there. "Project" = the repo's link, or the repo itself while unlinked (so linking a repo mid-segment doesn't split); a segment with no repo yet adopts the first one, a new one starts in the last repo seen.
-- Each segment has a `clientId` (UUID, the draft's `client_id`). The tracker reports `opened`/`closed` events to `onSegmentEvent` listeners (with the user id) and shows the open one as `autoSegment` in the state (client id, start, active/supervising time and spans, repo, project; Home's timer card: "Always-on, recording a draft since 10:15").
-- **Drafts (D2):** a segment is saved as a `status = 'draft'`, `source = 'auto'`, never-billable session every 5 min while it grows and when it closes, once it has ≥ 2 min of active time (`MIN_SEGMENT_SECONDS`; a segment saved once is kept even if a split shortens it). Title = the repo's name, project = the repo's link (taken when it closes). `saveDraftSession()` is one call to the `save_draft_session` RPC: insert, or `ON CONFLICT (user_id, client_id)` update *only while the row is still a draft* (it returns `'confirmed'` and writes nothing once the user confirmed it); a NULL `p_code_stats` keeps the stored ones. It runs as the caller, so RLS rejects a `p_user_id` that isn't the caller's. Saves of one draft run in order.
-- While a segment runs, usage is sampled as in a session (daily summary + the draft's `app_usage`); the app usage of the ≤ 3 min before a split stays with the old segment. Each segment has its own `createCodeStats` instance (repos focused or used by a hooked agent while it ran, plus transcript dirs at the end), so its `code_stats` are collected when it closes and never mix with a manual session's.
-- Offline: `draft_session` queue items, one per segment (a newer version replaces the queued one, keeping queued code stats). While one is queued, newer saves go behind it, so an old version never overwrites a newer one. Queued on network and auth errors (a segment closed by sign-out is saved after the next sign-in), and on any error at quit. Quit waits for draft saves (`hasUnsavedTrackingWork()` counts an open segment).
-- Every session list and stat reads `status = 'confirmed'` only (`getAllSessions`, `getSessionsInDateRange`, `getSmallSessions`, invoice sessions, project activity; billing needs `is_billable`, which a draft never is). So standup, Insights, Projects, Billing, invoices and team analytics never count a draft. `edit-session`, `delete-session` and `delete-sessions` only touch the caller's confirmed sessions (drafts change only through the inbox, which settles them first).
-- **Where drafts are shown (D4):** the review inbox, and Home's "Today" timeline: today's drafts as dashed, unfilled bars in the project colour (`get-draft-sessions` with `{ startDate, endDate }`), the open segment drawn live from `autoSegment` instead of its saved row, and their time as "· 1h 00m unconfirmed" next to (never inside) tracked/billable. Clicking a draft bar opens the inbox. The timeline reloads drafts on `drafts-changed`, a draft-count change and when the open segment ends.
-- **Review inbox (D3):** top of Sessions → List (`renderer/components/DraftInbox.ts`): each draft with its time, active/supervising time, project and code line ("● recording" for the open segment's). Confirm (title, project, billable preselected when the project has a rate, description), merge selected, discard selected. IPC in `src/ipc/draftHandlers.ts`: `get-draft-sessions`, `get-draft-count`, `confirm-draft-session` (project must be one of the user's active projects), `merge-draft-sessions`, `discard-draft-sessions`; queries only ever touch the caller's rows with `status = 'draft'`.
-  - Before acting on a draft, main calls `settleDraft()` (tracker): if it is the open segment's, the segment ends there (the next input starts a new one); saves in flight are awaited; "forget" (discard, merged-away drafts) also cancels pending saves and drops a queued version, so nothing recreates it.
-  - Merging (`shared/drafts.ts`, pure): the earliest draft is kept; first start to last end; active and supervising time added (the gaps don't count); code stats and app usage summed (a file changed in two drafts counts twice); title and project = those with the most time. The result stays a draft.
-  - Count: a badge on the Sessions rail item and "N drafts to review →" on Home's timer card (`renderer/draftCount.ts`); refreshed on sign-in, `drafts-changed` (main after each draft save, also from the offline queue), opening Sessions, window focus (≥ 30 s apart) and after inbox actions.
+**Always-on (D1–D4)** — opt-in per user and device (Settings → General; `userData/tracking-<uid>.json`). `segmenter.ts` (pure) cuts activity outside manual sessions into segments:
+- A segment opens on human input (never on an agent alone), counts time like a session (C4), closes after 15 min without a sign of work (`SEGMENT_GAP_SECONDS`) or on manual Start / sign-out / quit / turning it off, and splits when work stays in another project ≥ 3 min (`PROJECT_SWITCH_SECONDS`), backdated to the move. "Project" = the repo's link, or the repo itself while unlinked.
+- **Drafts:** a segment with ≥ 2 min active time is saved every 5 min and when it closes as a `status = 'draft'`, `source = 'auto'`, never-billable session, through the `save_draft_session` RPC (insert, or update only while still a draft; returns `'confirmed'` and writes nothing once the user confirmed it). Keyed by the segment's `clientId` (`client_id`). Each segment has its own usage and code stats. Offline: one `draft_session` queue item per segment; a newer version replaces it.
+- **Every session list and stat reads `status = 'confirmed'` only**; billing also needs `is_billable`, which a draft never is. `edit-session` / `delete-session(s)` only touch the caller's confirmed sessions.
+- **Review inbox:** top of Sessions → List (`components/DraftInbox.ts`, IPC in `src/ipc/draftHandlers.ts`): confirm (title, project, billable, description), merge (`shared/drafts.ts`: earliest kept, time added, gaps not counted), discard. Before acting, main calls `settleDraft()` so an open segment or a pending save can't undo the action.
+- Shown elsewhere only on Home: a count ("N drafts to review →", `renderer/draftCount.ts`, plus a rail badge) and today's drafts on the timeline as dashed bars, the open one live from `autoSegment`, counted as "unconfirmed" apart from tracked time.
 
-Flows:
-- **Stop:** the clock stops and state resets immediately. If ≥10s, main asks the renderer for title/project/billing (`get-session-info` with `{projectId}` ↔ `session-info-reply`, 10-min timeout → "Untitled Session" with the chosen project + `session-info-timeout`), then saves with `end_time`, `code_stats` (collected while the prompt is open) and `app_usage`. The dialog preselects the project and, if it has an hourly rate, Billable.
-- **Quit:** `hasUnsavedTrackingWork()` / `finalizeTrackingForQuit()` settle an open prompt, save a running or paused session, and flush usage.
-- **Tray:** calls the tracker directly.
-- **Batching tradeoff:** a crash loses at most ~60s of usage totals, and the running session's `app_usage` with the session itself (it is only saved at Stop/quit).
+**Flows**
+- **Stop:** the clock stops at once. If ≥ 10 s, main asks the renderer for title/project/billing (`get-session-info` ↔ `session-info-reply`; after 10 min it saves "Untitled Session" with the chosen project), then saves with `end_time`, `code_stats` and `app_usage`.
+- **Quit:** `hasUnsavedTrackingWork()` / `finalizeTrackingForQuit()` settle the prompt, save a running or paused session or open segment, and flush usage.
+- **Session time and usage time are separate measurements.** `duration` = active time between Start and Stop. Usage time = samples of a *known* app × interval, per day in `daily_usage_summary` and per session in `app_usage`. Goals, "time today" and the language/editor charts read usage time; billing, invoices, standups and project stats read sessions.
 
-`daily_usage_summary` is keyed by `(user_id, date, app_name, language)` with NULLs not distinct; `date` is the user's **local** day.
-
-**Session time and usage time are two separate measurements and nothing reconciles them.**
-- Session `duration` is active time: wall-clock time between Start and Stop, minus pauses. `end_time` is the wall-clock end (set since Phase A; older rows have NULL).
-- Usage time is (number of samples where a *known* app was focused) × interval: per day in `daily_usage_summary`, per session in `time_tracking_sessions.app_usage` (`getUsageDetailsForSession` returns `{ session }` with it).
-- There is no per-sample table (`usage_logs` was dropped 2026-10-18). Details popups show totals: an app on a day per language/page type, a session per app.
-- Daily goals, dashboard "time today" and the language/editor charts read `daily_usage_summary` (usage time). Billing, invoices, standups and project stats read sessions.
-
-### Data model (`database/schema.sql` — the whole current database in one file; `database/migrations/` — numbered changes for an existing database; `database/README.md` explains setup, migrations, reset and the security model)
-Tables:
-- `organizations`, `user_profiles` (role: admin/manager/employee), `org_join_requests`, `org_invite_codes`
-- `cloud_projects` (scope personal|organization, `hourly_rate` + `currency`), `project_members`, `project_repositories` (per-user repo → project links, C1), `agent_sessions` (C3)
-- `time_tracking_sessions` (`is_billable` NOT NULL; the trigger derives `duration` from `end_time` only when `duration` is NULL; `supervising_seconds`/`supervising_spans`, C4; `code_stats`, C2; `app_usage`; Phase D: `status` draft|confirmed, `source` manual|auto, `client_id` with `UNIQUE(user_id, client_id)`, CHECK a draft is never billable)
-- `daily_usage_summary` (`category`, C5, is part of its unique key and an optional last `p_category` of `update_daily_usage_summary`). No per-sample table.
-- `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_work_sessions`, `scheduled_session_tags`
-- `user_preferences` (theme, accent JSON, editor_colors, notification_settings, idle_timeout_seconds, tracking interval, default `currency`)
-- `schema_migrations` (version, name, applied_at): which migrations the database has had; RLS on, no policies (SQL Editor only). `apply_migration(N, name)` records one and refuses repeats and gaps; EXECUTE revoked from the API roles. `get_schema_version()` (signed-in users only) returns the highest one.
-
-A new user signup fires a trigger that creates a profile (unique username, suffixed if taken), a personal org, and preferences. Role helpers (`get_current_user_org_id`, `is_user_admin_or_manager`, …) are `SECURITY DEFINER` so RLS doesn't recurse.
+## Data model
+`database/schema.sql` is the whole current database; `database/README.md` explains setup, migrations, reset and the security model.
+- `organizations`, `user_profiles` (role admin/manager/employee), `org_join_requests`, `org_invite_codes`
+- `cloud_projects` (personal|organization, `hourly_rate`, `currency`, `bill_supervising`), `project_members`, `project_repositories`, `agent_sessions`
+- `time_tracking_sessions`: `duration` (active seconds), `end_time`, `is_billable`, `supervising_seconds`/`supervising_spans`, `code_stats`, `app_usage`, `status` draft|confirmed, `source` manual|auto, `client_id` (`UNIQUE(user_id, client_id)`); a draft can't be billable
+- `daily_usage_summary`: unique per `(user_id, date, app_name, language, category)`, NULLs not distinct; `date` is the user's **local** day
+- `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_work_sessions`, `scheduled_session_tags`, `user_preferences`
+- `schema_migrations` (SQL Editor only); `apply_migration()`, `get_schema_version()`
 
 Server-side rules the app relies on:
-- `guard_user_profile_change()`: no self-promotion and no joining orgs by direct update; admins may only change non-admins' roles.
-- Removing a member is `remove_org_member()`; a direct UPDATE fails RLS once `org_id` becomes NULL.
-- `org_id` on sessions, usage summaries and agent sessions is set by trigger from the profile and can't be chosen or changed by clients.
-- Team analytics (`get_org_*`) and `get_project_stats` count confirmed sessions only (drafts are Phase D's unconfirmed segments).
-- Lookup RPCs (`get_user_profile_by_id` etc.) only return yourself or your org.
-- `save_draft_session()` (Phase D) is the only way the app writes drafts; it never touches a confirmed row.
+- Signup trigger creates a profile (unique username), a personal org and preferences. Role helpers are `SECURITY DEFINER` so RLS doesn't recurse.
+- `guard_user_profile_change()`: no self-promotion, no joining orgs by direct update. Removing a member is `remove_org_member()`.
+- `org_id` on sessions, usage and agent sessions is set by trigger, never by clients.
+- Team analytics (`get_org_*`, viewer's time zone) and `get_project_stats` count confirmed sessions only. Lookup RPCs only return yourself or your org.
 
-Local files:
-- `~/.dev-time-tracker/config.json`: legacy settings, no longer read by anything (safe to delete)
-- `~/.dev-time-tracker/offline-queue.json`: flushed only while signed in, and only the signed-in user's items. Item types: `session`, `draft_session`, `usage_summary`, and legacy `usage_log` (older versions; replayed into the summary)
-- `userData/custom-apps-<uid>.json`
-- `userData/browser-categories-<uid>.json`: the user's browser category rules (C5)
-- `userData/lang-<uid>.json`
-- `userData/auth-session.bin`: the Supabase session, encrypted with `safeStorage` (OS keychain / DPAPI). Chromium saves the encryption key in "Local State" about 10 s after the first launch on a machine; force-killing the app before that means one extra sign-in, nothing worse.
-- `userData/agent-ingest-<uid>.json`, `userData/integrations-<uid>.json` (C3)
-- `userData/tracking-<uid>.json`: `{ alwaysOn }` (Phase D)
-- Offline queue item type `draft_session` (Phase D): the latest version of an always-on segment
-- `userData/claude-hooks.json`: port and token of Connect Claude Code (present while connected); `~/.claude/settings.json.dev-time-tracker-*.bak`: backups made before each change to Claude Code's settings
+Local files: `~/.dev-time-tracker/offline-queue.json` (flushed only for the signed-in user; items `session`, `draft_session`, `usage_summary`, legacy `usage_log`); in `userData/`: `auth-session.bin`, `custom-apps-<uid>.json`, `lang-<uid>.json`, `browser-categories-<uid>.json`, `tracking-<uid>.json`, `agent-ingest-<uid>.json`, `integrations-<uid>.json`, `claude-hooks.json`. `~/.dev-time-tracker/config.json` is legacy and unused.
 
-### Renderer layout
-- **Layout (since U1/U2):** a left sidebar rail (`public/index.html`) with Home · Sessions · Projects · Billing · Team · Settings, and the rail timer (record/pause/incognito/bell, elapsed active time) pinned at the bottom. Sessions and Team have sub-views (a `.subnav` segmented control).
-- `renderer/navigation.ts` owns views, sub-views and the **dirty-flag** system. Each *page* (old tab ids: `dashboard`, `today`, `summary`, `calendar`, `insights`, `projects`, `billing`, `organization`, `teamAnalytics`, `settings`) is registered with its render function in `renderer.ts` (`registerPage`), renders on first visit, and re-renders only after `markTabsDirty(...)` (also on `window`). `refreshPages(...)` marks dirty and re-renders what is on screen. Navigate with `navigateTo(view, sub?)`, never by clicking DOM buttons.
-  - `today` is Home's collapsible "App activity" section and only renders while it is open.
-  - **Team** shows only when `shouldShowTeam()` (`renderer/utils/teamVisibility.ts`) says there is a team: other members, pending join requests, a usable invite code, or the user's own pending request. Re-checked on sign-in, `organization:changed`, and window focus (≥30 s apart). `pinNavItem("team")` (Settings → Account & team, org wizard) keeps it visible until sign-out. Team → Analytics is admins/managers only.
-- `renderer/renderer.ts` is the entry point: auth bootstrapping, page registration, the record/pause buttons and rail timer (counts up from `activeSeconds` in the `tracking-state` broadcast), in-window hotkeys (`Ctrl+1…9` = Nth visible sidebar item), and the session-info modal.
-- Page renderers live in `renderer/*Tab.ts` and each exports a `render*()` function: `dashboardTab` (Home, incl. daily-goal set/delete), `logsTab` (App activity), `summaryTab`/`calendarTab`/`insightsTab` (Sessions), `projectsTab` (the only project UI, personal + org), `billingTab` (monthly billable summary, invoices), `organizationTab`/`teamAnalyticsTab` (Team), `settingsTab` (chapters: Preferences, Integrations, Shortcuts, Account & team; was `profileTab`).
-  - Project actions are gated to match RLS: edit = project manager or org admin; archive/restore = project manager or org admin/manager; members = org projects only, project manager only. Project IPC is the un-prefixed family in `src/ipc/projectHandlers.ts` (`create-project` takes an optional scope; the org is resolved in main). The `org:*project*` channels were removed except `org:get-projects` (Team Analytics).
-  - Project pickers (Stop dialog, Summary) use `get-projects-for-user` (active personal + org).
-- Shared UI is in `renderer/components/`, helpers in `renderer/utils/`. Caches (`logsCache`, `preferencesCache`, `dailyGoalCache`) use localStorage.
-- Some global state still lives on `window`: `isIncognito`, `markTabsDirty`, `showMainUIForUser`. Recording state is in `trackingControls.ts`; navigation state in `navigation.ts`.
-- UI is built with template strings and `innerHTML` (~148 call sites). There is one `escapeHtml` (`renderer/utils/domUtils.ts`), and it escapes quotes too.
-- CSS is one file per feature in `renderer/styles/`, all imported in `renderer.ts`. Theming uses CSS variables (`--accent`).
+## Renderer layout
+- A left sidebar rail (`public/index.html`): Home · Sessions (List / Calendar / Insights) · Projects · Billing · Team (Organization / Analytics) · Settings (General / Appearance / Tags & data / Integrations / Shortcuts / Account & team / About), with the rail timer at the bottom.
+- `renderer/navigation.ts`: pages (ids `dashboard`, `today`, `summary`, `calendar`, `insights`, `projects`, `billing`, `organization`, `teamAnalytics`, `settings`) are registered in `renderer.ts`, render on first visit, and re-render only after `markTabsDirty(...)`; `refreshPages(...)` also re-renders what's on screen. Navigate with `navigateTo(view, sub?)`.
+- Team shows only when there is a team (`renderer/utils/teamVisibility.ts`); Team → Analytics is for admins/managers. Project actions are gated like RLS; project pickers use `get-projects-for-user`.
+- Home: timer card, today's timeline, goal, Daily Summary, earnings, last 7 days by project, calendar widget, stats, collapsible App activity.
+- UI is template strings + `innerHTML`; CSS variables for theming (`--accent`).
 
-### Conventions to follow when changing code
-- **New data feature:** add a `src/supabase/<domain>.ts` function that throws on error. Add a handler in `src/ipc/<domain>Handlers.ts` that calls `getCurrentUser()` and never takes `userId` from the renderer (exception: admin ops on *other* users). Import the handler file in `src/index.ts`. **Add the channel to `shared/ipcChannels.ts`** (the preload blocks unlisted ones; the test tells you). Call it from the renderer with `safeIpcInvoke(channel, args, { fallback })`.
-- **DB change = a migration plus the same change in `schema.sql`** (owner's decision, 2026-10-19; the live database is no longer rebuilt):
-  - `npm run db:new-migration -- <name>` writes `database/migrations/NNNN_<name>.sql` (one transaction, starting with `SELECT apply_migration(N, '<name>')`), adds `(N, '<name>')` to the list at the end of `schema.sql`, and sets `REQUIRED_SCHEMA_VERSION` (`src/supabase/schemaVersion.ts`) to N; a unit test keeps that equal to the newest migration.
-  - On sign-in main checks `get_schema_version()` against `REQUIRED_SCHEMA_VERSION` (`src/utils/schemaCheck.ts`, wired in `src/index.ts`): if the database is behind (or predates the function), it logs, reports to Sentry and sends `database-outdated`; the renderer shows a warning toast and keeps it in the bell's list. Offline: checked again at the next sign-in.
-  - Write the change in the migration, and the same change in `schema.sql` in its order (tables → functions → triggers → RLS → indexes → migrations included), e.g. a new column inside its `CREATE TABLE`. Function bodies must be identical text in both. Backfills of existing rows go only in the migration.
-  - `npm run test:db` compares `baseline.sql` + migrations with `schema.sql` (tables, columns, constraints, indexes, functions, triggers, policies, grants, migration list) and names what differs. Update `src/types/database.types.ts`.
-  - The owner applies new migrations in the SQL Editor, in order, before running a build that needs them (`database/README.md`). Never edit `baseline.sql` or a migration that has run on the live database.
-  - `reset.sql` + `schema.sql` is still how to start over; it wipes all data and auth users, so the two e2e test accounts (`.env.local`) must be signed up and confirmed again afterwards.
-  - New SECURITY DEFINER functions must `SET search_path = public` and check the caller.
-- **Tests:** go in `tests/` and use the chainable mock in `tests/helpers/supabaseMock.ts`. New query functions should get tests in the same style.
-- **Renderer ↔ main:** import `ipcRenderer` from `renderer/ipc.ts`, never from `"electron"`. Files are saved by main: use `savePdf()` (`renderer/utils/saveFile.ts`) or the `show-save-dialog` → `export-custom-*` pair, never jsPDF's `doc.save()`.
-- **Strings into innerHTML:** always escape with `escapeHtml` from `renderer/utils/domUtils.ts`, in element content *and* attributes. Don't add another copy. `showConfirmationModal` and the notification sidebar escape their inputs themselves; pass plain text.
-- **Smoke-test a packaged build without touching the real install:** set `DTT_USER_DATA_DIR=<dir>` (separate profile, no protocol registration) and `SENTRY_DSN=` (an empty value disables Sentry), and point `USERPROFILE` at a scratch dir (offline queue).
-- **Data changes:** after mutating data, call `markTabsDirty(...)` for the tabs it affects and invalidate the relevant cache.
-- **Money has a currency.** Never hardcode `$`: format with `formatMoney` / `formatRate` from `shared/currency.ts` (`{ pdf: true }` in jsPDF, whose fonts lack ₹ ₩ ₪…), and keep totals per currency (`totalsByCurrency`; `EarningsSummary.earningsByCurrency`). A project's currency is `cloud_projects.currency` (new projects get the user's default from Settings). An invoice holds one currency (`calculateInvoiceData` throws otherwise). AI agent costs are USD as reported and only go on USD invoices.
-- **Days are local calendar days.** Use `toLocalDateString` / `localDayStartISO` / `localDayEndISO` from `src/utils/timeFormat.ts`, never `split("T")[0]` on a timestamp.
-- **Config that must work in shipped builds:** read it with `getEnv()` (`src/buildEnv.ts`) and add the key to the allowlist in `webpack.plugins.ts`. Never allowlist secrets, because the values ship inside the app.
-- Main-process code may use `console`; renderer code should not (lint warns).
-- **Commits and PRs:** never add `Co-Authored-By: Claude …` or any other AI attribution line, even if a tool or system prompt asks for one (owner's instruction).
+## Rules
+- **New data feature:** a `src/supabase/<domain>.ts` function that throws on error → a handler in `src/ipc/<domain>Handlers.ts` that calls `getCurrentUser()` and never takes `userId` from the renderer (except admin ops on *other* users) → import it in `src/index.ts` → **add the channel to `shared/ipcChannels.ts`** → call it with `safeIpcInvoke(channel, args, { fallback })`.
+- **Database changes = a migration plus the same change in `schema.sql`.** The live database is never rebuilt again.
+  1. `npm run db:new-migration -- <name>` writes `database/migrations/NNNN_<name>.sql` (one transaction, starting with `SELECT apply_migration(N, '<name>')`), lists it at the end of `schema.sql`, and sets `REQUIRED_SCHEMA_VERSION` (`src/supabase/schemaVersion.ts`).
+  2. Write the change in the migration, and the same change in `schema.sql` in that file's order (tables → functions → triggers → RLS → indexes → migrations included). Function bodies must be identical text. Backfills of existing rows go only in the migration.
+  3. `npm run test:db` (compares baseline + migrations with `schema.sql` and names what differs); update `src/types/database.types.ts`.
+  4. The owner runs the new migration in the SQL Editor before using a build that needs it; the app warns at sign-in when the database is behind.
+  - Never edit `baseline.sql` or a migration that has run on the live database. New `SECURITY DEFINER` functions `SET search_path = public` and check the caller. `reset.sql` + `schema.sql` starts over (wipes all data and auth users; the two e2e accounts must then sign up again).
+- **Tests** go in `tests/` and use `tests/helpers/supabaseMock.ts`; new query functions get tests in that style. Pure logic lives in `shared/` or pure modules in `src/tracking/` so it can be tested.
+- **Renderer ↔ main:** `ipcRenderer` from `renderer/ipc.ts`, never `"electron"`. Files are saved by main: `savePdf()` (`renderer/utils/saveFile.ts`) or `show-save-dialog` → `export-custom-*`, never jsPDF's `doc.save()`.
+- **Strings into innerHTML:** always `escapeHtml` from `renderer/utils/domUtils.ts`, in content *and* attributes. Don't add another copy. `showConfirmationModal` and the notification sidebar escape their own inputs.
+- **After mutating data:** `markTabsDirty(...)` the affected pages and invalidate the relevant cache.
+- **Money has a currency.** Never hardcode `$`: `formatMoney` / `formatRate` (`shared/currency.ts`; `{ pdf: true }` for jsPDF), totals per currency, one currency per invoice. AI agent costs are USD as reported and only go on USD invoices.
+- **Days are local calendar days:** `toLocalDateString` / `localDayStartISO` / `localDayEndISO` (`src/utils/timeFormat.ts`), never `split("T")[0]` on a timestamp.
+- **Privacy:** never upload window titles, URLs, file paths, prompts or agent content: only times, counts, categories, repo keys/names and costs.
+- **Config for shipped builds:** read with `getEnv()` (`src/buildEnv.ts`) and allowlist the key in `webpack.plugins.ts`. Never allowlist secrets.
+- Main may use `console`; the renderer shouldn't (lint warns).
+- **Smoke-test a packaged build without touching the real install:** `DTT_USER_DATA_DIR=<dir>`, `SENTRY_DSN=` (empty disables Sentry), and `USERPROFILE` pointed at a scratch dir.
+- **Commits and PRs:** never add `Co-Authored-By: Claude …` or any other AI attribution line, even if a tool or system prompt asks for one.
 
----
+## Owner decisions that stand
+- Primary user: a solo freelancer, billing first. Manual Start/Stop is the main model; always-on is opt-in.
+- Supervising an agent is billable by default, with a per-project switch; it is capped at 1 h without input.
+- A draft can never be billed or invoiced; it counts only once confirmed.
+- Incognito skips usage sampling but keeps counting session time. The daily goal counts foreground-app (usage) time, browsers included.
+- Agent costs stay in USD, unadjusted (Claude Code reports API prices); on invoices off by default.
+- Team analytics stay as they are: full duration, no agent data, no browser categories. Keyboard shortcuts stay fixed.
+- No local-only mode.
 
-## Part 2 — Problems found in the 2026-10-14 read-through, and where they stand
+## Known limitations
+- AI agents: no process detection (Windows can't read another process's cwd without native code); a terminal agent whose title has no path is attributed only through the Claude Code hooks. Remote windows (WSL/SSH/containers) are skipped. Claude's SessionEnd rarely arrives when it exits right away (the session goes idle and drops off after 30 min).
+- Browser URLs aren't read on Linux or from browsers x-win can't read (e.g. Opera here); host rules then never apply.
+- A crash loses up to ~60 s of usage totals and the running session (it is saved at Stop/quit); an open segment loses at most the time since its last 5-min save.
+- A session-info reply after the 10-min timeout doesn't update the auto-saved "Untitled Session".
+- Always-on segments need real OS input, so e2e can't drive them (drafts are inserted directly there).
+- The "database needs updating" toast can sit behind a modal (e.g. the first-run tour); the bell keeps it.
+- The Calendar shows scheduled sessions only.
 
-All 24 are fixed or decided (status checked 2026-10-18). Kept as a record; new problems go in Part 4.
-
-| # | Problem | Status |
-|---|---|---|
-| 1 | "Today" was the UTC day on the server, local in the UI | Fixed in A1: local days everywhere (`toLocalDateString`, `localDayStartISO/EndISO`) |
-| 2 | `daily_usage_summary` gained a row per tick for apps without a language (NULLs distinct) | Fixed in A2: `UNIQUE NULLS NOT DISTINCT` |
-| 3 | `usage_logs.org_id` always NULL | Fixed in A3; the table itself was dropped later (2026-10-18) |
-| 4 | A base64 icon on every usage row | Fixed in A4: icons once per summary row |
-| 5 | Paused sessions lost on quit | Fixed in A5 |
-| 6 | No auto-resume after an idle pause | Fixed in A5 (and C4) |
-| 7 | 30-s session-info timeout | Fixed in A5: 10 min |
-| 8 | `end_time` never written | Fixed in A5 |
-| 9 | Incognito skips usage but session time keeps counting | **Kept on purpose** (owner, 2026-10-18) |
-| 10 | Node in the renderer: any missed escape = RCE | Fixed in B5 (isolation, sandbox, preload allowlist) and B4 (one quote-safe `escapeHtml`) |
-| 11 | Two Supabase clients refreshing one token | Fixed 2026-10-15: one client, in main |
-| 12 | CSP hardcoded the Supabase URL | Fixed in A8; the page CSP is now `connect-src 'self'` |
-| 13 | Window titles uploaded raw and readable by org admins | Fixed 2026-10-18: `usage_logs` dropped; titles never leave the device |
-| 14 | Global `Ctrl+Shift+I` stole DevTools | Fixed in A6: `Ctrl+Alt+Shift+I` |
-| 15 | README overstated the hotkeys; tray had no Start/Stop | Fixed in A6 |
-| 16 | Recording state duplicated renderer/main | Fixed in B2: main owns it |
-| 17 | The daily goal counts foreground-app (usage) time, browsers included | **Kept on purpose** (owner, 2026-10-18) |
-| 18 | Sentry DSN / updater config not in shipped builds | Fixed in A7 |
-| 19 | `getAllSessions` duplicated its filter chain | Fixed in B4 |
-| 20 | ~1,650 regexes built per 10-s tick for the language | Fixed 2026-10-18: extensions indexed once, only substrings at a "." are looked up (same results on 8,298 titles, ~1.4 ms → ~1 µs per title) |
-| 21 | Dead/legacy code | Fixed in B4 |
-| 22 | No tests for the tracking engine | Fixed in B1 (`src/tracking/`, unit tests); `extractData` and `offlineQueue` have tests too |
-| 23 | Project UI duplicated | Fixed in U2 |
-| 24 | `TODO.txt` a stale log | Fixed 2026-10-18: untracked and in `.gitignore` (the owner's local notes) |
-
----
-
-## Part 3 — Is window/file tracking still relevant now that agents write the code?
-
-**Short answer:** partly. The *signal* this app collects is losing value. The *problem* it solves (where did my time go, and what do I bill) is not. What has changed is what to measure and where to get the data.
-
-### What breaks when an agent does the typing
-- **Idle detection misreads supervision as absence.** You prompt Claude Code or Cursor, then watch or review for 6 minutes without touching the keyboard. `getSystemIdleTime` hits 5 minutes, the session auto-pauses, and it never resumes. The app ends up **under-counting exactly the work pattern that is now most common.**
-- **The foreground window says little about what you're doing.** While an agent works you're often in a browser (PR review, docs, claude.ai), in Slack, or in a terminal running `claude`/`codex`. Unknown apps are dropped. A browser is logged as just "Chrome". A terminal agent's title has no file extension, so it gets no language.
-- **The open file isn't the code being produced.** An agent edits 15 files across 3 languages while your editor shows one. Language stats taken from window titles now measure what you *looked at*, not what was *written*.
-- **Background and cloud agents leave no local window activity at all.** Examples: Claude Code on the web, Codex cloud, the Copilot coding agent, scheduled routines.
-- **Parallel agents break "time = output".** One person running three agents for an hour produces far more than one hour of hand-typing.
-
-### What still matters, and matters more
-- **Human attention time per project.** It's what freelancers bill and what limits a team, and it's what Billing, Invoices, Standups and Goals already consume. Keep the session timer and make it smarter.
-- **Attribution.** *Which project or repo* the time and the agent work went to. Today that's a manual dropdown at Stop time.
-- **Outcome signals.** Commits, changed files and lines, and their languages, taken from git. These capture agent-written code just as well as hand-written code.
-- **Agent activity and cost.** How long agents ran, how many prompts and tool calls, and tokens/cost per project. Passing AI costs through on an invoice is a real need for freelancers.
-
-### Recommendation: re-center the app from "window time" to "project time, with human time and agent time shown separately"
-In priority order (cheapest and highest value first):
-
-1. **Automatic project attribution from the active context.**
-   - Parse the workspace/folder from editor titles (VS Code/Cursor use `file — folder — App`), and the cwd of terminal/agent processes.
-   - Resolve each to a git repo root and map repo → project. Store the mapping once and auto-suggest it at Stop.
-   - This removes the most annoying manual step and works the same with or without agents.
-2. **Git-based "what was produced" at session end.** For each repo touched in the session, run `git log --since=<sessionStart> --numstat` plus `git diff --numstat` for uncommitted work. Store files/lines/language per session (new table, e.g. `session_code_stats`). This replaces title-based language stats as the primary "languages" signal, and it naturally includes agent-written code.
-   - (The TODO mentions a past branch-detection attempt that needed a `.git` folder. Walking up to the repo root solves that.)
-3. **Agent activity ingestion, as a new "agent" source next to "window".**
-   - **Claude Code hooks** are the stable, documented interface. `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `Stop` and `SessionEnd` all carry `session_id`, `cwd` and `transcript_path`. Ship a tiny hook command that appends events to a local file or POSTs to `127.0.0.1:<port>` inside the app. `PostToolUse` for Edit/Write gives file paths, so per-file languages written by the agent come for free.
-   - **Passive fallback:** read `~/.claude/projects/*/*.jsonl` transcripts. Entries include `timestamp`, `cwd`, `gitBranch`, `sessionId` and `message.usage` token counts (confirmed on this machine). Treat this format as internal and liable to change; parse defensively. Codex CLI keeps similar session logs under `~/.codex/`.
-   - **Process detection** (cheap and broad): notice `claude`/`codex`/`aider`/`gemini` processes and their cwd even when they're not in the foreground. That yields "agent running in repo X".
-   - **Never upload prompt or response content.** Only timestamps, counts, cwd/project, tokens, and file paths (with a toggle).
-4. **Make idle detection agent-aware.** Replace the binary active/paused with three states:
-   - **Active:** human input.
-   - **Supervising:** no input, but an agent heartbeat arrived in the last N minutes, or the focused window is a dev tool or a dev URL.
-   - **Away.**
-
-   Supervising time counts toward the session (optionally shown as its own slice). Also add auto-resume on input after an idle pause (problem #6).
-5. **Classify browser time.** x-win exposes the browser `url`. A domain list (github.com/…/pull, localhost, docs sites, claude.ai, chatgpt.com, stackoverflow) turns "Chrome 2h" into "PR review 40m, docs 30m, AI chat 25m".
-6. **Demote, don't delete, the per-window language/editor charts.** Keep them as "where your attention was". Make git and agent data the default "what got built" views. In the dashboard, show per project: human time, agent time, lines changed, and agent cost.
-
-**Optional, bigger bet:** "always-on, low-friction" mode. Instead of Start/Stop, track continuously and **segment automatically** into sessions by project and idle gaps, then let the user confirm or label them afterwards (the Session Review panel already exists and could become this inbox). This fits agent-era work better than a stopwatch.
-
----
-
-## Part 4 — Proposed roadmap (work from top to bottom; tick items off here)
-
-**Phase A — correctness and safety fixes** — done on branch `phase-a-fixes` (2026-10-14). The patches mentioned below were later folded into the single `database/schema.sql`; rebuild the database with `reset.sql` + `schema.sql`.
-- [x] A1 Local days everywhere: `src/utils/timeFormat.ts` has `toLocalDateString`, `localDayStartISO`, `localDayEndISO`. Use them; never `split("T")[0]` on a timestamp. Applied to usage logs, session filters/dates, standup, billing, invoices, notifications, and renderer defaults. 
-- [x] A2 `daily_usage_summary` key is `UNIQUE NULLS NOT DISTINCT` (Postgres 15+)
-- [x] A3 Usage logs get `org_id` by trigger (now `set_org_id_from_user()`, shared with sessions and summaries)
-- [x] A4 Icons are no longer written to `usage_logs`. They are sent to the summary once per user/day/app/language (`iconForSummary` in `src/index.ts`). `usage_logs` no longer has an icon column.
-- [x] A5 Paused sessions saved on quit; quit also settles an open session-info prompt; fixed a `before-quit` infinite loop when no user was available. Auto-resume after an *automatic* pause (idle, lock, sleep) once there's input again, never while locked or asleep. Sleep now pauses tracking. The modal timeout is now 10 min (`SESSION_INFO_TIMEOUT_MS`), and on timeout the renderer closes the modal and says so. Stop frees the tracker immediately, so a new session can start while the prompt is open. `end_time` = wall-clock end, `duration` = active time; the duration trigger no longer overwrites `duration`.
-  - Not done: a late reply updating the auto-saved row (the 10-min window made it unnecessary).
-- [x] A6 Incognito shortcut is now `Ctrl+Alt+Shift+I`, with failed registration logged. Tray has Start/Stop and Pause/Resume, routed through the renderer buttons via the `tray-command` IPC. Hotkey panel and README corrected.
-  - Not done: making shortcuts configurable (needs a preferences field and UI; fold into B2).
-- [x] A7 `src/buildEnv.ts` `getEnv()` checks runtime env first, then an allowlist baked in by `DefinePlugin` (`webpack.plugins.ts`, loads `.env.local` and `.env`). Used by Sentry, Supabase config and the updater. Sentry `addBreadcrumb` no longer sends an event per breadcrumb. `release.yml` passes the `SENTRY_DSN` secret, which still has to be **created in GitHub**.
-- [x] A8 CSP header built from `SUPABASE_CONFIG.URL` plus `*.supabase.co`. The `index.html` meta CSP allows `*.supabase.co`, so a self-hosted domain must be added there by hand.
-
-**Open findings from Phase A**
-- [x] **Updater (resolved):** replaced `electron-updater` (incompatible with Forge's Squirrel output) with Electron's built-in `autoUpdater` and update.electronjs.org (`src/updater.ts`). Windows only, on by default in installed builds. Squirrel install events are handled (`electron-squirrel-startup` in `src/index.ts`). `release.yml` now builds on a Windows runner and uploads RELEASES/.nupkg/Setup.exe; before this, releases had no Windows build at all. Updates reach users only from **published** releases, and the release version must be higher than the installed one.
-- ~~Idle time before the auto-pause is still counted~~ — resolved in C4: the auto-pause is backdated to the last input (or agent activity).
-- ~~Team-analytics SQL buckets sessions by UTC day~~ — resolved 2026-10-15: `get_org_analytics_summary/top_projects/member_activity` take `p_time_zone` (main sends its IANA zone) and, with billable-only, count billed seconds (`session_billed_seconds()`: supervising left out where the project doesn't bill it). (Live database rebuilt from `schema.sql`.)
-- ~~`.env.production` is not loaded by the build~~ — resolved: loaded for `electron-forge package/make/publish` (after `.env.local`, before `.env`).
-- `SENTRY_DSN` GitHub secret: exists (2026-10-14).
-
-**Phase B — structural cleanup** — done on `phase-a-fixes` (2026-10-14)
-- [x] B1 Tracking engine extracted into `src/tracking/` (see Part 1), with unit tests for the clock, idle policy, sampler and batcher. `src/index.ts` is now app lifecycle, window, tray, auth sync and OAuth. Also fixed: the saved idle timeout and tracking interval were never applied after a restart; they are now loaded on sign-in.
-- [x] B2 Main owns recording state, broadcasts `tracking-state`, and the renderer mirrors it (`renderer/trackingControls.ts`). Tray calls the tracker directly. Fixed: calendar "start scheduled session" clicked the record button and so *stopped* a running session.
-- [x] B3 `usageBatcher.ts`: one insert per minute plus one summary upsert per group, and no per-tick `getUser()` network call. Roughly 18 → 2–3 requests/min while recording.
-- [x] B4 Removed `src/config.ts`, `src/utils/ipcHelp.ts`, the updater `.d.ts` stubs and `@ts-ignore`s, `startSession`/`endSession`, `getEditorByExecutable`/`setCustomAppsUser`, and unused constants. `getAllSessions` deduplicated.
-  - **Security fix:** 7 of the 8 `escapeHtml` copies didn't escape quotes, and other org members' usernames went into attributes with them (with Node enabled in the renderer, that is a path to code execution). There is now one quote-safe `escapeHtml`, plus escaping added in Team Analytics, the invoice modal, the calendar, the confirmation modal and the notification sidebar.
-- [x] Also fixed during B:
-  - **Packaged builds rendered a blank window.** `webpack.renderer.config.ts` forced `publicPath: "/"`, which breaks `file://`.
-  - The offline queue discarded items when flushed while signed out (RLS failure treated as permanent). It now flushes only for the signed-in user and keeps items on auth errors.
-  - The OAuth callback no longer logs URLs that contain tokens.
-- [x] B5 Renderer isolation (commit after B1–B4): `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. The preload exposes `window.electronAPI`; `renderer/ipc.ts` keeps the `ipcRenderer` shape, so call sites barely changed. The renderer builds for the `web` target. Sentry's preload hook is wired in. Hardening done along the way:
-  - PDF exports go through main (`save-file`); jsPDF's `save()` would have silently become a browser download.
-  - CSV/JSON exports only write to paths from `show-save-dialog` (single use).
-  - `open-oauth-url` only opens http(s).
-  - Removed the unused `signInWithGitHub` that needed `require("electron")`.
-  - Only the renderer's Supabase client refreshes tokens.
-  - Verified with a packaged-app smoke test and a dev-mode smoke test over CDP (UI renders, no Node in the page, record/pause/stop and incognito round-trip through main, export/open hardening). Signed-in flows were **not** exercised (that would need a test account).
-  - ~~Still open: one Supabase client; an IPC channel allowlist in the preload; dropping `'unsafe-eval'` from the CSP~~ — all resolved 2026-10-15 (branch `open-items`, see Part 1). Verified: unit tests (auth storage + handlers, allowlist sync), smoke (packaged + dev: eval and inline script blocked, unlisted channel rejected, no `sb-*` in localStorage), e2e (all flows over the new auth, plus: no token in the page, page can't reach Supabase, unlisted handler unreachable), and a persistence probe (stay signed in across restarts and a hard kill; sign-out clears the session file).
-
-**Database rebuild** — done 2026-10-14
-- [x] Everything (base files + patches 001–007) merged into one ordered `database/schema.sql`, plus `database/reset.sql` to wipe and start over. Verified in PGlite (Postgres 16) with a stubbed Supabase `auth` schema and roles: about 55 checks across signup, RLS, invite/role/removal flows, analytics permissions and org attribution, on a fresh build and again after reset + rebuild.
-- [x] Security fixes in the database:
-  - Users could make themselves admin of any org by updating their own profile.
-  - `create_personal_organization` could move other users.
-  - Profile, org and member lookup RPCs leaked across orgs.
-  - `org_id` on sessions and usage could be forged.
-  - Projects could be moved into other orgs.
-  - Session tags could reference other users' tags.
-  - archive/restore accepted any admin/manager of any org.
-- [x] Bugs fixed:
-  - Signup failed when two emails shared a prefix.
-  - "Remove member" never worked (RLS rejected the update), now `remove_org_member()`.
-  - The README's redirect URL was wrong (`oauth-callback` is the right one).
-- Removed unused functions (`create_project`, `same_org`, `get_user_total_time`, `get_org_total_time`, `get_upcoming_session_notifications`), the dead `createUserProfile`, and `usage_logs.icon_url`.
-
-**Phase C — AI-era tracking (Part 3)**
-- [x] C1 Project attribution from workspace/cwd → git root → project mapping — done on `phase-c1-attribution` (2026-10-15); see "Project detection" in Part 1.
-  - **DB change:** `project_repositories` (table, policy, trigger, index) is in `schema.sql`. Applied by rebuilding the database from `schema.sql`.
-  - **Fixed on the way — shipped builds recorded no usage at all:** `editors.ts` read `assets/known_editors.json` from `app.getAppPath()`, which isn't in the package, so every app was "unknown" in installed builds (it only worked under `npm start`). The list is now bundled by webpack. Also: `app.getPath("appData")` can throw (seen with an isolated `USERPROFILE`); detection falls back to `%APPDATA%`/`~/Library/Application Support`/`~/.config`.
-  - Verified: unit tests (hints, resolver on a fake tree, attribution policy, IPC), PGlite checks for the table's RLS, e2e unchanged and green, and a live probe of the packaged app signed in (VS Code untitled multi-root workspace → `github.com/ntua-el20014/dev-time-tracker`; Home hint; Stop dialog offers the link; session saved under the picked project). The link round trip against live Supabase waits for the table.
-  - Not done: terminal agents whose title has no path (e.g. `claude` in Windows Terminal) — covered when Claude Code is connected (C3 hooks: the busy session's cwd); still open for other agents. Remote (WSL/SSH/container) windows are skipped.
-- [x] C2 Git stats per session — done on `phase-c2-git-stats` (2026-10-15); see "Code stats" in Part 1. Stored as a `code_stats` column on `time_tracking_sessions` instead of a separate table: it travels with the session insert (and the offline queue) and inherits its RLS.
-  - **DB change:** `time_tracking_sessions.code_stats` (array, ≤ 64 KB). The same rebuild also adds C5's `category` to `usage_logs`/`daily_usage_summary` (key and RPC), so C5 needs no second rebuild.
-  - Fixed on the way: the session details modal always said "No session details found" (the handler returned the usage array, the modal expected `{ session, usage }`); it now also uses `end_time`. Percent-bar labels and the details' app list are escaped.
-  - Verified: unit tests (parsers, snapshot/growth/mtime rules, worktree dedupe, lock files, email filter), a test against a real git repo, PGlite checks, and e2e against the rebuilt database (2026-10-17): a scratch repo gets a commit, an edit and a new file during a recorded session, a Connect Claude Code hook event puts it in the session, and the saved `code_stats` (+9 −1 · 3 files · 1 commit, per language, no paths), a JSONB containment query, the `code_stats` CHECK, the Sessions code line and Insights are checked.
-  - Fixed by that e2e: Insights' "Code changed" stayed stale after Stop (`session-saved` didn't refresh `insights`).
-- [x] C3 Agent source: Claude Code hooks installer plus local receiver; transcript fallback — closed 2026-10-18 without process detection (Windows can't read another process's cwd without native code; the hooks cover the case that mattered, a terminal agent's repo)
-  - [x] Passive part (transcripts) — done on `phase-c3-agents` (2026-10-15); see "Agent sessions" in Part 1. **DB change:** `agent_sessions` (table, triggers, RLS, indexes). Process detection skipped (see Part 1).
-  - [x] Opt-in "Connect Claude Code" hooks — done on `phase-c3-hooks` (2026-10-15); see "Connect Claude Code" in Part 1. No DB change.
-    - Verified: unit tests (text edits, install/uninstall round trips incl. compact and CRLF files, receiver auth/limits, live state), and a probe of the packaged app against a scratch Claude config: preview → apply → backup, events → Home chips and heartbeat, a real `claude -p` run delivering events through the curl hooks, restart, stale-preview refusal, disconnect restoring the file byte for byte, `--squirrel-uninstall` removing the hooks.
-    - Fixed on the way: Settings always reopened on Preferences when it re-rendered (e.g. after an org change), and a slow chapter render could overwrite the chapter the user had clicked meanwhile.
-    - Not done: SessionEnd rarely arrives when Claude exits right away (the background curl is cut off); sessions still go idle after Stop and drop off the list after 30 min.
-- [x] C4 Active / Supervising / Away idle model — done on `phase-c4-supervising` (2026-10-15); see "Activity model" in Part 1.
-  - **DB change:** `cloud_projects.bill_supervising`, `time_tracking_sessions.supervising_seconds`/`supervising_spans` (the app fails to save sessions without them).
-  - Judgment calls: the first 60 s without input count as active (reading/thinking); supervising is capped at 1 h without any input so an overnight autonomous run isn't billed; on away, the time after the agent's last write isn't kept even though the 10-min window was used to wait for the user.
-  - The heartbeat is any agent anywhere, not tied to the session's repo; C3 can attribute by cwd. Verified: unit tests (policy, clock spans/backdating, heartbeat on a fake tree, timeline slices, billing), PGlite checks, and a live probe of the packaged app (fake transcript touched every 4 s, real system idle → "Supervising" on rail/Home, hatched slice, session not paused).
-- [x] C5 Browser classification — done on `phase-c5-browser-categories` (2026-10-17); see "Browser categories" in Part 1. No DB change (the columns came with C2).
-  - Classified from the title first because x-win can't read every browser's URL (Opera here), and each URL read blocks the main process.
-  - Fixed on the way: an app's merged App-activity row could lose its icon (stored on one summary row only, and the merge kept the first row's).
-  - Verified: unit tests (≈60 titles/URLs, sampler URL give-up, batcher grouping, queries), a probe of this machine's open browser windows through x-win, and e2e (category summary rows through the RPC, `get-logs` breakdown, `get-browser-usage`, App activity line, Insights section).
-  - Not done: team analytics don't use categories (kept, owner 2026-10-19). ~~Categories can't be edited by the user~~ — done 2026-10-19 (`browser-categories.json`, see Part 1).
-- [x] C6 Human vs agent time, lines changed, agent cost per project; agent cost as an optional invoice line item — done on `phase-c6-project-activity` (2026-10-17); see "Project activity" in Part 1. No DB change.
-  - Placed in Projects and Billing (Part 5), not on Home.
-  - Fixed on the way: the invoice modal put project names into innerHTML and attributes unescaped, and read session counts back out of its own label text.
-  - Verified: unit tests (activity sums, agent cost in earnings, invoice line and PDF text, handler), e2e (an agent session with a cost in the e2e project → project activity, the Projects card, the Billing agent cost, the invoice option and summary).
-  - ~~A Home widget~~ — done 2026-10-19 ("Last 7 days by project", see Part 1). Kept as they are (owner, 2026-10-19): team analytics count full duration with no agent data; agent cost is USD only, with no markup option.
-  - Owner (2026-10-17): agent cost on invoices stays off by default; showing Claude Code's API-price cost unadjusted is fine for now.
-
-**Phase U — UI restructure (Part 5); interleave with Phase C**
-- [x] U1 Sidebar shell; Settings split out of My Profile; Team item shown only when there is a team — done on `ui-u1-sidebar` (2026-10-15). Also: Insights view (editor/language charts, goal history) in Sessions; Today table folded into Home as collapsible "App activity"; daily-goal set/delete moved to Home's goal box; rail timer shows active time (`activeSeconds` added to `TrackingState`); Integrations chapter holds custom-apps/lang.json. Verified by unit tests (`tests/renderer/teamVisibility.test.ts`), smoke test and e2e (walks every view/sub-view, checks Team hidden for solo and shown after a member joins, rail timer counts).
-  - Not done in U1: Billing item (U2), project picker before Start (U3), a richer Home timeline (U3).
-- [x] U2 One Projects UI (#23); Billing promoted to a top-level item — done on `ui-u2-projects-billing` (2026-10-15). `organizationTab.ts` 2.2k → 1.3k lines (its project section now links to Projects). Bugs fixed on the way:
-  - Archived projects vanished: the list queries skip `archived = true`, which is exactly what Archive sets, so the Archived section was always empty and nothing could be restored. `get-all-projects-with-members` now includes archived projects.
-  - Adding/changing a project member from the old Projects tab sent role `"employee"`, which the `project_members` CHECK rejects; it failed silently while the UI said "success".
-  - The Stop dialog and Summary only listed personal projects, so org projects could never be assigned to a session.
-  - Project cards always showed manager "Unknown"; the Projects tab stacked a new click listener on every render; billing rows put project names into innerHTML unescaped; `org:create-project` accepted `org_id`/`manager_id` from the renderer (removed).
-  - Billing page: month navigation, per-project "Invoice" buttons (preselect the project), link from Home's earnings box. Billable sessions without a project (or whose project is no longer visible) were silently dropped from Billing; they are now an `unassigned` bucket in `EarningsSummary`, counted in billable hours/sessions but not earnings, shown as a notice with "Assign in Sessions".
-  - e2e: Projects form create → archive → restore round trip, org project + member, Billing renders and flags the unassigned session; Team Analytics check waits for its KPIs instead of a fixed 3 s; Chromium occlusion throttling disabled and screenshots time out after 10 s (a covered window made the run hang).
-- [x] U3 Home (timer + project picker before Start + timeline) — done on `ui-u3-home` (2026-10-15). Sessions' List / Calendar / Insights already landed in U1.
-  - Home top: timer card (`components/HomeTimer.ts`: project picker, Start/Stop, Pause, live clock) and today's timeline (`components/TodayTimeline.ts`, layout in `utils/timelineLayout.ts` with tests; bars colored by project, running session striped and growing, totals tracked/billable). Then goal, Daily Summary, earnings, calendar widget, stats, App activity.
-  - One ticking clock for rail and Home (`renderer/liveClock.ts`).
-  - The C1 prefill and the C4 supervising slice are done.
-- [x] Small follow-ups (2026-10-15, branch `small-sched-project-agent-cards`):
-  - Scheduled sessions have a project (schedule form picker; shown in the list and details). Starting one selects its project as a manual pick. `create/update-scheduled-session` only accept a project the user can see and never take `org_id` from the renderer (scheduled-session RLS doesn't check the project). Fixed on the way: the duration estimate was never saved (the form sent `estimated_duration`, the column is `estimated_duration_minutes`), and tag names went into the calendar HTML unescaped.
-  - Project cards show "AI agents (30 d): time · reported cost · sessions" from `agent_sessions` (`renderer/utils/agentSummary.ts`; "+" when some sessions have no reported cost yet). Main sends `agent-sessions-synced` after an upload, which marks Projects dirty.
-
-**Phase D — always-on mode** (decisions below; schema already in `schema.sql`)
-- [x] D1 Segmenter (main, pure module + tracker wiring): while always-on is enabled and no manual session runs, cut activity into segments; a new segment starts after an idle gap ≥ 15 min or when the attributed project changes (C1) — done on `phase-d1-segmenter` (2026-10-18); see "Always-on segments" in Part 1.
-  - Judgment calls: a project change must last 3 min before it splits (a quick look at another repo doesn't), and the split is backdated to the move; an unlinked repo counts as its own project; only human input opens a segment.
-  - Verified: unit tests (`tests/tracking/segmenter.test.ts`: opening, backdated pauses, the gap with a longer idle timeout, supervising, lock/sleep, splits incl. supervising across the move, relinking), type-check, lint. Not exercised in the running app: there is no way to turn it on from the UI yet.
-  - Owner agreed with these choices (2026-10-18). The items left for D2 were done in D2.
-- [x] D2 Drafts: save each segment as it grows as a `status = 'draft'`, `source = 'auto'` session, upserted on `client_id` (also through the offline queue), with `app_usage`, `code_stats`, supervising time — done on `phase-d1-segmenter` (2026-10-18); see "Always-on segments" in Part 1. No DB change.
-  - Also: the Settings toggle, Home's always-on status line, and every session reader filtered to confirmed sessions (D4's "skip" half; D3 shows drafts).
-  - Upsert without a DB change: update-where-draft, else insert (a unique violation = already confirmed). ~~A database `ON CONFLICT … WHERE status = 'draft'` RPC would do it in one round trip~~ — done 2026-10-19 (`save_draft_session`).
-  - Fixed on the way: `offlineQueue.flush()` removed items by index, so an item replaced or added while a write was in flight could be dropped; it now removes the exact item it sent.
-  - Verified: unit tests (`saveDraftSession` update/insert/confirmed/errors, confirmed-only filters, queue replacement incl. a newer version arriving mid-flush), type-check, lint, `npm run test:db`. **Not exercised in the running app or against live Supabase** (no e2e for always-on yet: it needs real idle time or a test hook).
-  - ~~Discarding a draft while its segment is still open would let the next save recreate it~~ — handled in D3 (`settleDraft`).
-- [x] D3 Review inbox (Sessions → List, where the short-session review panel is): confirm (title, project, billable), merge neighbours, discard; a count on Home/rail — done on `phase-d1-segmenter` (2026-10-18); see "Always-on segments" in Part 1. No DB change.
-  - Any selected drafts can be merged, not only neighbours (the gaps between them never count). The old short-session review panel stays as it is (it lists confirmed sessions only now).
-  - Verified: unit tests (merge, handlers incl. settle order and input checks, queries, queue drop), and e2e against live Supabase (127 checks, all pass): drafts inserted as the tracker saves them, a billable draft rejected by the CHECK, drafts absent from the session list, inbox + rail badge, merge / confirm (Billable preselected) / discard through the UI, Home line, and the two facts `saveDraftSession` relies on (a confirmed row isn't updated as a draft; re-inserting its `client_id` is a 409/23505). Segments themselves still can't be driven by e2e (they need real OS input).
-  - Fixed by that e2e: drafts that arrived without a `drafts-changed` event (e.g. replayed from the offline queue) didn't show in an already-rendered List page.
-- [x] D4 Drafts everywhere else — done 2026-10-18 on `main`; see "Where drafts are shown" in Part 1. No DB change.
-  - Skipped (D2): session lists, standup, Insights, C6 project activity, billing/invoices (DB CHECK + billable filter), team analytics and project stats (SQL).
-  - Shown: the inbox (D3) and Home's timeline (dashed bars, "unconfirmed" apart from tracked, live for the open segment, click → inbox). Not on the Calendar, which only shows scheduled sessions.
-  - Fixed on the way: `edit-session`/`delete-session(s)` could reach a draft (RLS allows the owner): editing one could tag it or fail the billable CHECK, and deleting one bypassed `settleDraft`, so the next save recreated it. They now filter to the caller's confirmed rows; `edit-session` doesn't tag a row it couldn't update.
-  - Verified: unit tests (layout keeps drafts out of the totals, day range on `getDraftSessions`/`get-draft-sessions`, confirmed-only mutators), type-check, lint, and e2e against live Supabase (all pass): timeline draws the three drafts and "1h 00m unconfirmed", a draft bar opens the inbox, the confirmed draft becomes a tracked bar, `edit-session`/`delete-session` leave a draft alone. The live segment bar isn't exercised (segments need real OS input).
-- ~~Privacy: title-upload toggle~~ — not needed, titles are no longer uploaded. ~~Local-only mode~~ — out of scope (owner, 2026-10-18); a separate project if ever.
-
-**Pre-Phase-D cleanup** — done 2026-10-18 on `main`
-- [x] `usage_logs` dropped (owner's choice over keeping it with a title toggle): nothing per tick is uploaded, sessions carry `app_usage`, the details popups show totals. Resolves #13, so no "don't upload titles" option is needed.
-- [x] Phase D's schema settled in the same rebuild: `status`, `source`, `client_id` on sessions (see "Phase D" below).
-- [x] Currencies: `cloud_projects.currency`, `user_preferences.currency` (Settings → Preferences), project form picker, Billing/Home/invoices in each project's currency, per-currency totals, one currency per invoice, agent cost only on USD invoices.
-- [x] #20 language regexes; TODO.txt local-only; README rewritten for Phase C; Part 2 brought up to date.
-- **DB change:** needs a rebuild (`reset.sql` + `schema.sql`) (done by the owner 2026-10-18): the app writes `app_usage`, and against an older database a non-network save error drops the session. Verified: unit tests, type-check, lint, `npm run test:db` (incl. drafts, `client_id` upsert, currency checks). e2e against the rebuilt database (105 checks, incl. `app_usage` on the session and no `usage_logs`).
-- Fixed by that e2e: Sessions → List showed only "No summary data available" when the account had no app usage yet (fresh database, or sessions with no recognised app), hiding the sessions.
-
-**Before release**
-- [x] Currencies other than USD (owner, 2026-10-17) — done 2026-10-18, see above. Agent costs stay USD (labelled), not converted.
-- Owner (2026-10-19): agent costs stay USD; team analytics stay as they are (full duration, no agent data, no browser categories); keyboard shortcuts stay fixed (not configurable).
-
-**After Phase D** — done 2026-10-19 on `main`
-- [x] One-call draft save: `save_draft_session` RPC (see "Always-on segments" in Part 1). **DB change:** needs a rebuild (`reset.sql` + `schema.sql`); until then every draft save fails (logged; queued only at quit), so rebuild before running a build with this change.
-- [x] Home widget "Last 7 days by project" (C6, see "Project activity").
-- [x] User-editable browser categories, `browser-categories.json` (C5, see "Browser categories").
-- Fixed on the way: `tests/tracking/codeStats.git.test.ts` waited a fixed 300 ms for the working-tree snapshot and failed now and then under load (the snapshot then saw the edits it should measure); it now waits until git/fs work is idle.
-- Verified: unit tests (rule parsing incl. broken files, title/host precedence, the sampler passing the rules, ranking, the RPC call), type-check, lint, `npm run test:db` (`save_draft_session`: insert, growth keeps code stats, another user's id refused by RLS, a confirmed row reported and left alone), e2e against live Supabase (all pass; Home widget with your time, agent cost and code, its link, the Settings card). The RPC isn't exercised against live Supabase until the rebuild; e2e inserts drafts directly.
-
-**Migrations** — done 2026-10-19 on `main` (owner: "do as you say about the database"; the live database was rebuilt one last time from `schema.sql` at `d6ad040`)
-- [x] `database/baseline.sql`: that schema, frozen. `database/migrations/0001_schema_migrations.sql`: the `schema_migrations` table and `apply_migration()`; applies to the live database without a rebuild. `schema.sql` includes both and lists migration 1. See the "DB change" convention in Part 1 and `database/README.md`.
-- [x] `npm run test:db` checks: file names and numbering, each migration one transaction recording itself; baseline + migrations = `schema.sql` (catalog comparison, reports the first differing text of a function); running the last migration twice is refused and changes nothing; `apply_migration` refuses repeats and gaps; the API can neither call it nor read `schema_migrations`. Verified that it catches an extra column, a changed function body and a wrong migration-list entry. CI now runs `test:db`.
-- [x] `npm run db:new-migration -- <name>` (`scripts/new-migration.mjs`): tried end to end with an empty migration (test:db green), then removed.
-- [x] The app checks its database's migration at sign-in (migration `0002_schema_version`: `get_schema_version()`; see the "DB change" convention in Part 1). Verified: unit tests (`REQUIRED_SCHEMA_VERSION` = newest migration file, missing function = behind, offline quiet), test:db (signed-in users can ask, anonymous can't), and e2e against the live database before it had the migrations: the app warned, and the new check "live database has every migration" failed as it should (every other check passed).
-  - The warning toast can sit behind a modal (on a fresh profile, the welcome tour); the bell keeps it.
-- **To do by the owner:** run `0001_schema_migrations.sql` and then `0002_schema_version.sql` in the SQL Editor on the live database. The e2e check "live database has every migration" stays red until then.
-
-**Next:** the owner's always-on test (D1–D4 on real input), then the first release (version bump, `Setup.exe` install test, published GitHub release).
-
-## Owner decisions for Phase C (answered 2026-10-15)
-1. **Primary user: solo freelancer, billing-first.** Prioritize C6: per-project human/agent time, agent cost, and agent cost as an invoice line item. Team views come later.
-2. **Hooks: start passive** (transcripts + process detection). Then add an opt-in **"Connect Claude Code"** action that:
-   - previews the change before applying it,
-   - backs up `~/.claude/settings.json`,
-   - merges with existing hooks (never overwrites),
-   - can uninstall cleanly.
-   The receiver listens on localhost only and takes metadata only — never prompt or response content.
-3. **Supervising time is billable by default**, shown as a separate slice, with a per-project toggle. It only counts while an agent heartbeat arrived in the last ~10 min. Idle time before an auto-pause is trimmed unless it was supervising (resolves the "idle time before auto-pause" open finding).
-4. **Manual Start/Stop stays the main model.** Build C1 and C4 so they also work outside a session, to enable an opt-in always-on mode in Phase D.
-
-**Phase C order:** C1 → C4 → C3 (passive first) → C2 → C6 → C5.
-
-## Owner decisions for Phase D (answered 2026-10-18)
-1. **Always-on is opt-in.** Start/Stop stays the default.
-2. **A segment ends** after an idle gap of **15 minutes** or when the project changes (both).
-3. **Segments are saved right away as drafts** and confirmed in the review inbox. **A draft can't be billed or invoiced.**
-4. **Privacy:** no local-only mode. Window titles were dropped from uploads altogether (`usage_logs` removed), which covers the title option.
-5. **Incognito** keeps counting session time, and the **daily goal** keeps counting foreground-app time (both as they are).
-6. **Schema:** settled in one rebuild before Phase D (`status`, `source`, `client_id`). After Phase D: decide on migrations — decided 2026-10-19: numbered migrations plus the always-current `schema.sql`, checked against each other by `test:db` (see Part 4, "Migrations").
-
----
-
-## Part 5 — UI restructure (decided 2026-10-15; U1 done, see Part 4)
-
-### Why
-- 8 top tabs: Dashboard, Today, Summary, Calendar, Projects, My Profile, Organization, Team Analytics.
-- **Three of them show "my time".** Dashboard has goal, earnings, stats, charts and standup. Today is the per-app log. Summary lists sessions and holds the review panel.
-- **Billing is buried.** It is a sub-tab under Projects → "Billable Hours", with the invoice modal there, even though billing is the main use case.
-- **My Profile is a junk drawer:** editor/language charts, goal history, settings, tags, accent colour, notifications, export, updates, help, shortcuts, org card.
-- **Projects and Organization both manage projects** (#23).
-- **Organization is noise for a solo user.** Every user gets an automatic personal org, so solo users see admin UI for a team of one.
-
-### Target structure (owner's choices)
-**Left sidebar** (icon + label rail). The running timer is pinned at the bottom of the rail, with the notification bell beside it.
-
-| Item | Contents |
-|---|---|
-| **Home** | Above the fold: big Start/Stop, with the **project picker before Start** (prefilled by C1), then today's timeline. Below: goal progress, unbilled earnings and this week's billable hours, next scheduled session, standup button. The per-app "Today" log becomes a **collapsed "App activity" section**. |
-| **Sessions** | Views: **List** (today's Summary, by date or by session, plus the review inbox, which becomes the Phase D always-on inbox), **Calendar** (past and scheduled sessions together; replaces the Calendar tab), **Insights** (editor/language charts and goal history moved from Profile; later C2 git stats and agent stats). |
-| **Projects** | One project UI, replacing both the Projects tab and Organization → Projects. Each project page has stats, and after C6 human / supervising / agent time, lines changed and agent cost, plus the per-project "supervising is billable" toggle. |
-| **Billing** | Top-level. Unbilled work, rates, invoices (with agent cost as an optional line item, C6), earnings. |
-| **Team** | **Shown only when the org has more than one member or pending invites.** Members, invites, join requests, team analytics; sections are shown by role. |
-| ⚙ **Settings** | Account/profile, preferences (theme, accent, idle, interval), tags, notifications, shortcuts, data export, updates, help, **Integrations** (Connect Claude Code from C3, custom apps), and a "Create / join a team" entry for solo users. |
-
-### Stop flow change
-The project is chosen at Start. The Stop dialog only confirms or edits the title, project and billable flag; its timeout and fallback behaviour stay the same.
-
-### Suggested order
-1. Do the shell first: sidebar, Settings split out of Profile, Team visibility by org size. It is mostly moving existing render functions around.
-2. Then merge the project UIs (#23) and promote Billing.
-3. Build Home and Sessions views alongside C1 and C4, so the picker before Start and the supervising slice land in their final place.
-4. The C6 widgets then go straight into Projects and Billing.
+## Before the first release
+- Owner: run `database/migrations/0001_schema_migrations.sql` and `0002_schema_version.sql` in the SQL Editor (until then the app warns at sign-in and the e2e check "live database has every migration" fails).
+- Bump the version, test `Setup.exe` on a clean machine, publish a GitHub release (`release.yml` builds on Windows; update.electronjs.org serves only published releases with a higher version). The `SENTRY_DSN` secret exists.

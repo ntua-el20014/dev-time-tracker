@@ -33,7 +33,6 @@ import { DEFAULT_CURRENCY } from "../shared/currency";
 import { BROWSER_CATEGORIES } from "../shared/browserCategories";
 import { currencyOptionsHtml } from "./utils/currencyOptions";
 
-
 type NotificationSettings = {
   enabled: boolean;
   scheduledSessions: boolean;
@@ -42,6 +41,151 @@ type NotificationSettings = {
   orgInvites?: boolean;
   syncStatus?: boolean;
 };
+
+const DEFAULT_NOTIFICATIONS: NotificationSettings = {
+  enabled: true,
+  scheduledSessions: true,
+  dailyGoals: true,
+  healthAlerts: true,
+  orgInvites: true,
+  syncStatus: false,
+};
+
+/** The notification kinds under the master switch. */
+const NOTIFICATION_KINDS: {
+  id: string;
+  key: "scheduledSessions" | "dailyGoals" | "healthAlerts" | "orgInvites";
+  label: string;
+  hint: string;
+}[] = [
+  {
+    id: "notifScheduled",
+    key: "scheduledSessions",
+    label: "Scheduled session reminders",
+    hint: "A nudge before a planned session starts.",
+  },
+  {
+    id: "notifDailyGoals",
+    key: "dailyGoals",
+    label: "Daily goal reached",
+    hint: "When you reach today's goal.",
+  },
+  {
+    id: "notifHealth",
+    key: "healthAlerts",
+    label: "Health alerts",
+    hint: "Warnings about tracking or sync problems.",
+  },
+  {
+    id: "notifOrgInvites",
+    key: "orgInvites",
+    label: "Organization invites",
+    hint: "Invitations from your organization.",
+  },
+];
+
+const DEFAULT_ACCENTS = { dark: "#f0db4f", light: "#007acc" } as const;
+
+const TAG_COLORS = [
+  "#f0db4f",
+  "#ff6961",
+  "#7ed957",
+  "#4f8cff",
+  "#ffb347",
+  "#b19cd9",
+  "#f67280",
+  "#355c7d",
+  "#ffb6b9",
+  "#c1c8e4",
+  "#ffe156",
+  "#6a0572",
+  "#ff6f3c",
+  "#00b8a9",
+  "#f6416c",
+  "#43dde6",
+  "#e7e6e1",
+  "#f9f871",
+  "#a28089",
+  "#f7b32b",
+  "#2d4059",
+  "#ea5455",
+  "#ffd460",
+  "#40514e",
+  "#11999e",
+];
+
+// --- Building blocks (labels and hints are our own text, not user input) ---
+
+/** A switch: the styled checkbox used across Settings. */
+function toggleHtml(id: string, ariaLabel: string, checked = false): string {
+  return `
+    <label class="notification-toggle" for="${id}" aria-label="${ariaLabel}">
+      <input type="checkbox" id="${id}" ${checked ? "checked" : ""} />
+      <span class="notification-toggle-track" aria-hidden="true">
+        <span class="notification-toggle-thumb"></span>
+      </span>
+    </label>`;
+}
+
+/** One setting: its name and a short explanation on the left, the control on the right. */
+function settingHtml(opts: {
+  label: string;
+  hint?: string;
+  control: string;
+  forId?: string;
+  className?: string;
+}): string {
+  const label = opts.forId
+    ? `<label class="settings-item-label" for="${opts.forId}">${opts.label}</label>`
+    : `<span class="settings-item-label">${opts.label}</span>`;
+  return `
+    <div class="settings-item${opts.className ? ` ${opts.className}` : ""}">
+      <div class="settings-item-text">
+        ${label}
+        ${opts.hint ? `<p class="settings-item-hint">${opts.hint}</p>` : ""}
+      </div>
+      <div class="settings-item-control">${opts.control}</div>
+    </div>`;
+}
+
+/** A titled group of settings. */
+function cardHtml(title: string, body: string, note?: string): string {
+  return `
+    <section class="settings-card">
+      <h3 class="settings-card-title">${title}</h3>
+      ${body}
+      ${note ? `<p class="settings-card-note">${note}</p>` : ""}
+    </section>`;
+}
+
+function currentTheme(): "dark" | "light" {
+  return document.body.classList.contains("light") ? "light" : "dark";
+}
+
+function formatIdleTimeout(seconds: number): string {
+  return `${+(seconds / 60).toFixed(1)} min`;
+}
+
+/** A range input that shows its value while dragging and saves when let go. */
+function wireRange(
+  container: HTMLElement,
+  inputId: string,
+  valueId: string,
+  format: (value: number) => string,
+  save: (value: number) => Promise<unknown>,
+) {
+  const input = container.querySelector<HTMLInputElement>(`#${inputId}`);
+  const value = container.querySelector<HTMLElement>(`#${valueId}`);
+  if (!input || !value) return;
+  input.addEventListener("input", () => {
+    value.textContent = format(parseInt(input.value, 10));
+  });
+  input.addEventListener("change", () => {
+    void save(parseInt(input.value, 10));
+  });
+}
+
+// --- App updates (About) ---
 
 let updaterListenerRegistered = false;
 let updaterStatusEl: HTMLElement | null = null;
@@ -79,373 +223,109 @@ function ensureUpdaterListener() {
   updaterListenerRegistered = true;
 }
 
-async function renderSettings(container: HTMLElement) {
-  let idleTimeout = await safeIpcInvoke("get-idle-timeout", [], {
-    fallback: 60,
-  });
-  if (!idleTimeout || typeof idleTimeout !== "number") idleTimeout = 60;
+function updaterFallback(message: string): UpdaterState {
+  return {
+    status: "error",
+    message,
+    canCheck: true,
+    canDownload: false,
+    canInstall: false,
+    autoEnabled: false,
+  };
+}
 
-  let trackingInterval = await safeIpcInvoke("get-tracking-interval", [], {
-    fallback: 10,
-  });
-  if (!trackingInterval || typeof trackingInterval !== "number")
-    trackingInterval = 10;
+/** Settings → General: how tracking behaves, billing defaults, notifications. */
+async function renderGeneral(container: HTMLElement) {
+  const [idleRaw, intervalRaw, alwaysOn, defaultCurrency, notif] =
+    await Promise.all([
+      safeIpcInvoke<number>("get-idle-timeout", [], { fallback: 60 }),
+      safeIpcInvoke<number>("get-tracking-interval", [], { fallback: 10 }),
+      safeIpcInvoke<boolean>("get-always-on", [], { fallback: false }),
+      safeIpcInvoke<string>("get-default-currency", [], {
+        fallback: DEFAULT_CURRENCY,
+      }),
+      safeIpcInvoke<NotificationSettings>("get-notification-settings", [], {
+        fallback: DEFAULT_NOTIFICATIONS,
+      }),
+    ]);
+  const idleTimeout =
+    typeof idleRaw === "number" && idleRaw > 0 ? idleRaw : 60;
+  const interval =
+    typeof intervalRaw === "number" && intervalRaw > 0 ? intervalRaw : 10;
+  const notifications = { ...DEFAULT_NOTIFICATIONS, ...(notif || {}) };
 
-  const alwaysOn = await safeIpcInvoke<boolean>("get-always-on", [], {
-    fallback: false,
-  });
+  const tracking =
+    settingHtml({
+      label: "Idle timeout",
+      forId: "idleTimeoutRange",
+      hint: "With no keyboard or mouse input for this long and no AI agent at work, a running session pauses, backdated to your last activity.",
+      control: `
+        <input type="range" id="idleTimeoutRange" class="settings-range" min="60" max="300" step="30" value="${idleTimeout}">
+        <span id="idleTimeoutValue" class="settings-value">${formatIdleTimeout(idleTimeout)}</span>`,
+    }) +
+    settingHtml({
+      label: "Sampling interval",
+      forId: "trackingIntervalRange",
+      hint: "How often the app in front is checked. Each check adds this many seconds to App activity, the language and editor charts and the daily goal. Shorter is more precise. Session time isn't affected.",
+      control: `
+        <input type="range" id="trackingIntervalRange" class="settings-range" min="5" max="30" step="5" value="${interval}">
+        <span id="trackingIntervalValue" class="settings-value">${interval} s</span>`,
+    }) +
+    settingHtml({
+      label: "Always-on",
+      forId: "alwaysOnToggle",
+      hint: "Outside sessions, record your work as drafts to review in Sessions. A draft is never billed until you confirm it. This device only.",
+      control: toggleHtml("alwaysOnToggle", "Always-on tracking", alwaysOn),
+    });
 
-  const defaultCurrency = await safeIpcInvoke<string>("get-default-currency", [], {
-    fallback: DEFAULT_CURRENCY,
-  });
-
-  // Get current theme
-  const currentTheme = document.body.classList.contains("light")
-    ? "light"
-    : "dark";
-
-  // Get current user info
-  const userId = getCurrentUserId();
-  const user: any = await safeIpcInvoke("get-user-info", [userId], {
-    fallback: null,
-  });
-  const avatar = user?.avatar || "";
-
-  // --- Avatar Picker Logic ---
-  const editors: { app: string; icon: string }[] = await safeIpcInvoke(
-    "get-user-editors",
-    [],
-    { fallback: [] },
-  );
-  const langs: { lang_ext: string | null }[] = await safeIpcInvoke(
-    "get-user-lang-exts",
-    [],
-    { fallback: [] },
-  );
-  const langIcons: string[] = [];
-  for (const l of langs) {
-    if (l.lang_ext) {
-      const icon = getLangIconUrl(l.lang_ext);
-      if (icon) langIcons.push(icon);
-    }
-  }
-  // Remove duplicates
-  const editorIcons = Array.from(new Set(editors.map((e) => e.icon)));
-  const customAvatars = getCustomAvatars(userId);
-
-  // --- Tag management ---
-  const tags: Tag[] = await safeIpcInvoke("get-all-tags", [], { fallback: [] });
-
-  // --- Accent color management ---
-  const theme: "dark" | "light" = document.body.classList.contains("light")
-    ? "light"
-    : "dark";
-  const accentColor: string = await safeIpcInvoke("get-accent-color", [theme], {
-    fallback: "#f0db4f",
+  const billing = settingHtml({
+    label: "Default currency",
+    forId: "defaultCurrencySelect",
+    hint: "Used for new projects. Each project can have its own.",
+    control: `<select id="defaultCurrencySelect" class="settings-select">${currencyOptionsHtml(defaultCurrency)}</select>`,
   });
 
-  // Build the complete HTML first, then set it all at once
+  const notificationRows =
+    settingHtml({
+      label: "Show notifications",
+      forId: "notifEnabled",
+      hint: "Turn off to silence all of the below.",
+      control: toggleHtml("notifEnabled", "Show notifications", notifications.enabled),
+    }) +
+    NOTIFICATION_KINDS.map((kind) =>
+      settingHtml({
+        label: kind.label,
+        forId: kind.id,
+        hint: kind.hint,
+        className: "settings-item-sub",
+        control: toggleHtml(kind.id, kind.label, !!notifications[kind.key]),
+      }),
+    ).join("");
+
   container.innerHTML = `
-    <h2>Preferences</h2>
-    <div class="settings-row">
-      <label for="idleTimeoutRange" class="settings-label">Idle Timeout:</label>
-      <input type="range" id="idleTimeoutRange" min="60" max="300" step="30" value="${idleTimeout}" class="settings-range">
-      <span id="idleTimeoutValue" class="settings-range-value">${(
-        idleTimeout / 60
-      ).toFixed(1)} min</span>
-    </div>
-    <div class="settings-row">
-      <label for="trackingIntervalRange" class="settings-label">Tracking Interval:</label>
-      <input type="range" id="trackingIntervalRange" min="5" max="30" step="5" value="${trackingInterval}" class="settings-range">
-      <span id="trackingIntervalValue" class="settings-range-value">${trackingInterval}s</span>
-    </div>
-    <div class="settings-row">
-      <span class="settings-label">Always-on:</span>
-      <label class="notification-toggle" for="alwaysOnToggle" aria-label="Always-on tracking">
-        <input type="checkbox" id="alwaysOnToggle" ${alwaysOn ? "checked" : ""} />
-        <span class="notification-toggle-track" aria-hidden="true">
-          <span class="notification-toggle-thumb"></span>
-        </span>
-      </label>
-      <span class="settings-range-value">Outside sessions, record work as drafts to review (never billed until confirmed). On this device.</span>
-    </div>
-    <div class="settings-row">
-      <label for="defaultCurrencySelect" class="settings-label">Currency:</label>
-      <select id="defaultCurrencySelect" class="settings-select" title="Used for new projects; each project can have its own">
-        ${currencyOptionsHtml(defaultCurrency)}
-      </select>
-      <span class="settings-range-value">for new projects</span>
-    </div>
-    <div class="settings-row">
-      <label class="settings-label">Theme:</label>
-      <button id="themeToggleBtn" class="theme-toggle-btn">
-        Switch to ${currentTheme === "dark" ? "Light" : "Dark"} Mode
-      </button>
-    </div>
-
-    <h2>App Updates</h2>
-    <div class="notification-preferences-panel">
-      <p id="updaterStatusText" class="notification-preferences-note">
-        Loading updater state...
-      </p>
-      <div class="settings-row">
-        <button id="checkUpdatesBtn" class="help-button">Check for Updates</button>
-        <button id="downloadUpdateBtn" class="help-button" style="display:none;">Download Update</button>
-        <button id="installUpdateBtn" class="help-button" style="display:none;">Restart to Install</button>
-      </div>
-    </div>
-    
-    <h2>Notifications</h2>
-    <div class="notification-preferences-panel">
-      <p class="notification-preferences-note">
-        Choose which events should surface as notifications.
-      </p>
-      <div class="notification-preferences-table-wrap">
-        <table class="notification-preferences-table">
-          <thead>
-            <tr>
-              <th>Preference</th>
-              <th>Description</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="notification-pref-name">Enable notifications</td>
-              <td class="notification-pref-description">Master switch for all notification delivery.</td>
-              <td>
-                <label class="notification-toggle" for="notifEnabled" aria-label="Enable notifications">
-                  <input type="checkbox" id="notifEnabled" />
-                  <span class="notification-toggle-track" aria-hidden="true">
-                    <span class="notification-toggle-thumb"></span>
-                  </span>
-                </label>
-              </td>
-            </tr>
-            <tr>
-              <td class="notification-pref-name">Scheduled session reminders</td>
-              <td class="notification-pref-description">Get nudges before a planned session starts.</td>
-              <td>
-                <label class="notification-toggle" for="notifScheduled" aria-label="Scheduled session reminders">
-                  <input type="checkbox" id="notifScheduled" />
-                  <span class="notification-toggle-track" aria-hidden="true">
-                    <span class="notification-toggle-thumb"></span>
-                  </span>
-                </label>
-              </td>
-            </tr>
-            <tr>
-              <td class="notification-pref-name">Daily goal completions</td>
-              <td class="notification-pref-description">Celebrate when you finish your daily target.</td>
-              <td>
-                <label class="notification-toggle" for="notifDailyGoals" aria-label="Daily goal completions">
-                  <input type="checkbox" id="notifDailyGoals" />
-                  <span class="notification-toggle-track" aria-hidden="true">
-                    <span class="notification-toggle-thumb"></span>
-                  </span>
-                </label>
-              </td>
-            </tr>
-            <tr>
-              <td class="notification-pref-name">Health alerts</td>
-              <td class="notification-pref-description">Receive warnings about tracking health or sync issues.</td>
-              <td>
-                <label class="notification-toggle" for="notifHealth" aria-label="Health alerts">
-                  <input type="checkbox" id="notifHealth" />
-                  <span class="notification-toggle-track" aria-hidden="true">
-                    <span class="notification-toggle-thumb"></span>
-                  </span>
-                </label>
-              </td>
-            </tr>
-            <tr>
-              <td class="notification-pref-name">Org invites</td>
-              <td class="notification-pref-description">Stay on top of invitations from your organization.</td>
-              <td>
-                <label class="notification-toggle" for="notifOrgInvites" aria-label="Org invites">
-                  <input type="checkbox" id="notifOrgInvites" />
-                  <span class="notification-toggle-track" aria-hidden="true">
-                    <span class="notification-toggle-thumb"></span>
-                  </span>
-                </label>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    
-    <div class="avatar-settings-row" style="margin-top:16px;">
-      <label class="settings-label">Avatar:</label>
-      <div class="avatar-preview" id="avatarPreview">
-        ${
-          avatar
-            ? `<img src="${avatar}" alt="Avatar" id="avatarImg" style="width:48px;height:48px;border-radius:50%;">`
-            : '<div id="avatarImg" class="avatar-placeholder"></div>'
-        }
-      </div>
-      <button id="openAvatarPickerBtn" class="choose-avatar-btn">Choose</button>
-      <input type="file" id="avatarInput" accept="image/*" style="display:none;">
-    </div>
-
-    <h2 class="settings-tags-title">Manage Tags</h2>
-    ${
-      tags.length === 0
-        ? `<p>No tags added yet.</p>`
-        : `<ul id="tag-list-settings" class="tag-list-settings">
-            ${tags
-              .map(
-                (tag) => `
-              <li class="tag-list-item">
-                <span class="tag-label" style="background:${escapeHtml(tag.color)};">
-                  ${escapeHtml(tag.name)}
-                  <span class="tag-color-chip" data-tag="${escapeHtml(
-                    tag.name,
-                  )}" style="background:${escapeHtml(tag.color)};"></span>
-                </span>
-                <button class="btn-delete btn-small delete-tag-btn" data-tag="${escapeHtml(
-                  tag.name,
-                )}">Delete</button>
-              </li>
-            `,
-              )
-              .join("")}
-          </ul>`
-    }
-
-    <div class="accent-color-header">
-      <h2 class="accent-color-title">Accent Color</h2>
-      <button id="resetAccentColorsBtn" class="reset-accent-btn">Reset</button>
-    </div>
-    <div class="accent-color-row">
-      <div class="accent-color-preview" style="background:${accentColor};">
-        <input type="color" id="accentColorInput" value="${accentColor}" class="accent-color-input" />
-      </div>
-      <button id="saveAccentColorBtn" class="save-accent-btn">Save</button>
-    </div>
-    <div class="info-note">
-      Change the accent color for the current theme and <b>Save</b>.<br>
-    </div>
-
-    <div>
-      <h2>My Data Export</h2>
-      <p class="info-note" style="margin-bottom: 12px;">
-        Export your own time tracking data, summaries, and PDF reports with a date range.
-      </p>
-      <button id="openPersonalExportBtn" class="help-button">Export My Data</button>
-    </div>
-
-    <div class="help-section">
-      <h2>Need Help?</h2>
-      <button id="showOnboardingBtn" class="help-button">🎯 Show Welcome Tour</button>
+    <div class="settings-page">
+      <h2>General</h2>
+      ${cardHtml("Tracking", tracking)}
+      ${cardHtml("Billing", billing)}
+      ${cardHtml("Notifications", notificationRows)}
     </div>
   `;
 
-  const range = container.querySelector(
-    "#idleTimeoutRange",
-  ) as HTMLInputElement;
-  const valueSpan = container.querySelector(
-    "#idleTimeoutValue",
-  ) as HTMLSpanElement;
-
-  const accentInput = container.querySelector(
-    "#accentColorInput",
-  ) as HTMLInputElement;
-  const saveAccentBtn = container.querySelector(
-    "#saveAccentColorBtn",
-  ) as HTMLButtonElement;
-  const resetAccentBtn = container.querySelector(
-    "#resetAccentColorsBtn",
-  ) as HTMLButtonElement;
-
-  // Attach all event listeners
-
-  const themeToggleBtn = container.querySelector(
-    "#themeToggleBtn",
-  ) as HTMLButtonElement;
-  updaterStatusEl = container.querySelector("#updaterStatusText");
-  updaterCheckBtn = container.querySelector(
-    "#checkUpdatesBtn",
-  ) as HTMLButtonElement;
-  updaterDownloadBtn = container.querySelector(
-    "#downloadUpdateBtn",
-  ) as HTMLButtonElement;
-  updaterInstallBtn = container.querySelector(
-    "#installUpdateBtn",
-  ) as HTMLButtonElement;
-
-  ensureUpdaterListener();
-
-  updaterCheckBtn.addEventListener("click", async () => {
-    const state = await safeIpcInvoke<UpdaterState>("updater:check", [], {
-      fallback: {
-        status: "error",
-        message: "Failed to check for updates.",
-        canCheck: true,
-        canDownload: false,
-        canInstall: false,
-        autoEnabled: false,
-      },
-    });
-    applyUpdaterState(state);
-  });
-
-  updaterDownloadBtn.addEventListener("click", async () => {
-    const state = await safeIpcInvoke<UpdaterState>("updater:download", [], {
-      fallback: {
-        status: "error",
-        message: "Failed to download update.",
-        canCheck: true,
-        canDownload: false,
-        canInstall: false,
-        autoEnabled: false,
-      },
-    });
-    applyUpdaterState(state);
-  });
-
-  updaterInstallBtn.addEventListener("click", async () => {
-    await safeIpcInvoke("updater:install", [], { fallback: null });
-  });
-
-  const initialUpdaterState = await safeIpcInvoke<UpdaterState>(
-    "updater:get-state",
-    [],
-    {
-      fallback: {
-        status: "disabled",
-        message: "Updater unavailable.",
-        canCheck: false,
-        canDownload: false,
-        canInstall: false,
-        autoEnabled: false,
-      },
-    },
+  wireRange(
+    container,
+    "idleTimeoutRange",
+    "idleTimeoutValue",
+    formatIdleTimeout,
+    (seconds) => safeIpcInvoke("set-idle-timeout", [seconds], { fallback: null }),
   );
-  applyUpdaterState(initialUpdaterState);
-
-  themeToggleBtn.addEventListener("click", async () => {
-    document.body.classList.toggle("light");
-    const newTheme = document.body.classList.contains("light")
-      ? "light"
-      : "dark";
-    await setUserTheme(newTheme);
-    await applyAccentColor();
-    window.dispatchEvent(new Event("theme-changed"));
-    themeToggleBtn.textContent = `Switch to ${
-      newTheme === "dark" ? "Light" : "Dark"
-    } Mode`;
-  });
-
-  if (range && valueSpan) {
-    range.addEventListener("input", async () => {
-      const seconds = parseInt(range.value, 10);
-      valueSpan.textContent = (seconds / 60).toFixed(1) + " min";
-      await safeIpcInvoke("set-idle-timeout", [seconds], { fallback: null });
-    });
-  } else {
-    // Idle timeout elements not found - skip event listener setup
-  }
+  wireRange(
+    container,
+    "trackingIntervalRange",
+    "trackingIntervalValue",
+    (seconds) => `${seconds} s`,
+    (seconds) =>
+      safeIpcInvoke("set-tracking-interval", [seconds], { fallback: null }),
+  );
 
   const alwaysOnToggle =
     container.querySelector<HTMLInputElement>("#alwaysOnToggle");
@@ -458,22 +338,6 @@ async function renderSettings(container: HTMLElement) {
     alwaysOnToggle.checked = enabled;
   });
 
-  const intervalRange = container.querySelector(
-    "#trackingIntervalRange",
-  ) as HTMLInputElement;
-  const intervalValueSpan = container.querySelector(
-    "#trackingIntervalValue",
-  ) as HTMLSpanElement;
-  if (intervalRange && intervalValueSpan) {
-    intervalRange.addEventListener("input", async () => {
-      const secs = parseInt(intervalRange.value, 10);
-      intervalValueSpan.textContent = secs + "s";
-      await safeIpcInvoke("set-tracking-interval", [secs], {
-        fallback: null,
-      });
-    });
-  }
-
   const currencySelect = container.querySelector<HTMLSelectElement>(
     "#defaultCurrencySelect",
   );
@@ -484,86 +348,219 @@ async function renderSettings(container: HTMLElement) {
     if (!ok) showNotification("Couldn't save the currency", 3000);
   });
 
-  // --- Notification preferences wiring ---
-  (async () => {
-    try {
-      const notifSettings = await safeIpcInvoke<NotificationSettings>(
-        "get-notification-settings",
-        [],
-        {
-          fallback: {
-            enabled: true,
-            scheduledSessions: true,
-            dailyGoals: true,
-            healthAlerts: true,
-            orgInvites: true,
-            syncStatus: false,
-          },
-        },
-      );
-
-      const enabledEl = container.querySelector(
-        "#notifEnabled",
-      ) as HTMLInputElement | null;
-      const scheduledEl = container.querySelector(
-        "#notifScheduled",
-      ) as HTMLInputElement | null;
-      const dailyEl = container.querySelector(
-        "#notifDailyGoals",
-      ) as HTMLInputElement | null;
-      const healthEl = container.querySelector(
-        "#notifHealth",
-      ) as HTMLInputElement | null;
-      const orgEl = container.querySelector(
-        "#notifOrgInvites",
-      ) as HTMLInputElement | null;
-
-      if (enabledEl) enabledEl.checked = !!notifSettings.enabled;
-      if (scheduledEl) scheduledEl.checked = !!notifSettings.scheduledSessions;
-      if (dailyEl) dailyEl.checked = !!notifSettings.dailyGoals;
-      if (healthEl) healthEl.checked = !!notifSettings.healthAlerts;
-      if (orgEl) orgEl.checked = !!notifSettings.orgInvites;
-
-      const saveSettings = async () => {
-        const newSettings: any = {
-          enabled: !!enabledEl?.checked,
-          scheduledSessions: !!scheduledEl?.checked,
-          dailyGoals: !!dailyEl?.checked,
-          healthAlerts: !!healthEl?.checked,
-          orgInvites: !!orgEl?.checked,
-        };
-
-        const ok = await safeIpcInvoke(
-          "set-notification-settings",
-          [newSettings],
-          {
-            fallback: false,
-          },
-        );
-        if (ok) {
-          // Update local cache for immediate use
-          try {
-            updateCachedPreference("notification_settings", newSettings);
-          } catch {
-            // ignore cache update errors, not critical to show updated settings on next load
-          }
-          // Silent success - preferences saved
-        } else {
-          showNotification("Failed to save notification preferences", 3000);
-        }
-      };
-
-      [enabledEl, scheduledEl, dailyEl, healthEl, orgEl].forEach((el) => {
-        if (el) el.addEventListener("change", () => void saveSettings());
-      });
-    } catch (err) {
-      // ignore — leave defaults
+  // Notifications: the kinds are greyed out while the master switch is off
+  const enabledEl = container.querySelector<HTMLInputElement>("#notifEnabled");
+  const kindEls = NOTIFICATION_KINDS.map((kind) => ({
+    kind,
+    el: container.querySelector<HTMLInputElement>(`#${kind.id}`),
+  }));
+  const syncDisabled = () => {
+    const on = !!enabledEl?.checked;
+    for (const { el } of kindEls) {
+      if (!el) continue;
+      el.disabled = !on;
+      el.closest(".settings-item")?.classList.toggle("is-disabled", !on);
     }
-  })();
+  };
+  syncDisabled();
 
-  container.querySelectorAll(".delete-tag-btn").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const tag = (btn as HTMLButtonElement).dataset.tag;
+  const saveNotifications = async () => {
+    const next: NotificationSettings = {
+      ...notifications,
+      enabled: !!enabledEl?.checked,
+    };
+    for (const { kind, el } of kindEls) next[kind.key] = !!el?.checked;
+    const ok = await safeIpcInvoke("set-notification-settings", [next], {
+      fallback: false,
+    });
+    if (ok) {
+      Object.assign(notifications, next);
+      try {
+        updateCachedPreference("notification_settings", next);
+      } catch {
+        // The cache refreshes on its own; not worth failing the save over
+      }
+    } else {
+      showNotification("Failed to save notification preferences", 3000);
+    }
+  };
+  enabledEl?.addEventListener("change", () => {
+    syncDisabled();
+    void saveNotifications();
+  });
+  for (const { el } of kindEls) {
+    el?.addEventListener("change", () => void saveNotifications());
+  }
+}
+
+/** Keeps an open Appearance page in step when the theme changes. */
+function syncAppearanceToTheme() {
+  const theme = currentTheme();
+  document
+    .querySelectorAll<HTMLButtonElement>(".settings-segment[data-theme-choice]")
+    .forEach((btn) => {
+      const active = btn.dataset.themeChoice === theme;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", String(active));
+    });
+  const input = document.getElementById("accentColorInput") as HTMLInputElement | null;
+  if (!input) return;
+  safeIpcInvoke<string>("get-accent-color", [theme], {
+    fallback: DEFAULT_ACCENTS[theme],
+  }).then((color) => setAccentPreview(input, color));
+}
+
+function setAccentPreview(input: HTMLInputElement, color: string) {
+  input.value = color;
+  const swatch = input.closest<HTMLElement>(".accent-color-preview");
+  if (swatch) swatch.style.background = color;
+  const value = document.getElementById("accentColorValue");
+  if (value) value.textContent = color;
+}
+
+let themeListenerRegistered = false;
+
+/** Settings → Appearance: theme and accent color. */
+async function renderAppearance(container: HTMLElement) {
+  if (!themeListenerRegistered) {
+    window.addEventListener("theme-changed", syncAppearanceToTheme);
+    themeListenerRegistered = true;
+  }
+
+  const theme = currentTheme();
+  const accentColor = await safeIpcInvoke<string>("get-accent-color", [theme], {
+    fallback: DEFAULT_ACCENTS[theme],
+  });
+
+  const body =
+    settingHtml({
+      label: "Theme",
+      control: `
+        <div class="settings-segmented" role="group" aria-label="Theme">
+          <button type="button" class="settings-segment" data-theme-choice="dark">Dark</button>
+          <button type="button" class="settings-segment" data-theme-choice="light">Light</button>
+        </div>`,
+    }) +
+    settingHtml({
+      label: "Accent color",
+      hint: "Buttons, highlights and charts. Dark and light each keep their own; this changes the one in use.",
+      control: `
+        <label class="accent-color-preview" title="Pick a color">
+          <input type="color" id="accentColorInput" class="accent-color-input" value="${escapeHtml(accentColor)}" />
+        </label>
+        <code id="accentColorValue" class="settings-value">${escapeHtml(accentColor)}</code>
+        <button id="saveAccentColorBtn" class="btn btn-primary btn-sm">Save</button>
+        <button id="resetAccentColorsBtn" class="btn btn-secondary btn-sm">Reset</button>`,
+    });
+
+  container.innerHTML = `
+    <div class="settings-page">
+      <h2>Appearance</h2>
+      ${cardHtml("Theme", body)}
+    </div>
+  `;
+
+  const accentInput = container.querySelector(
+    "#accentColorInput",
+  ) as HTMLInputElement;
+  setAccentPreview(accentInput, accentColor);
+  syncAppearanceToTheme();
+
+  container
+    .querySelectorAll<HTMLButtonElement>(".settings-segment[data-theme-choice]")
+    .forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const choice = btn.dataset.themeChoice as "dark" | "light";
+        if (choice === currentTheme()) return;
+        document.body.classList.toggle("light", choice === "light");
+        await setUserTheme(choice);
+        await applyAccentColor();
+        window.dispatchEvent(new Event("theme-changed"));
+      });
+    });
+
+  accentInput.addEventListener("input", () => {
+    setAccentPreview(accentInput, accentInput.value);
+  });
+
+  container
+    .querySelector("#saveAccentColorBtn")
+    ?.addEventListener("click", async () => {
+      const color = accentInput.value;
+      const theme = currentTheme();
+      await safeIpcInvoke("set-accent-color", [color, theme], {
+        fallback: null,
+      });
+      await applyAccentColor();
+      window.dispatchEvent(new Event("theme-changed"));
+      showNotification(`Accent color saved for the ${theme} theme`, 2500);
+    });
+
+  container
+    .querySelector("#resetAccentColorsBtn")
+    ?.addEventListener("click", () => {
+      showConfirmationModal({
+        title: "Reset Accent Colors",
+        message: "Reset the accent colors of both themes to the defaults?",
+        confirmText: "Reset",
+        onConfirm: async () => {
+          await safeIpcInvoke("set-accent-color", [DEFAULT_ACCENTS.dark, "dark"], {
+            fallback: null,
+          });
+          await safeIpcInvoke(
+            "set-accent-color",
+            [DEFAULT_ACCENTS.light, "light"],
+            { fallback: null },
+          );
+          await applyAccentColor();
+          window.dispatchEvent(new Event("theme-changed"));
+        },
+      });
+    });
+}
+
+/** Settings → Tags & data: your tags, and exporting your data. */
+async function renderTagsAndData(container: HTMLElement) {
+  const tags: Tag[] = await safeIpcInvoke("get-all-tags", [], { fallback: [] });
+
+  const tagList =
+    tags.length === 0
+      ? `<p class="settings-empty">No tags yet. Tags you add to sessions show up here.</p>`
+      : `<ul id="tag-list-settings" class="tag-list-settings">
+          ${tags
+            .map(
+              (tag) => `
+            <li class="tag-list-item">
+              <button type="button" class="tag-color-chip" data-tag="${escapeHtml(tag.name)}"
+                style="background:${escapeHtml(tag.color)};" title="Change color" aria-label="Change the color of ${escapeHtml(tag.name)}"></button>
+              <span class="tag-name">${escapeHtml(tag.name)}</span>
+              <button class="btn btn-secondary btn-sm delete-tag-btn" data-tag="${escapeHtml(tag.name)}">Delete</button>
+            </li>`,
+            )
+            .join("")}
+        </ul>`;
+
+  const exportRow = settingHtml({
+    label: "Export my data",
+    hint: "Your sessions, daily summaries, tags and goals for a date range, as CSV, JSON or a PDF report.",
+    control: `<button id="openPersonalExportBtn" class="btn btn-primary btn-sm">Export…</button>`,
+  });
+
+  container.innerHTML = `
+    <div class="settings-page">
+      <h2>Tags &amp; data</h2>
+      ${cardHtml(
+        "Tags",
+        tagList,
+        tags.length ? "Click a dot to change its color. Deleting a tag removes it from every session." : undefined,
+      )}
+      ${cardHtml("Export", exportRow)}
+    </div>
+  `;
+
+  container.querySelectorAll<HTMLButtonElement>(".delete-tag-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tag = btn.dataset.tag;
       showConfirmationModal({
         title: "Delete Tag",
         message: `Delete tag "${tag}"? This will remove it from all sessions.`,
@@ -571,209 +568,105 @@ async function renderSettings(container: HTMLElement) {
         confirmClass: "btn-delete",
         onConfirm: async () => {
           await safeIpcInvoke("delete-tag", [tag], { fallback: null });
-          renderSettings(container); // Refresh the list
+          renderTagsAndData(container);
         },
       });
     });
   });
 
-  accentInput.addEventListener("input", () => {
-    if (accentInput.parentElement) {
-      accentInput.parentElement.style.background = accentInput.value; // Update preview
-    }
-  });
-
-  saveAccentBtn.addEventListener("click", async () => {
-    const currentTheme: "dark" | "light" = document.body.classList.contains(
-      "light",
-    )
-      ? "light"
-      : "dark";
-    const colorToSave = accentInput.value;
-    showConfirmationModal({
-      title: "Apply Accent Color",
-      message: `Apply new accent color ${colorToSave} for ${currentTheme} theme?`,
-      confirmText: "Apply",
-      onConfirm: async () => {
-        await safeIpcInvoke("set-accent-color", [colorToSave, currentTheme], {
-          fallback: null,
-        });
-        await applyAccentColor();
-        window.dispatchEvent(new Event("theme-changed"));
-        accentInput.value = colorToSave;
-      },
-    });
-  });
-
-  resetAccentBtn.addEventListener("click", async () => {
-    showConfirmationModal({
-      title: "Reset Accent Colors",
-      message: "Reset both accent colors to default values?",
-      confirmText: "Reset",
-      onConfirm: async () => {
-        await safeIpcInvoke("set-accent-color", ["#f0db4f", "dark"], {
-          fallback: null,
-        });
-        await safeIpcInvoke("set-accent-color", ["#007acc", "light"], {
-          fallback: null,
-        });
-        await applyAccentColor();
-
-        // Always get the current theme at the moment of reset
-        const currentTheme: "dark" | "light" = document.body.classList.contains(
-          "light",
-        )
-          ? "light"
-          : "dark";
-        const newAccent = await safeIpcInvoke(
-          "get-accent-color",
-          [currentTheme],
-          { fallback: "#f0db4f" },
-        );
-        accentInput.value = newAccent;
-        if (accentInput.parentElement) {
-          accentInput.parentElement.style.background = newAccent;
-        }
-      },
-    });
-  });
-
-  function updateAccentPickerForTheme() {
-    const theme: "dark" | "light" = document.body.classList.contains("light")
-      ? "light"
-      : "dark";
-    safeIpcInvoke("get-accent-color", [theme], { fallback: "#f0db4f" }).then(
-      (color: string) => {
-        accentInput.value = color;
-        if (accentInput.parentElement) {
-          accentInput.parentElement.style.background = color;
-        }
-      },
-    );
-  }
-
-  window.addEventListener("theme-changed", updateAccentPickerForTheme);
-
-  const tagColors = [
-    "#f0db4f",
-    "#ff6961",
-    "#7ed957",
-    "#4f8cff",
-    "#ffb347",
-    "#b19cd9",
-    "#f67280",
-    "#355c7d",
-    "#ffb6b9",
-    "#c1c8e4",
-    "#ffe156",
-    "#6a0572",
-    "#ff6f3c",
-    "#00b8a9",
-    "#f6416c",
-    "#43dde6",
-    "#e7e6e1",
-    "#f9f871",
-    "#a28089",
-    "#f7b32b",
-    "#2d4059",
-    "#ea5455",
-    "#ffd460",
-    "#40514e",
-    "#11999e",
-  ];
-  container.querySelectorAll(".tag-color-chip").forEach((chip) => {
+  container.querySelectorAll<HTMLElement>(".tag-color-chip").forEach((chip) => {
     chip.addEventListener("click", (e) => {
-      const tagName = (chip as HTMLElement).dataset.tag;
-      if (!tagName) {
-        return; // Skip if tag name not found
-      }
+      const tagName = chip.dataset.tag;
+      if (!tagName) return;
       showColorGridPicker({
-        colors: tagColors,
-        selected: (chip as HTMLElement).style.backgroundColor,
-        anchorEl: chip as HTMLElement,
+        colors: TAG_COLORS,
+        selected: chip.style.backgroundColor,
+        anchorEl: chip,
         onSelect: async (color) => {
           await safeIpcInvoke("set-tag-color", [tagName, color], {
             fallback: null,
           });
-          renderSettings(container); // or rerender tag list
+          renderTagsAndData(container);
         },
       });
       e.stopPropagation();
     });
   });
 
-  // --- Avatar Picker Logic ---
-  const openPickerBtn = container.querySelector(
-    "#openAvatarPickerBtn",
-  ) as HTMLButtonElement;
-  const avatarInput = container.querySelector(
-    "#avatarInput",
-  ) as HTMLInputElement;
+  container
+    .querySelector("#openPersonalExportBtn")
+    ?.addEventListener("click", () => createPersonalExportModal());
+}
 
-  openPickerBtn.onclick = () => {
-    showAvatarPicker({
-      anchorEl: openPickerBtn,
-      icons: Array.from(new Set([...editorIcons, ...langIcons])),
-      customAvatars: customAvatars,
-      onSelect: async (icon) => {
-        await safeIpcInvoke("set-user-avatar", [icon], { fallback: null });
-        renderSettings(container);
+/** Settings → About: app updates and the welcome tour. */
+async function renderAbout(container: HTMLElement) {
+  const updates = `
+    <div class="settings-item">
+      <div class="settings-item-text">
+        <span class="settings-item-label">App updates</span>
+        <p id="updaterStatusText" class="settings-item-hint">Loading updater state…</p>
+      </div>
+      <div class="settings-item-control">
+        <button id="checkUpdatesBtn" class="btn btn-secondary btn-sm">Check for updates</button>
+        <button id="downloadUpdateBtn" class="btn btn-primary btn-sm" style="display:none;">Download</button>
+        <button id="installUpdateBtn" class="btn btn-primary btn-sm" style="display:none;">Restart to install</button>
+      </div>
+    </div>`;
+
+  const help = settingHtml({
+    label: "Welcome tour",
+    hint: "A short walk through the main pages.",
+    control: `<button id="showOnboardingBtn" class="btn btn-secondary btn-sm">Show tour</button>`,
+  });
+
+  container.innerHTML = `
+    <div class="settings-page">
+      <h2>About</h2>
+      ${cardHtml("Updates", updates)}
+      ${cardHtml("Help", help)}
+    </div>
+  `;
+
+  updaterStatusEl = container.querySelector("#updaterStatusText");
+  updaterCheckBtn = container.querySelector("#checkUpdatesBtn");
+  updaterDownloadBtn = container.querySelector("#downloadUpdateBtn");
+  updaterInstallBtn = container.querySelector("#installUpdateBtn");
+  ensureUpdaterListener();
+
+  updaterCheckBtn?.addEventListener("click", async () => {
+    applyUpdaterState(
+      await safeIpcInvoke<UpdaterState>("updater:check", [], {
+        fallback: updaterFallback("Failed to check for updates."),
+      }),
+    );
+  });
+  updaterDownloadBtn?.addEventListener("click", async () => {
+    applyUpdaterState(
+      await safeIpcInvoke<UpdaterState>("updater:download", [], {
+        fallback: updaterFallback("Failed to download update."),
+      }),
+    );
+  });
+  updaterInstallBtn?.addEventListener("click", async () => {
+    await safeIpcInvoke("updater:install", [], { fallback: null });
+  });
+
+  container
+    .querySelector("#showOnboardingBtn")
+    ?.addEventListener("click", () => showOnboarding());
+
+  applyUpdaterState(
+    await safeIpcInvoke<UpdaterState>("updater:get-state", [], {
+      fallback: {
+        status: "disabled",
+        message: "Updater unavailable.",
+        canCheck: false,
+        canDownload: false,
+        canInstall: false,
+        autoEnabled: false,
       },
-      onUpload: () => avatarInput.click(),
-      onDeleteCustom: async (icon) => {
-        removeCustomAvatar(userId, icon);
-        renderSettings(container);
-      },
-    });
-  };
-
-  // Avatar upload logic
-  avatarInput.onchange = async () => {
-    if (avatarInput.files && avatarInput.files[0]) {
-      const file = avatarInput.files[0];
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const dataUrl = e.target?.result as string;
-        // Add to custom avatars collection
-        addCustomAvatar(userId, dataUrl);
-        // Set as current user avatar
-        await safeIpcInvoke("set-user-avatar", [dataUrl], { fallback: null });
-        renderSettings(container);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const removeAvatarBtn = container.querySelector(
-    "#removeAvatarBtn",
-  ) as HTMLButtonElement;
-  if (removeAvatarBtn) {
-    removeAvatarBtn.onclick = async () => {
-      await safeIpcInvoke("set-user-avatar", [""], { fallback: null });
-      renderSettings(container);
-    };
-  }
-
-  // --- Help Section Event Handlers ---
-  const showOnboardingBtn = container.querySelector(
-    "#showOnboardingBtn",
-  ) as HTMLButtonElement;
-
-  const openPersonalExportBtn = container.querySelector(
-    "#openPersonalExportBtn",
-  ) as HTMLButtonElement;
-
-  if (showOnboardingBtn) {
-    showOnboardingBtn.onclick = () => {
-      showOnboarding();
-    };
-  }
-
-  if (openPersonalExportBtn) {
-    openPersonalExportBtn.onclick = () => {
-      createPersonalExportModal();
-    };
-  }
+    }),
+  );
 }
 
 /**
@@ -875,15 +768,39 @@ async function renderIntegrations(container: HTMLElement) {
   if (agents) await renderAgentIntegration(agents);
 }
 
-/** Settings → Account & team: who you are, your org, and the way into Team. */
+/** Settings → Account & team: who you are, your avatar, your org, and the way into Team. */
 async function renderAccountSection(container: HTMLElement) {
-  const profile = await getCurrentUserProfile();
-  const org = await getCurrentOrganization();
+  const userId = getCurrentUserId();
+  const [profile, org, user, editors, langs] = await Promise.all([
+    getCurrentUserProfile(),
+    getCurrentOrganization(),
+    safeIpcInvoke<{ avatar?: string } | null>("get-user-info", [userId], {
+      fallback: null,
+    }),
+    safeIpcInvoke<{ app: string; icon: string }[]>("get-user-editors", [], {
+      fallback: [],
+    }),
+    safeIpcInvoke<{ lang_ext: string | null }[]>("get-user-lang-exts", [], {
+      fallback: [],
+    }),
+  ]);
 
   if (!profile) {
     container.innerHTML = `<h2>Account &amp; team</h2><p>Could not load your profile.</p>`;
     return;
   }
+
+  const avatar = user?.avatar || "";
+  // The avatar picker offers the icons of the editors and languages you use
+  const pickerIcons = Array.from(
+    new Set([
+      ...editors.map((e) => e.icon),
+      ...langs
+        .map((l) => (l.lang_ext ? getLangIconUrl(l.lang_ext) : ""))
+        .filter((icon): icon is string => !!icon),
+    ]),
+  );
+  const customAvatars = getCustomAvatars(userId);
 
   const teamVisible = isNavItemVisible("team");
 
@@ -893,9 +810,23 @@ async function renderAccountSection(container: HTMLElement) {
     : "Employee";
 
   container.innerHTML = `
+    <div class="settings-page">
     <h2>Account &amp; team</h2>
     <div class="org-profile-section">
       <div class="org-profile-card">
+        <div class="org-profile-row account-avatar-row">
+          <label>Avatar:</label>
+          <span class="avatar-preview">
+            ${
+              avatar
+                ? `<img src="${escapeHtml(avatar)}" alt="Avatar" class="account-avatar-img">`
+                : '<span class="avatar-placeholder"></span>'
+            }
+          </span>
+          <button id="openAvatarPickerBtn" class="btn btn-secondary btn-sm">Choose…</button>
+          ${avatar ? `<button id="removeAvatarBtn" class="btn btn-secondary btn-sm">Remove</button>` : ""}
+          <input type="file" id="avatarInput" accept="image/*" hidden>
+        </div>
         <div class="org-profile-row">
           <label>Username:</label>
           <span>${escapeHtml(profile.username)}</span>
@@ -950,7 +881,53 @@ async function renderAccountSection(container: HTMLElement) {
           : ""
       }
     </div>
+    </div>
   `;
+
+  // --- Avatar ---
+  const openPickerBtn = container.querySelector(
+    "#openAvatarPickerBtn",
+  ) as HTMLButtonElement;
+  const avatarInput = container.querySelector(
+    "#avatarInput",
+  ) as HTMLInputElement;
+
+  openPickerBtn.addEventListener("click", () => {
+    showAvatarPicker({
+      anchorEl: openPickerBtn,
+      icons: pickerIcons,
+      customAvatars,
+      onSelect: async (icon) => {
+        await safeIpcInvoke("set-user-avatar", [icon], { fallback: null });
+        renderAccountSection(container);
+      },
+      onUpload: () => avatarInput.click(),
+      onDeleteCustom: async (icon) => {
+        removeCustomAvatar(userId, icon);
+        renderAccountSection(container);
+      },
+    });
+  });
+
+  avatarInput.addEventListener("change", () => {
+    const file = avatarInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target?.result as string;
+      addCustomAvatar(userId, dataUrl);
+      await safeIpcInvoke("set-user-avatar", [dataUrl], { fallback: null });
+      renderAccountSection(container);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  container
+    .querySelector("#removeAvatarBtn")
+    ?.addEventListener("click", async () => {
+      await safeIpcInvoke("set-user-avatar", [""], { fallback: null });
+      renderAccountSection(container);
+    });
 
   container.querySelector("#openTeamBtn")?.addEventListener("click", () => {
     pinNavItem("team");
@@ -986,15 +963,22 @@ async function renderAccountSection(container: HTMLElement) {
   }
 }
 
-const CHAPTERS: Record<string, (el: HTMLElement) => void | Promise<void>> = {
-  preferences: renderSettings,
-  integrations: renderIntegrations,
-  shortcuts: renderHotkeys,
-  account: renderAccountSection,
-};
+const CHAPTERS: {
+  id: string;
+  label: string;
+  render: (el: HTMLElement) => void | Promise<void>;
+}[] = [
+  { id: "general", label: "General", render: renderGeneral },
+  { id: "appearance", label: "Appearance", render: renderAppearance },
+  { id: "data", label: "Tags &amp; data", render: renderTagsAndData },
+  { id: "integrations", label: "Integrations", render: renderIntegrations },
+  { id: "shortcuts", label: "Shortcuts", render: renderHotkeys },
+  { id: "account", label: "Account &amp; team", render: renderAccountSection },
+  { id: "about", label: "About", render: renderAbout },
+];
 
 /** The open chapter, kept when Settings re-renders (e.g. after an org change). */
-let openChapter = "preferences";
+let openChapter = "general";
 
 export async function renderSettingsView() {
   const settingsDiv = document.getElementById("settingsContent");
@@ -1004,12 +988,12 @@ export async function renderSettingsView() {
   <div class="profile-main-flex">
     <nav class="profile-sidebar" aria-label="Settings sections">
       <ul class="profile-chapter-list">
-        <li><button class="profile-chapter-btn" data-chapter="preferences">Preferences</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="integrations">Integrations</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="shortcuts">Shortcuts</button></li>
-        <li><button class="profile-chapter-btn" data-chapter="account">Account &amp; team</button></li>
+        ${CHAPTERS.map(
+          (c) =>
+            `<li><button class="profile-chapter-btn" data-chapter="${c.id}">${c.label}</button></li>`,
+        ).join("")}
       </ul>
-      <button id="logoutBtn" class="logout-btn">Log Out</button>
+      <button id="logoutBtn" class="logout-btn">Log out</button>
     </nav>
     <div id="settingsChapterContent" class="profile-chapter-content"></div>
   </div>
@@ -1021,23 +1005,22 @@ export async function renderSettingsView() {
   const buttons = settingsDiv.querySelectorAll(".profile-chapter-btn");
 
   async function showChapter(chapter: string) {
-    const render = CHAPTERS[chapter];
-    if (!render) return;
+    const entry = CHAPTERS.find((c) => c.id === chapter);
+    if (!entry) return;
     openChapter = chapter;
-    // Each chapter renders into its own pane: a slower render that is still
-    // running (e.g. Preferences when the user clicks on) fills a pane that's
-    // no longer on screen instead of replacing the chapter they opened
-    const pane = document.createElement("div");
-    contentDiv.replaceChildren(pane);
-    await withLoading(pane, "Loading…", async () => {
-      await render(pane);
-    });
-    if (pane.parentElement !== contentDiv) return;
     buttons.forEach((btn) => {
       btn.classList.toggle(
         "active",
         (btn as HTMLButtonElement).dataset.chapter === chapter,
       );
+    });
+    // Each chapter renders into its own pane: a slower render that is still
+    // running (e.g. General when the user clicks on) fills a pane that's
+    // no longer on screen instead of replacing the chapter they opened
+    const pane = document.createElement("div");
+    contentDiv.replaceChildren(pane);
+    await withLoading(pane, "Loading…", async () => {
+      await entry.render(pane);
     });
   }
 
@@ -1049,18 +1032,7 @@ export async function renderSettingsView() {
     });
   });
 
-  // Logout button logic
   const logoutBtn = settingsDiv.querySelector("#logoutBtn") as HTMLButtonElement;
-  logoutBtn.onmouseenter = () => {
-    logoutBtn.style.background =
-      "linear-gradient(90deg, #f09819 0%, #ff5858 100%)";
-    logoutBtn.style.boxShadow = "0 4px 16px #0003";
-  };
-  logoutBtn.onmouseleave = () => {
-    logoutBtn.style.background =
-      "linear-gradient(90deg, #ff5858 0%, #f09819 100%)";
-    logoutBtn.style.boxShadow = "0 2px 8px #0002";
-  };
   logoutBtn.onclick = async () => {
     // Save a running session, then main signs out (and tells the UI)
     try {

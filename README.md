@@ -36,7 +36,7 @@ Start a session, pick a project, and it records where the time went: your own ti
 - **Invoices:**
   PDF invoices for a date range, one currency per invoice. Agent costs can be added as a line item, at cost, on USD invoices.
 - **Currencies:**
-  Set your default currency in Settings → Preferences. New projects start with it, and each project can use a different one.
+  Set your default currency in Settings → General. New projects start with it, and each project can use a different one.
 
 ### **Analytics & Planning**
 
@@ -299,7 +299,7 @@ renderer/                     # Sandboxed UI (no Node)
   projectsTab.ts                # Projects
   billingTab.ts                 # Billing
   organizationTab.ts, teamAnalyticsTab.ts         # Team
-  settingsTab.ts                # Settings (Preferences, Integrations, Shortcuts, Account & team)
+  settingsTab.ts                # Settings (General, Appearance, Tags & data, Integrations, Shortcuts, Account & team, About)
   components/                   # HomeTimer, TodayTimeline, InvoiceModal, ClaudeHooks, …
   utils/                        # safeIpcInvoke, escapeHtml, invoice PDF, …
   styles/                       # One CSS file per feature

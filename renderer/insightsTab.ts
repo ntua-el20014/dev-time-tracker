@@ -286,12 +286,12 @@ async function renderLanguageUsage(container: HTMLElement) {
 }
 
 async function renderDailyGoalHistory(container: HTMLElement) {
-  // Fetch all daily goals for the user, newest first
+  // Fetch all daily goals for the user (raw daily_work_goals rows), newest first
   const goals: {
     date: string;
-    time: number;
-    description: string;
-    isCompleted: number;
+    target_minutes: number;
+    description: string | null;
+    is_completed: boolean;
   }[] = await safeIpcInvoke("get-all-daily-goals", [], { fallback: [] });
 
   container.innerHTML = `
@@ -314,11 +314,11 @@ async function renderDailyGoalHistory(container: HTMLElement) {
                   (g) => `
                 <tr>
                   <td>${prettyDate(g.date)}</td>
-                  <td>${g.time}</td>
+                  <td>${Number(g.target_minutes) || 0}</td>
                   <td>${escapeHtml(g.description || "")}</td>
                   <td>
                     ${
-                      g.isCompleted
+                      g.is_completed
                         ? '<span style="color:green;">Completed</span>'
                         : '<span style="color:#aaa;">Not completed</span>'
                     }

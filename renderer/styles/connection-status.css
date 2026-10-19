@@ -2,10 +2,12 @@
    Connection Status Indicator
    ===================================================== */
 
+/* Top-right of the page, in the gap above the content card (a pill at the
+   bottom sat against the OS taskbar when the window was maximized) */
 .connection-status {
   position: fixed;
-  bottom: 8px;
-  right: 12px;
+  top: 10px;
+  right: 16px;
   z-index: 9999;
   display: inline-flex;
   align-items: center;
@@ -71,6 +73,12 @@
   to {
     opacity: 0.3;
   }
+}
+
+/* Below the incognito banner while it's shown (it spans the top edge) */
+#incognitoBanner[style*="flex"] ~ .connection-status,
+#incognitoBanner[style*="flex"] ~ .sync-status {
+  top: 38px;
 }
 
 /* Light-theme overrides */
