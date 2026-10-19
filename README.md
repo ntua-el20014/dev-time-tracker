@@ -125,7 +125,7 @@ An Electron app whose data lives in **Supabase (PostgreSQL)**. The renderer is s
 
 ## 🗄️ Database Schema
 
-The whole database (tables, functions, triggers, RLS and indexes) is one file, [`database/schema.sql`](./database/schema.sql). See [`database/README.md`](./database/README.md) for setup, reset and the security model.
+The whole database (tables, functions, triggers, RLS and indexes) is one file, [`database/schema.sql`](./database/schema.sql). An existing database is updated with the numbered files in [`database/migrations/`](./database/migrations). See [`database/README.md`](./database/README.md) for setup, migrations, reset and the security model.
 
 ### Supabase API Reference
 
@@ -215,7 +215,7 @@ This launches the app with webpack hot reload. Create an account on the sign-in 
 npm test               # unit tests (vitest, mocked Supabase)
 npm run type-check     # main + renderer
 npm run lint
-npm run test:db        # database/schema.sql in an in-process Postgres (PGlite)
+npm run test:db        # database/schema.sql and the migrations in an in-process Postgres (PGlite)
 ```
 
 ### 6. Build
@@ -234,7 +234,8 @@ npm run clean      # remove build artifacts (.webpack, dist, out)
 | `npm test` / `npm run test:watch` | Unit tests (vitest) |
 | `npm run type-check`          | TypeScript (main + renderer); `:main` / `:renderer` for one |
 | `npm run lint` / `lint:fix`   | ESLint |
-| `npm run test:db`             | Check `database/schema.sql` in PGlite |
+| `npm run test:db`             | Check `database/schema.sql` and the migrations in PGlite |
+| `npm run db:new-migration -- <name>` | Start the next numbered migration (see `database/README.md`) |
 | `npm run test:smoke`          | Smoke-test the packaged app (after `npm run package`) |
 | `npm run test:e2e`            | End-to-end test against Supabase with two test accounts from `.env.local` |
 | `npm run package` / `make`    | Package / build installers |
@@ -246,7 +247,7 @@ npm run clean      # remove build artifacts (.webpack, dist, out)
 
 - **Native module errors:** run `npm run rebuild`.
 - **Auth not working:** check the Supabase URL and anon key, and that the Email provider is enabled.
-- **Permission denied / missing column errors:** the database is older than `schema.sql`. There are no migrations yet: rebuild it with `reset.sql` + `schema.sql` (this deletes all data and users).
+- **Permission denied / missing column or function errors:** the database is older than the app. In the SQL Editor, `SELECT * FROM schema_migrations ORDER BY version;` shows how far it is; then run the newer files from `database/migrations/` in order (see `database/README.md`).
 - **OAuth redirect issues:** add `dev-time-tracker://oauth-callback` to the project's redirect URLs.
 - **An app isn't recorded:** add it to `custom-apps.json` (see *Platform Notes*).
 
@@ -309,7 +310,9 @@ shared/                       # Pure code used by both sides
   billing.ts, projectActivity.ts, codeStats.ts, appUsage.ts, browserCategories.ts
 
 database/
-  schema.sql                    # The whole database
+  schema.sql                    # The whole database, always current (new setups)
+  migrations/                   # Numbered changes for an existing database
+  baseline.sql                  # Frozen 2026-10-19: what the migrations start from
   reset.sql                     # Wipes everything (start over)
 
 scripts/                      # db-test, smoke and e2e test runners

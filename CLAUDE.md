@@ -1,7 +1,7 @@
 # CLAUDE.md — Dev Time Tracker
 
 Guide for working in this repo: how the code is laid out, the conventions to follow, known problems, and the roadmap we agreed to work from.
-Written 2026-10-14 after a full read-through, kept current since (last: 2026-10-19, after Phase D and its follow-ups). Part 2 lists what that read-through found and where each item stands. Line numbers will drift, so search by function name.
+Written 2026-10-14 after a full read-through, kept current since (last: 2026-10-19, migrations introduced). Part 2 lists what that read-through found and where each item stands. Line numbers will drift, so search by function name.
 
 ---
 
@@ -17,11 +17,12 @@ npm test                  # vitest (~650 tests, mocked Supabase — ~15s)
 npm run type-check        # main + renderer tsconfigs
 npm run lint              # eslint
 npm run make              # installers
-npm run test:db           # database/schema.sql + reset.sql in PGlite (no Supabase needed)
+npm run test:db           # schema.sql, reset.sql and baseline.sql + migrations in PGlite (no Supabase needed)
+npm run db:new-migration -- <name>   # next numbered migration from a template; lists it in schema.sql, bumps REQUIRED_SCHEMA_VERSION
 npm run test:smoke        # packaged app, isolated profile, over CDP (run `npm run package` first)
 npm run test:e2e          # packaged app vs real Supabase, 2 test accounts from .env.local
 ```
-Baseline as of 2026-10-18: tests, type-check, lint and test:db are all green. Keep them green.
+Baseline as of 2026-10-19: tests, type-check, lint and test:db are all green (CI runs all four). Keep them green.
 
 ### Processes and the boundary between them
 ```
@@ -135,7 +136,7 @@ Flows:
 - There is no per-sample table (`usage_logs` was dropped 2026-10-18). Details popups show totals: an app on a day per language/page type, a session per app.
 - Daily goals, dashboard "time today" and the language/editor charts read `daily_usage_summary` (usage time). Billing, invoices, standups and project stats read sessions.
 
-### Data model (`database/schema.sql` — the whole database in one file; `database/README.md` explains setup, reset and the security model)
+### Data model (`database/schema.sql` — the whole current database in one file; `database/migrations/` — numbered changes for an existing database; `database/README.md` explains setup, migrations, reset and the security model)
 Tables:
 - `organizations`, `user_profiles` (role: admin/manager/employee), `org_join_requests`, `org_invite_codes`
 - `cloud_projects` (scope personal|organization, `hourly_rate` + `currency`), `project_members`, `project_repositories` (per-user repo → project links, C1), `agent_sessions` (C3)
@@ -143,6 +144,7 @@ Tables:
 - `daily_usage_summary` (`category`, C5, is part of its unique key and an optional last `p_category` of `update_daily_usage_summary`). No per-sample table.
 - `user_tags`, `session_tags`, `daily_work_goals`, `scheduled_work_sessions`, `scheduled_session_tags`
 - `user_preferences` (theme, accent JSON, editor_colors, notification_settings, idle_timeout_seconds, tracking interval, default `currency`)
+- `schema_migrations` (version, name, applied_at): which migrations the database has had; RLS on, no policies (SQL Editor only). `apply_migration(N, name)` records one and refuses repeats and gaps; EXECUTE revoked from the API roles. `get_schema_version()` (signed-in users only) returns the highest one.
 
 A new user signup fires a trigger that creates a profile (unique username, suffixed if taken), a personal org, and preferences. Role helpers (`get_current_user_org_id`, `is_user_admin_or_manager`, …) are `SECURITY DEFINER` so RLS doesn't recurse.
 
@@ -182,7 +184,14 @@ Local files:
 
 ### Conventions to follow when changing code
 - **New data feature:** add a `src/supabase/<domain>.ts` function that throws on error. Add a handler in `src/ipc/<domain>Handlers.ts` that calls `getCurrentUser()` and never takes `userId` from the renderer (exception: admin ops on *other* users). Import the handler file in `src/index.ts`. **Add the channel to `shared/ipcChannels.ts`** (the preload blocks unlisted ones; the test tells you). Call it from the renderer with `safeIpcInvoke(channel, args, { fallback })`.
-- **DB change:** one clean `database/schema.sql`, **no migrations, patches or upgrade snippets until Phases C and D are finished** (owner's decision, 2026-10-15; then we decide about migrations). Edit `schema.sql` directly, keep its order (tables → functions → triggers → RLS → indexes), update `src/types/database.types.ts`, run `npm run test:db`, and have the owner rebuild the live database with `reset.sql` + `schema.sql`. That wipes all data and auth users, so the two e2e test accounts (`.env.local`) must be signed up and confirmed again afterwards. New SECURITY DEFINER functions must `SET search_path = public` and check the caller.
+- **DB change = a migration plus the same change in `schema.sql`** (owner's decision, 2026-10-19; the live database is no longer rebuilt):
+  - `npm run db:new-migration -- <name>` writes `database/migrations/NNNN_<name>.sql` (one transaction, starting with `SELECT apply_migration(N, '<name>')`), adds `(N, '<name>')` to the list at the end of `schema.sql`, and sets `REQUIRED_SCHEMA_VERSION` (`src/supabase/schemaVersion.ts`) to N; a unit test keeps that equal to the newest migration.
+  - On sign-in main checks `get_schema_version()` against `REQUIRED_SCHEMA_VERSION` (`src/utils/schemaCheck.ts`, wired in `src/index.ts`): if the database is behind (or predates the function), it logs, reports to Sentry and sends `database-outdated`; the renderer shows a warning toast and keeps it in the bell's list. Offline: checked again at the next sign-in.
+  - Write the change in the migration, and the same change in `schema.sql` in its order (tables → functions → triggers → RLS → indexes → migrations included), e.g. a new column inside its `CREATE TABLE`. Function bodies must be identical text in both. Backfills of existing rows go only in the migration.
+  - `npm run test:db` compares `baseline.sql` + migrations with `schema.sql` (tables, columns, constraints, indexes, functions, triggers, policies, grants, migration list) and names what differs. Update `src/types/database.types.ts`.
+  - The owner applies new migrations in the SQL Editor, in order, before running a build that needs them (`database/README.md`). Never edit `baseline.sql` or a migration that has run on the live database.
+  - `reset.sql` + `schema.sql` is still how to start over; it wipes all data and auth users, so the two e2e test accounts (`.env.local`) must be signed up and confirmed again afterwards.
+  - New SECURITY DEFINER functions must `SET search_path = public` and check the caller.
 - **Tests:** go in `tests/` and use the chainable mock in `tests/helpers/supabaseMock.ts`. New query functions should get tests in the same style.
 - **Renderer ↔ main:** import `ipcRenderer` from `renderer/ipc.ts`, never from `"electron"`. Files are saved by main: use `savePdf()` (`renderer/utils/saveFile.ts`) or the `show-save-dialog` → `export-custom-*` pair, never jsPDF's `doc.save()`.
 - **Strings into innerHTML:** always escape with `escapeHtml` from `renderer/utils/domUtils.ts`, in element content *and* attributes. Don't add another copy. `showConfirmationModal` and the notification sidebar escape their inputs themselves; pass plain text.
@@ -421,7 +430,15 @@ In priority order (cheapest and highest value first):
 - Fixed on the way: `tests/tracking/codeStats.git.test.ts` waited a fixed 300 ms for the working-tree snapshot and failed now and then under load (the snapshot then saw the edits it should measure); it now waits until git/fs work is idle.
 - Verified: unit tests (rule parsing incl. broken files, title/host precedence, the sampler passing the rules, ranking, the RPC call), type-check, lint, `npm run test:db` (`save_draft_session`: insert, growth keeps code stats, another user's id refused by RLS, a confirmed row reported and left alone), e2e against live Supabase (all pass; Home widget with your time, agent cost and code, its link, the Settings card). The RPC isn't exercised against live Supabase until the rebuild; e2e inserts drafts directly.
 
-**Next:** decide on migrations (Part 4 "Owner decisions for Phase D", 6), now that Phase D is done.
+**Migrations** — done 2026-10-19 on `main` (owner: "do as you say about the database"; the live database was rebuilt one last time from `schema.sql` at `d6ad040`)
+- [x] `database/baseline.sql`: that schema, frozen. `database/migrations/0001_schema_migrations.sql`: the `schema_migrations` table and `apply_migration()`; applies to the live database without a rebuild. `schema.sql` includes both and lists migration 1. See the "DB change" convention in Part 1 and `database/README.md`.
+- [x] `npm run test:db` checks: file names and numbering, each migration one transaction recording itself; baseline + migrations = `schema.sql` (catalog comparison, reports the first differing text of a function); running the last migration twice is refused and changes nothing; `apply_migration` refuses repeats and gaps; the API can neither call it nor read `schema_migrations`. Verified that it catches an extra column, a changed function body and a wrong migration-list entry. CI now runs `test:db`.
+- [x] `npm run db:new-migration -- <name>` (`scripts/new-migration.mjs`): tried end to end with an empty migration (test:db green), then removed.
+- [x] The app checks its database's migration at sign-in (migration `0002_schema_version`: `get_schema_version()`; see the "DB change" convention in Part 1). Verified: unit tests (`REQUIRED_SCHEMA_VERSION` = newest migration file, missing function = behind, offline quiet), test:db (signed-in users can ask, anonymous can't), and e2e against the live database before it had the migrations: the app warned, and the new check "live database has every migration" failed as it should (every other check passed).
+  - The warning toast can sit behind a modal (on a fresh profile, the welcome tour); the bell keeps it.
+- **To do by the owner:** run `0001_schema_migrations.sql` and then `0002_schema_version.sql` in the SQL Editor on the live database. The e2e check "live database has every migration" stays red until then.
+
+**Next:** the owner's always-on test (D1–D4 on real input), then the first release (version bump, `Setup.exe` install test, published GitHub release).
 
 ## Owner decisions for Phase C (answered 2026-10-15)
 1. **Primary user: solo freelancer, billing-first.** Prioritize C6: per-project human/agent time, agent cost, and agent cost as an invoice line item. Team views come later.
@@ -442,7 +459,7 @@ In priority order (cheapest and highest value first):
 3. **Segments are saved right away as drafts** and confirmed in the review inbox. **A draft can't be billed or invoiced.**
 4. **Privacy:** no local-only mode. Window titles were dropped from uploads altogether (`usage_logs` removed), which covers the title option.
 5. **Incognito** keeps counting session time, and the **daily goal** keeps counting foreground-app time (both as they are).
-6. **Schema:** settled in one rebuild before Phase D (`status`, `source`, `client_id`). After Phase D: decide on migrations.
+6. **Schema:** settled in one rebuild before Phase D (`status`, `source`, `client_id`). After Phase D: decide on migrations — decided 2026-10-19: numbered migrations plus the always-current `schema.sql`, checked against each other by `test:db` (see Part 4, "Migrations").
 
 ---
 

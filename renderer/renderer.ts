@@ -559,6 +559,16 @@ ipcRenderer.on("session-info-timeout", () => {
   );
 });
 
+// The database lacks migrations this build needs (checked by main at sign-in)
+ipcRenderer.on(
+  "database-outdated",
+  (_event: unknown, info: { version?: number; required?: number }) => {
+    const message = `The database is at migration ${info?.version || "1 or older"}, this version of the app needs ${info?.required ?? "a newer one"}. Saving may fail until the missing migrations in database/migrations are applied (see database/README.md).`;
+    showInAppNotification(message, 15000, "warning");
+    addSidebarNotification({ title: "Database needs updating", message });
+  },
+);
+
 ipcRenderer.on("notify", (_event: any, data: { message?: string }) => {
   if (data && data.message) showInAppNotification(data.message);
 });

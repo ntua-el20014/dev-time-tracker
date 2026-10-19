@@ -9,7 +9,7 @@
 // a session; account 2 ends up in a fresh personal org. Windows only; needs
 // git and curl (a scratch repo and Connect Claude Code cover C2/C3).
 import { spawn, execSync } from "child_process";
-import { mkdirSync, rmSync, writeFileSync, readFileSync } from "fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync, readFileSync } from "fs";
 import os from "os";
 import path from "path";
 
@@ -203,6 +203,29 @@ try {
   const u1 = await launch("user1", 9341);
   apps.push(u1);
   check("user 1 signs in", await login(u1, creds[0]));
+
+  // The live database has every migration this build needs, and the app
+  // warns (checked by main at sign-in) exactly when it doesn't
+  const neededVersion = Math.max(
+    ...readdirSync(path.join(repo, "database", "migrations"))
+      .map((f) => /^(\d{4})_/.exec(f))
+      .filter(Boolean)
+      .map((m) => Number(m[1])),
+  );
+  const ver = await rawApi(u1, "POST", "rpc/get_schema_version", {});
+  const dbVersion = ver.status === 200 ? Number(ver.body) || 0 : 0;
+  const upToDate = dbVersion >= neededVersion;
+  check(
+    `live database has every migration (up to ${neededVersion})`,
+    upToDate,
+    `it is at ${dbVersion || "1 or older"}: run the newer database/migrations files in the SQL Editor`,
+  );
+  const warned = await u1.waitFor(
+    `(document.getElementById("custom-notification")?.textContent || "").includes("this version of the app needs")`,
+    upToDate ? 3000 : 10000,
+  );
+  check(upToDate ? "no database warning at sign-in" : "the app warns that the database needs migrations", warned === !upToDate);
+  if (!upToDate) await u1.shot("u1-database-outdated.png");
   await sleep(3000);
   // Main owns the session: the page holds no token and can't reach Supabase
   check(

@@ -36,7 +36,9 @@ import {
   flushTrackedUsage,
   hasUnsavedTrackingWork,
   finalizeTrackingForQuit,
+  send,
 } from "./tracking/tracker";
+import { checkDatabaseVersion } from "./utils/schemaCheck";
 import { initAgentIngest } from "./tracking/agents";
 import {
   initClaudeHooks,
@@ -156,7 +158,13 @@ app.whenReady().then(async () => {
   // Auth first: the window asks who is signed in as soon as it loads
   await initAuth({
     getWindow: () => mainWindow,
-    onUserChange: setTrackingUser,
+    onUserChange: (userId) => {
+      setTrackingUser(userId);
+      // Warn when the database lacks migrations this build needs
+      if (userId) {
+        void checkDatabaseVersion((info) => send("database-outdated", info));
+      }
+    },
   });
   createWindow();
 

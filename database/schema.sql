@@ -2,7 +2,13 @@
 -- DEV TIME TRACKER — COMPLETE DATABASE SETUP
 -- =====================================================
 -- One file, run once, on an empty Supabase project (or after reset.sql).
--- Order: tables → functions → triggers → row level security → indexes.
+-- Order: tables → functions → triggers → row level security → indexes →
+-- the migrations this file already includes.
+--
+-- Always the complete current schema. An existing database is changed
+-- with the numbered files in migrations/ instead (see README.md); every
+-- change goes into both, and npm run test:db checks that baseline.sql plus
+-- the migrations builds exactly what this file builds.
 --
 -- Requires Postgres 15+ (UNIQUE NULLS NOT DISTINCT). All Supabase projects
 -- created since 2023 qualify.
@@ -279,9 +285,58 @@ CREATE TABLE user_preferences (
 );
 
 
+-- Which migrations (migrations/NNNN_*.sql) the database has had; see
+-- apply_migration(). Filled at the end of this file for a fresh database.
+CREATE TABLE schema_migrations (
+    version INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- =====================================================
 -- 2. FUNCTIONS
 -- =====================================================
+
+-- ── Migrations ──────────────────────────────────────
+
+-- Record a migration as applied, inside the migration's own transaction.
+-- Refuses one that is already applied or skips a number, so a migration
+-- pasted twice or out of order changes nothing. Not callable through the API.
+CREATE OR REPLACE FUNCTION apply_migration(p_version INTEGER, p_name TEXT)
+RETURNS VOID
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+    v_last INTEGER;
+BEGIN
+    SELECT COALESCE(MAX(version), 0) INTO v_last FROM schema_migrations;
+    IF p_version <= v_last THEN
+        RAISE EXCEPTION 'Migration % (%) is already applied: this database is at %', p_version, p_name, v_last;
+    END IF;
+    IF p_version <> v_last + 1 THEN
+        RAISE EXCEPTION 'Migration % (%) needs migration % first: this database is at %', p_version, p_name, v_last + 1, v_last;
+    END IF;
+    INSERT INTO schema_migrations (version, name) VALUES (p_version, p_name);
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION apply_migration(INTEGER, TEXT) FROM PUBLIC, anon, authenticated;
+
+-- The highest migration applied; schema_migrations itself stays unreadable
+-- through the API. Signed-in users only.
+CREATE OR REPLACE FUNCTION get_schema_version()
+RETURNS INTEGER
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT COALESCE(MAX(version), 0) FROM schema_migrations;
+$$;
+
+REVOKE EXECUTE ON FUNCTION get_schema_version() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_schema_version() TO authenticated;
 
 -- ── Generic triggers ────────────────────────────────
 
@@ -1324,6 +1379,8 @@ ALTER TABLE daily_work_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scheduled_work_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scheduled_session_tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+-- No policies: only the SQL editor (the table owner) reads or writes it
+ALTER TABLE schema_migrations ENABLE ROW LEVEL SECURITY;
 
 -- ── Organizations ── (created only by SECURITY DEFINER functions)
 
@@ -1592,6 +1649,16 @@ CREATE INDEX idx_session_tags_tag_id ON session_tags(tag_id);
 
 CREATE INDEX idx_scheduled_sessions_user_datetime ON scheduled_work_sessions(user_id, scheduled_datetime);
 CREATE INDEX idx_scheduled_sessions_actual ON scheduled_work_sessions(actual_session_id);
+
+-- =====================================================
+-- 6. MIGRATIONS INCLUDED
+-- =====================================================
+-- Everything in migrations/ is already part of this file. Add a row here
+-- with each new migration.
+
+INSERT INTO schema_migrations (version, name) VALUES
+    (1, 'schema_migrations'),
+    (2, 'schema_version');
 
 -- =====================================================
 -- DONE

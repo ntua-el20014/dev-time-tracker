@@ -1,21 +1,41 @@
 # Database
 
-Everything the app needs in Supabase is in one file:
-
 | File | What it does |
 |---|---|
-| [`schema.sql`](./schema.sql) | Complete setup: tables → functions → triggers → row level security → indexes. Run once on an empty project. |
+| [`schema.sql`](./schema.sql) | Complete, current setup: tables → functions → triggers → row level security → indexes → the migrations it includes. Run once on an empty project. |
+| [`migrations/`](./migrations) | Numbered changes (`0001_schema_migrations.sql`, `0002_…`) that bring an existing database up to date without losing data. |
+| [`baseline.sql`](./baseline.sql) | Frozen 2026-10-19, never edited: the schema the live database was last rebuilt from. The migrations start from it. |
 | [`reset.sql`](./reset.sql) | **Destructive.** Drops every table, function and type in `public`, the signup trigger, and **all auth users**. Use it to start over on the same project, then run `schema.sql`. |
 
-There are no migrations, patches or upgrade scripts — **at least until Phases C and D of the roadmap are finished.** Change `schema.sql` directly, and reset and rebuild the database to apply it (`reset.sql`, then `schema.sql`). After C and D we'll decide whether to switch to numbered migrations (for example with the Supabase CLI).
+`npm run test:db` checks that `baseline.sql` plus every migration builds exactly what `schema.sql` builds (tables, columns, constraints, indexes, functions, triggers, policies, grants and the list of migrations), so the two can't drift apart. CI runs it on every push.
 
 Requires Postgres 15+ (all Supabase projects created since 2023).
+
+## Updating an existing database (migrations)
+
+A database records the migrations it has had in `schema_migrations` (readable only in the SQL Editor, not through the API). To bring one up to date:
+
+1. Supabase Dashboard → **SQL Editor** → run `SELECT version, name, applied_at FROM schema_migrations ORDER BY version;`. If the table doesn't exist, the database is at the baseline: start with `0001`.
+2. Paste each newer file from `migrations/`, **in order**, and **Run** it.
+
+Each migration is one transaction that starts with `SELECT apply_migration(N, 'name')` (0001 creates that function first). It refuses to run a migration twice or before the one it follows, and then nothing is changed. If one fails halfway, nothing of it is kept either: fix the cause and run it again.
+
+Apply a release's migrations before people run that release. The app checks at sign-in (`get_schema_version()`, from migration 0002) and warns when its database is behind the migrations it was built for.
+
+### Writing one
+
+1. `npm run db:new-migration -- <name>` writes the next `migrations/NNNN_<name>.sql` from a template, adds it to the list at the end of `schema.sql`, and raises `REQUIRED_SCHEMA_VERSION` in `src/supabase/schemaVersion.ts` (what the app's check expects).
+2. Write the change in the migration, and the same change in `schema.sql` where it belongs in that file's order (a new column in its `CREATE TABLE`, a changed function in place, …). Functions must be identical text in both.
+3. `npm run test:db`. It names whatever differs.
+4. Update `src/types/database.types.ts`.
+
+Never edit a migration that has run on the live database, or `baseline.sql`: write a new migration instead. Work that only an existing database needs (filling a new `NOT NULL` column for old rows, moving data) goes in the migration alone; `schema.sql` describes the result.
 
 ## Setting up or starting over
 
 1. Supabase Dashboard → your project → **SQL Editor** → **New query**.
 2. *(Starting over only)* Paste the whole of `reset.sql` and **Run**.
-3. Paste the whole of `schema.sql` and **Run**. The result should say "Success. No rows returned".
+3. Paste the whole of `schema.sql` and **Run**. The result should say "Success. No rows returned". It already includes every migration, so there is nothing to apply afterwards.
 4. **Authentication → Sign In / Providers**: enable **Email**. **GitHub** is optional; its callback URL is `https://<project>.supabase.co/auth/v1/callback`.
 5. **Authentication → URL Configuration → Redirect URLs**: add `dev-time-tracker://oauth-callback`. GitHub sign-in, email confirmation and password reset all return to the app through it.
 

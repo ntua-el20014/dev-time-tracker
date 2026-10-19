@@ -2,14 +2,24 @@
 // Supabase stub (auth schema, auth.uid(), anon/authenticated roles) and
 // checks the security rules and main flows as different users.
 //
+// Also checks the migrations: baseline.sql plus every file in migrations/,
+// in order, must build exactly what schema.sql builds (tables, columns,
+// constraints, indexes, functions, triggers, policies, grants, and the
+// migrations recorded), and a migration can't run twice or out of order.
+//
 // Usage (repo root):  npm run test:db
 // No Supabase needed: PGlite runs real Postgres in-process.
 import { PGlite } from "@electric-sql/pglite";
-import { readFileSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 
 const repo = process.argv[2] || process.cwd();
 const schema = readFileSync(`${repo}/database/schema.sql`, "utf8");
 const reset = readFileSync(`${repo}/database/reset.sql`, "utf8");
+const baseline = readFileSync(`${repo}/database/baseline.sql`, "utf8");
+const migrations = readdirSync(`${repo}/database/migrations`)
+  .filter((file) => file.endsWith(".sql"))
+  .sort()
+  .map((file) => ({ file, sql: readFileSync(`${repo}/database/migrations/${file}`, "utf8") }));
 
 const db = new PGlite();
 let failed = 0;
@@ -40,7 +50,7 @@ const asAdminDb = async () => {
 };
 
 // ── Supabase stub ─────────────────────────────────────
-await db.exec(`
+const SUPABASE_STUB = `
   CREATE ROLE anon NOLOGIN;
   CREATE ROLE authenticated NOLOGIN;
   CREATE SCHEMA auth;
@@ -58,7 +68,8 @@ await db.exec(`
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated;
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated;
-`);
+`;
+await db.exec(SUPABASE_STUB);
 
 async function runScenario(label) {
   console.log(`\n── ${label} ──`);
@@ -524,6 +535,157 @@ async function runScenario(label) {
 
   await asAdminDb();
 }
+
+// ── Migrations ────────────────────────────────────────
+
+/** What a database is made of, per kind, as sorted lines (data left out, except the migrations recorded). */
+async function catalog(target) {
+  const lines = async (sql) => (await target.query(sql)).rows.map((r) => r.line).sort();
+  return {
+    tables: await lines(`SELECT c.relname || ' kind=' || c.relkind::TEXT || ' rls=' || c.relrowsecurity
+        || ' force=' || c.relforcerowsecurity || ' acl=' || COALESCE(c.relacl::TEXT, '') AS line
+      FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'v', 'm', 'p', 'S')`),
+    // Column order isn't compared: ALTER TABLE adds columns at the end
+    columns: await lines(`SELECT table_name || '.' || column_name || ' ' || data_type || '/' || udt_name
+        || ' nullable=' || is_nullable || ' default=' || COALESCE(column_default, '') AS line
+      FROM information_schema.columns WHERE table_schema = 'public'`),
+    constraints: await lines(`SELECT conrelid::regclass::TEXT || ' ' || conname || ' ' || pg_get_constraintdef(oid) AS line
+      FROM pg_constraint WHERE connamespace = 'public'::regnamespace`),
+    indexes: await lines(`SELECT indexdef AS line FROM pg_indexes WHERE schemaname = 'public'`),
+    functions: await lines(`SELECT pg_get_functiondef(p.oid) || ' acl=' || COALESCE(p.proacl::TEXT, '') AS line
+      FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prokind IN ('f', 'p')`),
+    triggers: await lines(`SELECT pg_get_triggerdef(t.oid) AS line
+      FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+      WHERE NOT t.tgisinternal AND c.relnamespace IN ('public'::regnamespace, 'auth'::regnamespace)`),
+    policies: await lines(`SELECT tablename || ' ' || policyname || ' ' || permissive || ' ' || roles::TEXT || ' ' || cmd
+        || ' using=' || COALESCE(qual, '') || ' check=' || COALESCE(with_check, '') AS line
+      FROM pg_policies WHERE schemaname = 'public'`),
+    types: await lines(`SELECT t.typname || ' ' || t.typtype::TEXT || ' ' || COALESCE(
+        (SELECT string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) FROM pg_enum e WHERE e.enumtypid = t.oid), '') AS line
+      FROM pg_type t WHERE t.typnamespace = 'public'::regnamespace AND t.typtype IN ('e', 'd')`),
+    migrations: await lines(`SELECT version || ' ' || name AS line FROM schema_migrations`),
+  };
+}
+
+/** Lines only in one of two catalogs, per kind ("" when they match). */
+function catalogDiff(expected, actual) {
+  const flat = (l) => l.replace(/\s+/g, " ");
+  const out = [];
+  for (const kind of Object.keys(expected)) {
+    const missing = expected[kind].filter((l) => !actual[kind].includes(l)).map(flat);
+    const extra = actual[kind].filter((l) => !expected[kind].includes(l)).map(flat);
+    for (const l of missing.slice(0, 5)) {
+      // The same object defined differently (e.g. a function body): show where
+      const twin = extra.find((x) => x.slice(0, 60) === l.slice(0, 60));
+      if (twin) {
+        let i = 0;
+        while (l[i] === twin[i]) i++;
+        const at = (s) => s.slice(Math.max(0, i - 40), i + 60);
+        out.push(`  ${kind}, differs: ${l.slice(0, 60)}…`);
+        out.push(`    schema.sql:             …${at(l)}…`);
+        out.push(`    baseline + migrations:  …${at(twin)}…`);
+      } else {
+        out.push(`  ${kind}, only in schema.sql: ${l.slice(0, 160)}`);
+      }
+    }
+    for (const l of extra.filter((x) => !missing.some((m) => m.slice(0, 60) === x.slice(0, 60))).slice(0, 5)) {
+      out.push(`  ${kind}, only in baseline + migrations: ${l.slice(0, 160)}`);
+    }
+  }
+  return out.join("\n");
+}
+
+async function runMigrationChecks() {
+  console.log("\n── migrations ──");
+
+  // The files: 0001_name.sql, 0002_…, no gaps, each one transaction recording itself
+  const named = migrations.map((x) => ({ ...x, m: /^(\d{4})_([a-z0-9_]+)\.sql$/.exec(x.file) }));
+  const badNames = named.filter((x) => !x.m).map((x) => x.file);
+  check("migration files are named NNNN_name.sql", badNames.length === 0, badNames.join(", "));
+  const numbers = named.filter((x) => x.m).map((x) => Number(x.m[1]));
+  check("migrations are numbered 1, 2, 3, … without gaps", numbers.every((n, i) => n === i + 1), numbers.join(","));
+  const unrecorded = named
+    .filter((x) => x.m)
+    .filter(({ sql, m }) => {
+      const self = new RegExp(`SELECT\\s+apply_migration\\(\\s*${Number(m[1])}\\s*,\\s*'${m[2]}'\\s*\\)`, "i");
+      return !self.test(sql) || !/^\s*BEGIN\s*;/im.test(sql) || !/^\s*COMMIT\s*;/im.test(sql);
+    })
+    .map((x) => x.file);
+  check(
+    "each migration is one transaction that records itself (apply_migration(N, 'name'))",
+    unrecorded.length === 0,
+    unrecorded.join(", "),
+  );
+
+  // baseline.sql + migrations = schema.sql
+  const fresh = new PGlite();
+  await fresh.exec(SUPABASE_STUB);
+  await fresh.exec(schema);
+  const migrated = new PGlite();
+  await migrated.exec(SUPABASE_STUB);
+  await migrated.exec(baseline);
+  let failedAt = null;
+  for (const { file, sql } of migrations) {
+    try {
+      await migrated.exec(sql);
+    } catch (e) {
+      failedAt = `${file}: ${e.message}`;
+      break;
+    }
+  }
+  check("every migration applies to baseline.sql, in order", !failedAt, failedAt ?? "");
+  const expected = await catalog(fresh);
+  const diff = catalogDiff(expected, await catalog(migrated));
+  check("baseline.sql + migrations builds exactly what schema.sql builds", !diff, diff ? "\n" + diff : "");
+
+  // Pasting the last migration again changes nothing
+  const last = migrations[migrations.length - 1];
+  if (last && !failedAt) {
+    const before = await catalog(migrated);
+    let refused = null;
+    try {
+      await migrated.exec(last.sql);
+    } catch (e) {
+      refused = e.message;
+      await migrated.exec("ROLLBACK");
+    }
+    check(`running ${last.file} twice is refused`, !!refused, refused ?? "");
+    check("…and leaves the database as it was", !catalogDiff(before, await catalog(migrated)));
+  }
+
+  // The guard itself, on a fresh schema.sql database
+  const n = migrations.length;
+  const attempt = async (sql) => {
+    try {
+      await fresh.query(sql);
+      return "";
+    } catch (e) {
+      return e.message;
+    }
+  };
+  let msg = await attempt(`SELECT apply_migration(${n}, 'again')`);
+  check("apply_migration refuses a migration that is already applied", /already applied/.test(msg), msg);
+  msg = await attempt(`SELECT apply_migration(${n + 2}, 'skipping')`);
+  check("apply_migration refuses one that skips a number", /needs migration/.test(msg), msg);
+  await fresh.query(`SELECT set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000001', false)`);
+  await fresh.exec(`SET ROLE authenticated`);
+  msg = await attempt(`SELECT apply_migration(${n + 1}, 'from_the_api')`);
+  check("the API can't record migrations", /permission denied/.test(msg), msg);
+  const seen = (await fresh.query(`SELECT count(*)::INT AS n FROM schema_migrations`)).rows[0].n;
+  check("the API can't read which migrations ran", seen === 0, `saw ${seen}`);
+  const version = (await fresh.query(`SELECT get_schema_version() AS v`)).rows[0].v;
+  check("a signed-in user can ask which migration the database is at", version === n, `got ${version}`);
+  await fresh.exec(`RESET ROLE`);
+  await fresh.exec(`SET ROLE anon`);
+  msg = await attempt(`SELECT get_schema_version()`);
+  check("…but not anonymously", /permission denied/.test(msg), msg);
+  await fresh.exec(`RESET ROLE`);
+
+  await fresh.close();
+  await migrated.close();
+}
+
+await runMigrationChecks();
 
 // ── Run: fresh build → scenario → reset → rebuild → scenario ──
 await db.exec(schema);

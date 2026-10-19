@@ -160,6 +160,7 @@ export const EVENT_CHANNELS = [
   "auth-notice",
   "auth-password-recovery",
   "auth-state",
+  "database-outdated",
   "drafts-changed",
   "get-session-info",
   "incognito-toggled",

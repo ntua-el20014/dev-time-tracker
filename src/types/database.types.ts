@@ -749,6 +749,23 @@ export interface Database {
           },
         ];
       };
+      /** Migrations the database has had; SQL Editor only (RLS, no policies) */
+      schema_migrations: {
+        Row: {
+          version: number;
+          name: string;
+          applied_at: TimestampString;
+        };
+        Insert: {
+          version: number;
+          name: string;
+          applied_at?: TimestampString;
+        };
+        Update: {
+          name?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
